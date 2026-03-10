@@ -40,7 +40,7 @@ const normEmail  = v => (v||'').toLowerCase();
 
 function daysSince(d) {
   if (!d) return 999;
-  return Math.floor((new Date() - new Date(d)) / 86400000);
+  return Math.max(0, Math.floor((new Date() - new Date(d)) / 86400000));
 }
 function fmtCurrency(n) {
   if (n >= 1000000) return `${(n/1000000).toFixed(2)}M€`;
@@ -511,13 +511,13 @@ function TabProspects({ contacts, historique, taches, profile, allProfiles, onRe
       });
     rows.sort((a,b)=>{
       let va,vb;
-      if(sortCol==='nom')          { va=(a.nom||'').toLowerCase();  vb=(b.nom||'').toLowerCase(); }
-      else if(sortCol==='groupe')  { va=(a.groupe||'').toLowerCase(); vb=(b.groupe||'').toLowerCase(); }
-      else if(sortCol==='ville')   { va=(a.ville||'').toLowerCase();  vb=(b.ville||'').toLowerCase(); }
-      else if(sortCol==='statut')  { va=(a.statut||'').toLowerCase(); vb=(b.statut||'').toLowerCase(); }
-      else if(sortCol==='date_dernier') { va=a.jours; vb=b.jours; }
-      else if(sortCol==='date_relance') { va=a.date_relance||'9999'; vb=b.date_relance||'9999'; }
-      else { va=a.jours; vb=b.jours; }
+      if(sortCol==='nom')               { va=(a.nom||'').toLowerCase();   vb=(b.nom||'').toLowerCase(); }
+      else if(sortCol==='groupe')       { va=(a.groupe||'').toLowerCase(); vb=(b.groupe||'').toLowerCase(); }
+      else if(sortCol==='ville')        { va=(a.ville||'').toLowerCase();  vb=(b.ville||'').toLowerCase(); }
+      else if(sortCol==='statut')       { va=(a.statut||'').toLowerCase(); vb=(b.statut||'').toLowerCase(); }
+      else if(sortCol==='date_dernier') { va=a.date_dernier||'0000-00-00'; vb=b.date_dernier||'0000-00-00'; }
+      else if(sortCol==='date_relance') { va=a.date_relance||'0000-00-00'; vb=b.date_relance||'0000-00-00'; }
+      else                              { va=a.date_dernier||'0000-00-00'; vb=b.date_dernier||'0000-00-00'; }
       if(va<vb) return sortDir==='asc'?-1:1;
       if(va>vb) return sortDir==='asc'?1:-1;
       return 0;
