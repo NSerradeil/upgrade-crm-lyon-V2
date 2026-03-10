@@ -583,6 +583,83 @@ function TabBesoins({ contacts, besoins, historique, taches }) {
   );
 }
 
+// ── Onglet Historique ─────────────────────────────────────────────────────────
+function TabHistorique({ historique, contacts, taches, profile, onRefresh }) {
+  const [search,setSearch]=useState(''); const [filterResp,setFilterResp]=useState('');
+  const [selected,setSelected]=useState(null);
+  const isAdmin=profile.role==='admin';
+  const contactMap=useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
+  const responsables=useMemo(()=>[...new Set(historique.map(h=>h.responsable).filter(Boolean))].sort(),[historique]);
+
+  const filtered=useMemo(()=>{
+    const q=search.toLowerCase();
+    return historique.filter(h=>{
+      if(filterResp&&h.responsable!==filterResp)return false;
+      if(!q)return true;
+      const c=h.id_prospect?contactMap[h.id_prospect]:null;
+      const nom=c?`${c.prenom||''} ${c.nom||''} ${c.groupe||''}`:'';
+      return[h.type_action,h.details,h.responsable,h.date,nom].some(v=>(v||'').toLowerCase().includes(q));
+    });
+  },[historique,search,filterResp,contactMap]);
+
+  const TYPE_COLORS={
+    'Tel':          {bg:'#dbeafe',color:'#1d4ed8'},
+    'Mail envoyé':  {bg:'#dcfce7',color:'#166534'},
+    'Mail reçu':    {bg:'#dcfce7',color:'#15803d'},
+    'RDV':          {bg:'#fef3c7',color:'#92400e'},
+    'LinkedIn':     {bg:'#ede9fe',color:'#5b21b6'},
+    'Note interne': {bg:'#f3f4f6',color:'#4b5563'},
+    'Autre':        {bg:'#f3f4f6',color:'#4b5563'},
+  };
+
+  return (
+    <div>
+      <div className="flex gap-3 mb-4 flex-wrap">
+        <input type="text" placeholder="Rechercher (nom, société, type, détails, date...)"
+          value={search} onChange={e=>setSearch(e.target.value)}
+          className="flex-1 min-w-64 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+        {isAdmin&&responsables.length>1&&(
+          <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
+            <option value="">Tous les commerciaux</option>
+            {responsables.map(r=><option key={r} value={r}>{r}</option>)}
+          </select>
+        )}
+        {(search||filterResp)&&<button onClick={()=>{setSearch('');setFilterResp('');}} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">✕ Reset</button>}
+      </div>
+      <div className="text-xs text-gray-400 mb-3">{filtered.length} action{filtered.length>1?'s':''}</div>
+
+      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
+        {filtered.length===0&&<div className="px-4 py-10 text-center text-sm text-gray-400 italic">Aucune action trouvée</div>}
+        {filtered.map((h,i)=>{
+          const contact=h.id_prospect?contactMap[h.id_prospect]:null;
+          const s=TYPE_COLORS[h.type_action]||TYPE_COLORS['Autre'];
+          return (
+            <div key={i} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+              <div className="flex gap-3 items-start">
+                <div className="shrink-0 w-20 text-xs text-gray-400 pt-1 tabular-nums">{h.date?.slice(0,10)||'—'}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                    <span style={{backgroundColor:s.bg,color:s.color,padding:'2px 8px',borderRadius:9999,fontSize:11,fontWeight:600,whiteSpace:'nowrap'}}>{h.type_action}</span>
+                    {contact&&(
+                      <button onClick={()=>setSelected(contact)} className="text-sm font-semibold text-blue-700 hover:underline">
+                        {contact.prenom} {contact.nom}
+                        {contact.groupe&&<span className="ml-1 text-xs font-normal text-gray-400">· {contact.groupe}</span>}
+                      </button>
+                    )}
+                  </div>
+                  {h.details&&<div className="text-sm text-gray-600 line-clamp-2" title={h.details}>{h.details}</div>}
+                </div>
+                {h.responsable&&<span className="shrink-0 text-xs bg-gray-800 text-white px-2 py-0.5 rounded-full font-medium whitespace-nowrap">{h.responsable}</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} profile={profile} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
+    </div>
+  );
+}
+
 // ── Onglet TDB Missions ───────────────────────────────────────────────────────
 function TabTDB({ missions, histMissions, profile, onRefresh }) {
   const [selected,setSelected] = useState(null);
@@ -790,10 +867,11 @@ function App() {
   const tachesRetard=tachesActives.filter(t=>t.due_date&&t.due_date<TODAY);
   const relancesRetard=contacts.filter(c=>c.date_relance&&c.date_relance<TODAY);
   const TABS=[
-    {id:'prospects',label:`📋 Contacts (${contacts.length})`},
-    {id:'taches',   label:`✅ Tâches (${tachesActives.length})${tachesRetard.length>0?' 🔴':''}`},
-    {id:'besoins',  label:`💼 Pipeline (${besoins.length})`},
-    {id:'tdb',      label:`📊 TDB (${missions.length})`},
+    {id:'prospects',  label:`📋 Contacts (${contacts.length})`},
+    {id:'taches',     label:`✅ Tâches (${tachesActives.length})${tachesRetard.length>0?' 🔴':''}`},
+    {id:'besoins',    label:`💼 Pipeline (${besoins.length})`},
+    {id:'tdb',        label:`📊 TDB (${missions.length})`},
+    {id:'historique', label:`📖 Historique (${historique.length})`},
   ];
 
   return (
@@ -825,6 +903,7 @@ function App() {
         {tab==='prospects'&&<TabProspects contacts={contacts} historique={historique} taches={taches} profile={profile} onRefresh={fetchAll}/>}
         {tab==='taches'   &&<TabTaches   taches={taches} contacts={contacts} profile={profile} onRefresh={fetchAll}/>}
         {tab==='besoins'  &&<TabBesoins  contacts={contacts} besoins={besoins} historique={historique} taches={taches}/>}
+        {tab==='historique'&&<TabHistorique historique={historique} contacts={contacts} taches={taches} profile={profile} onRefresh={fetchAll}/>}
         {tab==='tdb'      &&<TabTDB      missions={missions} histMissions={histMissions} profile={profile} onRefresh={fetchAll}/>}
       </div>
     </div>
