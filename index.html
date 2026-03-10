@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRM Lyon — Live ⚡</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; }
+  .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo, useCallback } = React;
+
+// ── Config Supabase ──────────────────────────────────────────────────────────
+const SUPABASE_URL = "https://ehfseahxoivfhmpiyoqa.supabase.co";
+const SUPABASE_KEY = "sb_publishable_BaNIdlZ09xavRRhG0G-ScQ_mW4hVueJ"; // clé publique lecture seule
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const TODAY = new Date().toISOString().slice(0, 10);
+
+// ── Utilitaires ──────────────────────────────────────────────────────────────
+function daysSince(dateStr) {
+  if (!dateStr) return 999;
+  const diff = new Date() - new Date(dateStr);
+  return Math.floor(diff / (1000 * 60 * 60 * 24));
+}
+
+const STATUT_STYLE = {
+  'Consultant CDI': { bg: '#dde4f5', color: '#1a237e' },
+  'CDI':            { bg: '#dde4f5', color: '#1a237e' },
+  'Freelance':      { bg: '#f3e8ff', color: '#6b21a8' },
+  'Client':         { bg: '#dcfce7', color: '#166534' },
+  'Candidat':       { bg: '#cffafe', color: '#0e7490' },
+  'Prestataire':    { bg: '#ccfbf1', color: '#115e59' },
+  'Prospect':       { bg: '#f3f4f6', color: '#4b5563' },
+  'À définir':      { bg: '#fef9c3', color: '#92400e' },
+};
+
+function StatutBadge({ statut }) {
+  const st = STATUT_STYLE[statut] || STATUT_STYLE['Prospect'];
+  return (
+    <span style={{ backgroundColor: st.bg, color: st.color,
+      padding: '2px 8px', borderRadius: 9999, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+      {statut || 'Prospect'}
+    </span>
+  );
+}
+
+function BesoinBadge({ statut }) {
+  const colors = {
+    'Besoin Gagné':   { bg: '#dcfce7', color: '#166534' },
+    'Profil proposé': { bg: '#e0f2fe', color: '#0369a1' },
+    'Entretien programmé': { bg: '#fef9c3', color: '#92400e' },
+    'Entretien passé':    { bg: '#fef3c7', color: '#b45309' },
+    'Besoin ouvert':  { bg: '#f0fdf4', color: '#15803d' },
+    'Opportunité':    { bg: '#ede9fe', color: '#5b21b6' },
+    'Besoin Perdu':   { bg: '#fee2e2', color: '#991b1b' },
+    'Push opportuniste': { bg: '#f3f4f6', color: '#6b7280' },
+  };
+  const c = colors[statut] || { bg: '#f3f4f6', color: '#6b7280' };
+  return (
+    <span style={{ backgroundColor: c.bg, color: c.color,
+      padding: '2px 8px', borderRadius: 9999, fontSize: 11, fontWeight: 600 }}>
+      {statut}
+    </span>
+  );
+}
+
+// ── Loader ───────────────────────────────────────────────────────────────────
+function Loader({ label }) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+      <div className="spin text-4xl">⚡</div>
+      <div className="text-gray-500 text-sm">{label}</div>
+    </div>
+  );
+}
+
+// ── Détail contact (panel latéral) ───────────────────────────────────────────
+function ContactDetail({ contact, historique, taches, onClose }) {
+  const hist = historique
+    .filter(h => h.id_prospect === contact.id)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const tachesContact = taches.filter(t =>
+    t.contact_id === contact.id && t.statut !== 'fait' && t.statut !== 'annule'
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex justify-end" onClick={onClose}>
+      <div className="w-full max-w-lg bg-white h-full overflow-y-auto shadow-2xl"
+           onClick={e => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+          <div>
+            <div className="font-bold text-lg">{contact.prenom} {contact.nom}</div>
+            <div className="text-sm text-gray-500">{contact.groupe} · {contact.role}</div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-2xl">×</button>
+        </div>
+        <div className="p-6 space-y-6">
+          {/* Infos */}
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div><span className="text-gray-400">Statut</span><br/><StatutBadge statut={contact.statut}/></div>
+            <div><span className="text-gray-400">Ville</span><br/>{contact.ville || '—'}</div>
+            {contact.email && <div className="col-span-2"><span className="text-gray-400">Email</span><br/>
+              <a href={`mailto:${contact.email}`} className="text-blue-600 hover:underline">{contact.email}</a></div>}
+            {contact.telephone && <div><span className="text-gray-400">Tel</span><br/>
+              <a href={`tel:${contact.telephone}`} className="text-green-600 font-mono">{contact.telephone}</a></div>}
+            {contact.linkedin && <div><span className="text-gray-400">LinkedIn</span><br/>
+              <a href={contact.linkedin} target="_blank" className="text-blue-500 hover:underline text-xs">→ Profil</a></div>}
+            {contact.date_relance && <div className="col-span-2">
+              <span className="text-gray-400">Relance</span><br/>
+              <span className={contact.date_relance < TODAY ? 'text-red-600 font-semibold' : 'text-gray-700'}>
+                {contact.date_relance}
+              </span>
+            </div>}
+          </div>
+
+          {/* Commentaires */}
+          {contact.commentaires && (
+            <div>
+              <div className="text-xs text-gray-400 font-semibold mb-1 uppercase tracking-wide">Commentaires</div>
+              <div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap">{contact.commentaires}</div>
+            </div>
+          )}
+
+          {/* Tâches actives */}
+          {tachesContact.length > 0 && (
+            <div>
+              <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">Tâches actives</div>
+              <div className="space-y-2">
+                {tachesContact.map(t => (
+                  <div key={t.id} className="flex items-start gap-2 bg-blue-50 rounded-lg p-3">
+                    <span className="text-blue-400 mt-0.5">◆</span>
+                    <div>
+                      <div className="text-sm font-medium text-blue-900">{t.titre}</div>
+                      {t.due_date && <div className="text-xs text-blue-600">Échéance : {t.due_date}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Historique */}
+          <div>
+            <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">
+              Historique ({hist.length} actions)
+            </div>
+            {hist.length === 0
+              ? <div className="text-sm text-gray-400 italic">Aucune action enregistrée</div>
+              : <div className="space-y-2">
+                  {hist.map((h, i) => (
+                    <div key={i} className="flex gap-3 text-sm border-l-2 border-gray-100 pl-3">
+                      <div className="text-gray-400 shrink-0 w-14">{h.date?.slice(0,10) || '—'}</div>
+                      <div>
+                        <span className="font-medium text-gray-700">{h.type_action}</span>
+                        {h.details && <div className="text-gray-500 text-xs mt-0.5">{h.details}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Onglet Prospects ─────────────────────────────────────────────────────────
+function TabProspects({ contacts, historique, taches }) {
+  const [search, setSearch] = useState('');
+  const [filterStatut, setFilterStatut] = useState('');
+  const [selected, setSelected] = useState(null);
+
+  const statuts = useMemo(() =>
+    [...new Set(contacts.map(c => c.statut).filter(Boolean))].sort()
+  , [contacts]);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return contacts
+      .map(c => ({
+        ...c,
+        jours: daysSince(c.date_dernier),
+        relance_en_retard: c.date_relance && c.date_relance < TODAY,
+        relance_aujourd_hui: c.date_relance === TODAY,
+      }))
+      .filter(c =>
+        (!filterStatut || c.statut === filterStatut) &&
+        (!q || [c.prenom, c.nom, c.groupe, c.ville, c.role, c.besoins]
+          .some(v => (v || '').toLowerCase().includes(q)))
+      )
+      .sort((a, b) => {
+        if (a.relance_en_retard && !b.relance_en_retard) return -1;
+        if (!a.relance_en_retard && b.relance_en_retard) return 1;
+        return b.jours - a.jours;
+      });
+  }, [contacts, search, filterStatut]);
+
+  const retard = filtered.filter(c => c.relance_en_retard).length;
+
+  return (
+    <div>
+      {/* Filtres */}
+      <div className="flex gap-3 mb-4 flex-wrap">
+        <input type="text" placeholder="Rechercher (nom, société, ville, besoin...)"
+          value={search} onChange={e => setSearch(e.target.value)}
+          className="flex-1 min-w-64 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+        <select value={filterStatut} onChange={e => setFilterStatut(e.target.value)}
+          className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
+          <option value="">Tous les statuts</option>
+          {statuts.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        {search || filterStatut ? (
+          <button onClick={() => { setSearch(''); setFilterStatut(''); }}
+            className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">✕ Reset</button>
+        ) : null}
+      </div>
+
+      {retard > 0 && (
+        <div className="mb-3 bg-red-50 border border-red-200 rounded-lg px-4 py-2 text-sm text-red-700">
+          ⚠️ {retard} relance{retard > 1 ? 's' : ''} en retard
+        </div>
+      )}
+
+      <div className="text-xs text-gray-400 mb-2">{filtered.length} contact{filtered.length > 1 ? 's' : ''}</div>
+
+      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 text-gray-500 text-xs uppercase">
+              <th className="px-4 py-3 text-left font-medium">Contact</th>
+              <th className="px-4 py-3 text-left font-medium">Société</th>
+              <th className="px-4 py-3 text-left font-medium hidden md:table-cell">Ville</th>
+              <th className="px-4 py-3 text-left font-medium">Statut</th>
+              <th className="px-4 py-3 text-left font-medium hidden lg:table-cell">Dernier contact</th>
+              <th className="px-4 py-3 text-left font-medium hidden lg:table-cell">Relance</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(c => (
+              <tr key={c.id} onClick={() => setSelected(c)}
+                className="border-t border-gray-50 hover:bg-blue-50 cursor-pointer transition-colors">
+                <td className="px-4 py-3">
+                  <div className="font-medium text-gray-900">{c.prenom} {c.nom}</div>
+                  {c.role && <div className="text-xs text-gray-400">{c.role}</div>}
+                </td>
+                <td className="px-4 py-3 text-gray-600">{c.groupe}</td>
+                <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{c.ville}</td>
+                <td className="px-4 py-3">
+                  <StatutBadge statut={c.statut} />
+                  {c.relance_en_retard && (
+                    <span className="ml-1 text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-medium">
+                      Retard
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-3 hidden lg:table-cell">
+                  {c.jours < 999
+                    ? <span className={c.jours > 90 ? 'text-orange-500 font-medium' : 'text-gray-500'}>
+                        {c.jours}j
+                      </span>
+                    : <span className="text-gray-300">—</span>}
+                </td>
+                <td className="px-4 py-3 hidden lg:table-cell">
+                  {c.date_relance
+                    ? <span className={c.relance_en_retard ? 'text-red-600 font-semibold' : c.relance_aujourd_hui ? 'text-orange-600 font-semibold' : 'text-gray-500'}>
+                        {c.date_relance}
+                      </span>
+                    : <span className="text-gray-300">—</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {selected && (
+        <ContactDetail
+          contact={selected}
+          historique={historique}
+          taches={taches}
+          onClose={() => setSelected(null)} />
+      )}
+    </div>
+  );
+}
+
+// ── Onglet Tâches ────────────────────────────────────────────────────────────
+function TabTaches({ taches, contacts, user }) {
+  const [search, setSearch] = useState('');
+  const contactMap = useMemo(() => Object.fromEntries(contacts.map(c => [c.id, c])), [contacts]);
+
+  const actives = useMemo(() => taches
+    .filter(t => t.statut !== 'fait' && t.statut !== 'annule')
+    .filter(t => !user || (t.responsable || '').toLowerCase().includes(user.toLowerCase()))
+    .filter(t => !search || (t.titre || '').toLowerCase().includes(search.toLowerCase()))
+    .map(t => ({ ...t, overdue: t.due_date && t.due_date < TODAY }))
+    .sort((a, b) => {
+      if (a.overdue && !b.overdue) return -1;
+      if (!a.overdue && b.overdue) return 1;
+      return (a.due_date || '9999').localeCompare(b.due_date || '9999');
+    })
+  , [taches, user, search]);
+
+  const overdue = actives.filter(t => t.overdue).length;
+  const today_t = actives.filter(t => t.due_date === TODAY).length;
+
+  const STATUT_STYLE_T = {
+    'a_faire':  { bg: '#eff6ff', color: '#1d4ed8', label: 'À faire' },
+    'en_cours': { bg: '#fef9c3', color: '#92400e', label: 'En cours' },
+    'en cours': { bg: '#fef9c3', color: '#92400e', label: 'En cours' },
+  };
+
+  return (
+    <div>
+      <div className="flex gap-3 mb-4 flex-wrap">
+        <input type="text" placeholder="Rechercher une tâche..."
+          value={search} onChange={e => setSearch(e.target.value)}
+          className="flex-1 min-w-48 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+        <div className="text-sm text-gray-500 self-center">
+          {actives.length} tâche{actives.length > 1 ? 's' : ''}
+          {overdue > 0 && <span className="ml-2 text-red-600 font-medium">⚠️ {overdue} en retard</span>}
+          {today_t > 0 && <span className="ml-2 text-orange-600 font-medium">📍 {today_t} aujourd'hui</span>}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {actives.map(t => {
+          const contact = t.contact_id ? contactMap[t.contact_id] : null;
+          const st = STATUT_STYLE_T[t.statut] || { bg: '#f9fafb', color: '#6b7280', label: t.statut };
+          return (
+            <div key={t.id}
+              className={`rounded-xl border p-4 ${t.overdue ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'}`}>
+              <div className="flex items-start gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-gray-900">{t.titre}</span>
+                    <span style={{ backgroundColor: st.bg, color: st.color,
+                      padding: '1px 7px', borderRadius: 9999, fontSize: 11, fontWeight: 600 }}>
+                      {st.label}
+                    </span>
+                    {t.overdue && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">En retard</span>}
+                    {t.due_date === TODAY && !t.overdue && <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">Aujourd'hui</span>}
+                  </div>
+                  {contact && (
+                    <div className="text-xs text-gray-400 mt-1">
+                      👤 {contact.prenom} {contact.nom} · {contact.groupe}
+                    </div>
+                  )}
+                  {t.notes && <div className="text-xs text-gray-500 mt-1 italic">{t.notes}</div>}
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-xs text-gray-400">{t.responsable}</div>
+                  {t.due_date && (
+                    <div className={`text-xs font-medium mt-1 ${t.overdue ? 'text-red-600' : 'text-gray-500'}`}>
+                      {t.due_date}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Onglet Pipeline Besoins ──────────────────────────────────────────────────
+function TabBesoins({ contacts, besoins, historique, taches }) {
+  const contactMap = useMemo(() => Object.fromEntries(contacts.map(c => [c.id, c])), [contacts]);
+  const histMap = useMemo(() => {
+    const m = {};
+    historique.forEach(h => {
+      if (!h.id_prospect) return;
+      if (!m[h.id_prospect] || (h.date || '') > (m[h.id_prospect].date || ''))
+        m[h.id_prospect] = h;
+    });
+    return m;
+  }, [historique]);
+
+  const SKIP = new Set(['-', 'non', 'nan', 'none', '']);
+
+  const pipeline = useMemo(() => {
+    const rows = [];
+    besoins.forEach(({ contact_id, data }) => {
+      const cid = parseInt(contact_id);
+      const contact = contactMap[cid];
+      if (!contact) return;
+      const derniere = histMap[cid];
+      const tachesActives = taches.filter(t =>
+        t.contact_id === cid && t.statut !== 'fait' && t.statut !== 'annule'
+      );
+      const base = { contact, derniere, tachesActives };
+
+      if (data.besoins_multiples) {
+        data.besoins_multiples.forEach(b => rows.push({ ...base, besoin: b }));
+      } else if (!SKIP.has((data.label || '').trim().toLowerCase())) {
+        rows.push({ ...base, besoin: data });
+      }
+    });
+    return rows;
+  }, [besoins, contactMap, histMap, taches]);
+
+  const ORDRE_STATUT = ['Besoin Gagné','Entretien passé','Entretien programmé','Profil proposé','Besoin ouvert','Opportunité','Push opportuniste','Besoin Perdu'];
+  const sorted = [...pipeline].sort((a, b) =>
+    ORDRE_STATUT.indexOf(a.besoin.statut) - ORDRE_STATUT.indexOf(b.besoin.statut)
+  );
+
+  return (
+    <div>
+      <div className="text-xs text-gray-400 mb-3">{sorted.length} besoin{sorted.length > 1 ? 's' : ''} en pipeline</div>
+      <div className="space-y-3">
+        {sorted.map(({ contact, besoin, derniere, tachesActives }, i) => (
+          <div key={i} className="bg-white rounded-xl border border-gray-100 p-4">
+            <div className="flex items-start gap-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <span className="font-semibold text-gray-900">
+                    {contact.prenom} {contact.nom}
+                  </span>
+                  <span className="text-gray-400 text-sm">{contact.groupe}</span>
+                  <BesoinBadge statut={besoin.statut} />
+                </div>
+                <div className="text-sm text-blue-700 font-medium mb-2">
+                  {besoin.label || contact.besoins || '—'}
+                </div>
+                <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+                  {besoin.candidat && (
+                    <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                      👤 {besoin.candidat}
+                    </span>
+                  )}
+                  {besoin.candidat_ko && (
+                    <span className="bg-red-50 text-red-600 px-2 py-0.5 rounded-full">
+                      ✗ {besoin.candidat_ko} — {besoin.cause_ko || 'KO'}
+                    </span>
+                  )}
+                  {derniere && (
+                    <span>Dernière action : {derniere.date?.slice(0,10)} · {derniere.type_action}</span>
+                  )}
+                </div>
+                {tachesActives.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {tachesActives.map(t => (
+                      <span key={t.id} className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 px-2 py-0.5 rounded-full">
+                        ⏰ {t.titre} {t.due_date ? `(${t.due_date})` : ''}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {besoin.notes && (
+                  <div className="mt-2 text-xs text-gray-400 italic border-l-2 border-gray-100 pl-2">
+                    {besoin.notes}
+                  </div>
+                )}
+              </div>
+              {besoin.trello && (
+                <a href={besoin.trello} target="_blank"
+                  className="shrink-0 text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium">
+                  Trello →
+                </a>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Écran de connexion ────────────────────────────────────────────────────────
+function LoginScreen({ onLogin }) {
+  const [email, setEmail]       = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState('');
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    const { error: err } = await sb.auth.signInWithPassword({ email, password });
+    if (err) {
+      setError('Email ou mot de passe incorrect.');
+      setLoading(false);
+    }
+    // si OK, onAuthStateChange dans App prend le relais automatiquement
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 w-full max-w-sm">
+        <div className="text-center mb-8">
+          <div className="text-3xl mb-2">📊</div>
+          <h1 className="text-xl font-bold text-gray-900">CRM Lyon</h1>
+          <p className="text-sm text-gray-400 mt-1">Connectez-vous pour accéder au CRM</p>
+        </div>
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Email</label>
+            <input
+              type="email" required autoFocus
+              value={email} onChange={e => setEmail(e.target.value)}
+              className="w-full px-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+              placeholder="votre@email.com" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Mot de passe</label>
+            <input
+              type="password" required
+              value={password} onChange={e => setPassword(e.target.value)}
+              className="w-full px-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+              placeholder="••••••••" />
+          </div>
+          {error && (
+            <div className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>
+          )}
+          <button type="submit" disabled={loading}
+            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
+            {loading ? 'Connexion...' : 'Se connecter'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── App principale ───────────────────────────────────────────────────────────
+function App() {
+  const [user, setUser]         = useState(undefined); // undefined = chargement initial
+  const [data, setData]         = useState(null);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState(null);
+  const [tab, setTab]           = useState('prospects');
+  const [lastRefresh, setLastRefresh] = useState(null);
+
+  // Écoute les changements de session Supabase Auth
+  useEffect(() => {
+    sb.auth.getUser().then(({ data: { user } }) => setUser(user || null));
+    const { data: { subscription } } = sb.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [
+        { data: contacts, error: e1 },
+        { data: historique, error: e2 },
+        { data: taches, error: e3 },
+        { data: besoins, error: e4 },
+      ] = await Promise.all([
+        sb.from('contacts').select('*').order('id'),
+        sb.from('historique_actions').select('*').order('date', { ascending: false }).limit(1000),
+        sb.from('taches').select('*').order('due_date', { ascending: true, nullsFirst: false }),
+        sb.from('besoins_statuts').select('*'),
+      ]);
+
+      const err = e1 || e2 || e3 || e4;
+      if (err) throw new Error(err.message);
+
+      setData({ contacts, historique, taches, besoins });
+      setLastRefresh(new Date().toLocaleTimeString('fr-FR'));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Charge les données dès que l'utilisateur est connecté
+  useEffect(() => {
+    if (user) fetchAll();
+    else if (user === null) setData(null);
+  }, [user]);
+
+  const handleLogout = async () => {
+    await sb.auth.signOut();
+  };
+
+  // Chargement initial de la session
+  if (user === undefined) return <Loader label="Vérification de la session..." />;
+
+  // Non connecté → écran login
+  if (!user) return <LoginScreen />;
+
+  if (!data) return <Loader label="Chargement depuis Supabase..." />;
+  if (error) return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md text-center">
+        <div className="text-3xl mb-3">❌</div>
+        <div className="font-semibold text-red-800">Erreur de connexion Supabase</div>
+        <div className="text-sm text-red-600 mt-2 font-mono">{error}</div>
+        <button onClick={fetchAll} className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg text-sm">
+          Réessayer
+        </button>
+      </div>
+    </div>
+  );
+
+  const { contacts, historique, taches, besoins } = data;
+  const tachesActives = taches.filter(t => t.statut !== 'fait' && t.statut !== 'annule');
+  const tachesRetard  = tachesActives.filter(t => t.due_date && t.due_date < TODAY);
+  const relancesRetard = contacts.filter(c => c.date_relance && c.date_relance < TODAY);
+
+  const TABS = [
+    { id: 'prospects', label: `📋 Prospects (${contacts.length})` },
+    { id: 'taches',    label: `✅ Tâches (${tachesActives.length})${tachesRetard.length > 0 ? ' 🔴' : ''}` },
+    { id: 'besoins',   label: `💼 Pipeline (${besoins.length})` },
+  ];
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b sticky top-0 z-40 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-xl font-bold text-gray-800">CRM Lyon</span>
+            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">⚡ Live</span>
+          </div>
+          <div className="flex items-center gap-4">
+            {relancesRetard.length > 0 && (
+              <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full font-medium">
+                ⚠️ {relancesRetard.length} relance{relancesRetard.length > 1 ? 's' : ''} en retard
+              </span>
+            )}
+            <div className="text-xs text-gray-400">
+              {lastRefresh && `Actualisé ${lastRefresh}`}
+            </div>
+            <button onClick={fetchAll} disabled={loading}
+              className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50">
+              {loading ? '⟳ ...' : '⟳ Refresh'}
+            </button>
+            <div className="flex items-center gap-2 border-l pl-4">
+              <span className="text-xs text-gray-400 hidden sm:block">{user.email}</span>
+              <button onClick={handleLogout}
+                className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-lg font-medium transition-colors">
+                Déconnexion
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Onglets */}
+        <div className="max-w-7xl mx-auto px-4 flex gap-1 pb-0">
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                tab === t.id
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Contenu */}
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        {tab === 'prospects' && (
+          <TabProspects contacts={contacts} historique={historique} taches={taches} />
+        )}
+        {tab === 'taches' && (
+          <TabTaches taches={taches} contacts={contacts} />
+        )}
+        {tab === 'besoins' && (
+          <TabBesoins contacts={contacts} besoins={besoins} historique={historique} taches={taches} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.render(<App />, document.getElementById('root'));
+</script>
+</body>
+</html>
