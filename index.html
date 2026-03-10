@@ -132,6 +132,12 @@ function Field({ label, children }) {
   return <div><label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>{children}</div>;
 }
 const inputCls = "w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300";
+// Renvoie les options allProfiles + éventuellement la valeur courante si absente (protection données legacy)
+function respOptions(allProfiles, current) {
+  const list = allProfiles&&allProfiles.length>0 ? allProfiles : [];
+  const extra = current && !list.some(p=>p.nom===current) ? [{nom:current}] : [];
+  return [...extra, ...list];
+}
 
 // ── Modals Contacts ───────────────────────────────────────────────────────────
 function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
@@ -165,7 +171,7 @@ function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
       <Field label="Email"><input type="email" value={f.email} onChange={e=>setF(v=>({...v,email:normEmail(e.target.value)}))} className={inputCls}/></Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Statut"><select value={f.statut} onChange={s('statut')} className={inputCls}>{STATUTS_CONTACT.map(x=><option key={x} value={x}>{x}</option>)}</select></Field>
-        {isAdmin&&<Field label="Responsable"><select value={f.responsable} onChange={s('responsable')} className={inputCls}>{(allProfiles&&allProfiles.length>0?allProfiles:[{nom:contact.responsable}]).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>}
+        {isAdmin&&<Field label="Responsable"><select value={f.responsable} onChange={s('responsable')} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>}
       </div>
       <Field label="Commentaires"><textarea rows={3} value={f.commentaires} onChange={s('commentaires')} className={inputCls+' resize-none'}/></Field>
       {err && <div className="text-xs text-red-600 bg-red-50 rounded px-3 py-2">{err}</div>}
@@ -251,7 +257,7 @@ function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
         <Field label="Statut"><select value={f.statut} onChange={s('statut')} className={inputCls}>{STATUTS_CONTACT.map(x=><option key={x} value={x}>{x}</option>)}</select></Field>
         <Field label="Responsable">
           <select value={f.responsable} onChange={s('responsable')} className={inputCls}>
-            {(allProfiles.length>0?allProfiles:[{nom:profile.nom}]).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}
+            {respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}
           </select>
         </Field>
       </div>
@@ -430,7 +436,7 @@ function MissionDetail({ mission, histMissions, profile, allProfiles, onClose, o
             <div><span className="text-gray-400 text-xs">Responsable</span><br/>
               {isAdmin&&allProfiles&&allProfiles.length>0
                 ? <select value={resp} onChange={e=>{setResp(e.target.value);saveResp(e.target.value);}} disabled={savingResp} className="mt-0.5 text-sm border rounded-lg px-2 py-1 focus:outline-none text-gray-700 bg-white w-full">
-                    {allProfiles.map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}
+                    {respOptions(allProfiles,resp).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}
                   </select>
                 : <span className="text-gray-700">{mission.responsable||'—'}</span>
               }
@@ -700,7 +706,7 @@ function EditTacheModal({ task, contacts, profile, allProfiles, onClose, onSaved
       </div>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Contact lié"><select value={f.contact_id} onChange={e=>setF(v=>({...v,contact_id:e.target.value}))} className={inputCls}><option value="">Aucun</option>{myContacts.map(c=><option key={c.id} value={c.id}>{c.prenom} {c.nom} — {c.groupe}</option>)}</select></Field>
-        {isAdmin&&<Field label="Responsable"><select value={f.responsable} onChange={e=>setF(v=>({...v,responsable:e.target.value}))} className={inputCls}>{(allProfiles.length>0?allProfiles:[{nom:profile.nom}]).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>}
+        {isAdmin&&<Field label="Responsable"><select value={f.responsable} onChange={e=>setF(v=>({...v,responsable:e.target.value}))} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>}
       </div>
       <Field label="Notes"><textarea rows={2} value={f.notes} onChange={e=>setF(v=>({...v,notes:e.target.value}))} className={inputCls+' resize-none'}/></Field>
     </Modal>
@@ -966,7 +972,7 @@ function TabBesoins({ contacts, besoins, historique, taches, profile, allProfile
               {besoin.trello&&<a href={besoin.trello} target="_blank" className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium">Trello →</a>}
               {isAdmin&&allProfiles&&allProfiles.length>0
                 ? <select value={contact.responsable||''} onChange={e=>changeResp(contact.id,e.target.value)} className="text-xs border rounded-lg px-2 py-1 focus:outline-none text-gray-600 bg-gray-50 hover:bg-white" title="Changer le responsable">
-                    {allProfiles.map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}
+                    {respOptions(allProfiles,contact.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}
                   </select>
                 : <span className="text-xs text-gray-400">{contact.responsable}</span>
               }
