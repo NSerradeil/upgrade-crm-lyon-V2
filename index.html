@@ -128,14 +128,23 @@ function Field({ label, children }) {
 const inputCls = "w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300";
 
 // ── Modals Contacts ───────────────────────────────────────────────────────────
-function ContactEditModal({ contact, onClose, onSaved }) {
+function ContactEditModal({ contact, profile, onClose, onSaved }) {
   const [f,setF] = useState({ telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', date_relance:contact.date_relance||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'' });
   const [saving,setSaving]=useState(false); const [err,setErr]=useState('');
   const s = k => e => setF(v=>({...v,[k]:e.target.value}));
   const save = async () => {
     setSaving(true);
     const { error } = await sb.from('contacts').update({ telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, date_relance:f.date_relance||null, statut:f.statut, ville:f.ville||null, role:f.role||null, groupe:f.groupe||null, updated_at:new Date().toISOString() }).eq('id',contact.id);
-    if (error) { setErr(error.message); setSaving(false); } else onSaved();
+    if (error) { setErr(error.message); setSaving(false); }
+    else {
+      const changes = [];
+      if (f.statut !== (contact.statut||'Prospect')) changes.push(`statut → ${f.statut}`);
+      if ((f.groupe||'') !== (contact.groupe||'')) changes.push(`société → ${f.groupe||'(vide)'}`);
+      if ((f.ville||'') !== (contact.ville||'')) changes.push(`ville → ${f.ville||'(vide)'}`);
+      const details = changes.length ? `Fiche modifiée : ${changes.join(', ')}` : 'Fiche contact modifiée';
+      await sb.from('historique_actions').insert({ id_prospect:contact.id, date:TODAY, type_action:'Note interne', details, responsable:profile?.nom||contact.responsable });
+      onSaved();
+    }
   };
   return (
     <Modal title={`✏️ Modifier — ${contact.prenom} ${contact.nom}`} onClose={onClose}
@@ -206,8 +215,12 @@ function AddContactModal({ profile, onClose, onSaved }) {
     setSaving(true);
     const { data:maxRow } = await sb.from('contacts').select('id').order('id',{ascending:false}).limit(1);
     const nextId = (maxRow?.[0]?.id||0)+1;
-    const { error } = await sb.from('contacts').insert({ id:nextId, prenom:f.prenom||null, nom:f.nom.trim(), groupe:f.groupe||null, ville:f.ville||null, role:f.role||null, telephone:f.telephone||null, email:f.email||null, statut:f.statut, responsable:f.responsable, commentaires:f.commentaires||null, nb_relance:0, updated_at:new Date().toISOString() });
-    if (error) { setErr(error.message); setSaving(false); } else onSaved();
+    const { error } = await sb.from('contacts').insert({ id:nextId, prenom:f.prenom||null, nom:f.nom.trim(), groupe:f.groupe||null, ville:f.ville||null, role:f.role||null, telephone:f.telephone||null, email:f.email||null, statut:f.statut, responsable:f.responsable, commentaires:f.commentaires||null, nb_relance:0, updated_at:new Date().toISOString(), agence:profile.agence||'Lyon' });
+    if (error) { setErr(error.message); setSaving(false); }
+    else {
+      await sb.from('historique_actions').insert({ id_prospect:nextId, date:TODAY, type_action:'Note interne', details:`Contact créé (statut : ${f.statut})`, responsable:f.responsable });
+      onSaved();
+    }
   };
   return (
     <Modal title="👤 Nouveau contact" onClose={onClose}
@@ -232,10 +245,17 @@ function AddContactModal({ profile, onClose, onSaved }) {
 // ── Panel : Détail contact ────────────────────────────────────────────────────
 function ContactDetail({ contact, historique, taches, profile, onClose, onRefresh }) {
   const [modal,setModal] = useState(null);
+  const [deleting,setDeleting] = useState(false);
   const isOwner = profile.role==='admin' || contact.responsable===profile.nom;
   const hist = historique.filter(h=>h.id_prospect===contact.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const tachesContact = taches.filter(t=>t.contact_id===contact.id&&t.statut!=='fait'&&t.statut!=='annule');
   const saved = () => { setModal(null); onRefresh(); };
+  const handleDelete = async () => {
+    setDeleting(true);
+    await sb.from('historique_actions').insert({ id_prospect:contact.id, date:TODAY, type_action:'Note interne', details:`Contact supprimé par ${profile.nom}`, responsable:profile.nom });
+    await sb.from('contacts').delete().eq('id',contact.id);
+    onRefresh(); onClose();
+  };
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex justify-end" onClick={onClose}>
       <div className="w-full max-w-lg bg-white h-full overflow-y-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
@@ -253,6 +273,14 @@ function ContactDetail({ contact, historique, taches, profile, onClose, onRefres
               <button onClick={()=>setModal('edit')} className="px-3 py-1.5 text-xs bg-blue-50 text-blue-700 rounded-lg font-medium hover:bg-blue-100">✏️ Modifier</button>
               <button onClick={()=>setModal('hist')} className="px-3 py-1.5 text-xs bg-green-50 text-green-700 rounded-lg font-medium hover:bg-green-100">➕ Ajouter action</button>
               <button onClick={()=>setModal('tache')} className="px-3 py-1.5 text-xs bg-orange-50 text-orange-700 rounded-lg font-medium hover:bg-orange-100">✅ Ajouter tâche</button>
+              {modal!=='confirmDel'
+                ? <button onClick={()=>setModal('confirmDel')} className="px-3 py-1.5 text-xs bg-red-50 text-red-700 rounded-lg font-medium hover:bg-red-100">🗑️ Supprimer</button>
+                : <div className="flex gap-2 items-center">
+                    <span className="text-xs text-red-700 font-medium">Confirmer la suppression ?</span>
+                    <button onClick={handleDelete} disabled={deleting} className="px-3 py-1.5 text-xs bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 disabled:opacity-50">{deleting?'...':'Oui'}</button>
+                    <button onClick={()=>setModal(null)} className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700">Annuler</button>
+                  </div>
+              }
             </div>
           )}
           <div className="grid grid-cols-2 gap-3 text-sm">
@@ -293,7 +321,7 @@ function ContactDetail({ contact, historique, taches, profile, onClose, onRefres
           </div>
         </div>
       </div>
-      {modal==='edit'  && <ContactEditModal   contact={contact} profile={profile} onClose={()=>setModal(null)} onSaved={saved}/>}
+      {modal==='edit'  && <ContactEditModal   contact={contact} profile={profile} onClose={()=>setModal(null)} onSaved={saved} />}
       {modal==='hist'  && <AddHistoriqueModal contact={contact} profile={profile} onClose={()=>setModal(null)} onSaved={saved}/>}
       {modal==='tache' && <AddTacheModal contacts={[contact]} profile={profile} onClose={()=>setModal(null)} onSaved={saved} defaultContactId={contact.id}/>}
     </div>
@@ -454,7 +482,7 @@ function TabProspects({ contacts, historique, taches, profile, onRefresh }) {
           <option value="">Tous les statuts</option>{statuts.map(s=><option key={s} value={s}>{s}</option>)}
         </select>
         {(search||filterStatut)&&<button onClick={()=>{setSearch('');setFilterStatut('');}} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">✕ Reset</button>}
-        {isAdmin&&<button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">+ Nouveau contact</button>}
+        <button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">+ Nouveau contact</button>
       </div>
       {retard>0&&<div className="mb-3 bg-red-50 border border-red-200 rounded-lg px-4 py-2 text-sm text-red-700">⚠️ {retard} relance{retard>1?'s':''} en retard</div>}
       <div className="text-xs text-gray-400 mb-2">{filtered.length} contact{filtered.length>1?'s':''}</div>
