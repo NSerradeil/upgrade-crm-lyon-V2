@@ -134,19 +134,21 @@ function Field({ label, children }) {
 const inputCls = "w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300";
 
 // ── Modals Contacts ───────────────────────────────────────────────────────────
-function ContactEditModal({ contact, profile, onClose, onSaved }) {
-  const [f,setF] = useState({ telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'' });
+function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
+  const isAdmin=profile.role==='admin';
+  const [f,setF] = useState({ telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', responsable:contact.responsable||'' });
   const [saving,setSaving]=useState(false); const [err,setErr]=useState('');
   const s = k => e => setF(v=>({...v,[k]:e.target.value}));
   const save = async () => {
     setSaving(true);
-    const { error } = await sb.from('contacts').update({ telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, groupe:f.groupe||null, updated_at:new Date().toISOString() }).eq('id',contact.id);
+    const { error } = await sb.from('contacts').update({ telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, groupe:f.groupe||null, responsable:f.responsable||contact.responsable, updated_at:new Date().toISOString() }).eq('id',contact.id);
     if (error) { setErr(error.message); setSaving(false); }
     else {
       const changes = [];
       if (f.statut !== (contact.statut||'Prospect')) changes.push(`statut → ${f.statut}`);
       if ((f.groupe||'') !== (contact.groupe||'')) changes.push(`société → ${f.groupe||'(vide)'}`);
       if ((f.ville||'') !== (contact.ville||'')) changes.push(`ville → ${f.ville||'(vide)'}`);
+      if (f.responsable !== (contact.responsable||'')) changes.push(`responsable → ${f.responsable}`);
       const details = changes.length ? `Fiche modifiée : ${changes.join(', ')}` : 'Fiche contact modifiée';
       await sb.from('historique_actions').insert({ id_prospect:contact.id, date:TODAY, type_action:'Note interne', details, responsable:profile?.nom||contact.responsable });
       onSaved();
@@ -161,7 +163,10 @@ function ContactEditModal({ contact, profile, onClose, onSaved }) {
       <Field label="Ville"><input type="text" value={f.ville} onChange={e=>setF(v=>({...v,ville:normVille(e.target.value)}))} className={inputCls}/></Field>
       <Field label="Téléphone"><input type="tel" value={f.telephone} onChange={s('telephone')} className={inputCls}/></Field>
       <Field label="Email"><input type="email" value={f.email} onChange={e=>setF(v=>({...v,email:normEmail(e.target.value)}))} className={inputCls}/></Field>
-      <Field label="Statut"><select value={f.statut} onChange={s('statut')} className={inputCls}>{STATUTS_CONTACT.map(x=><option key={x} value={x}>{x}</option>)}</select></Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Statut"><select value={f.statut} onChange={s('statut')} className={inputCls}>{STATUTS_CONTACT.map(x=><option key={x} value={x}>{x}</option>)}</select></Field>
+        {isAdmin&&<Field label="Responsable"><select value={f.responsable} onChange={s('responsable')} className={inputCls}>{(allProfiles&&allProfiles.length>0?allProfiles:[{nom:contact.responsable}]).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>}
+      </div>
       <Field label="Commentaires"><textarea rows={3} value={f.commentaires} onChange={s('commentaires')} className={inputCls+' resize-none'}/></Field>
       {err && <div className="text-xs text-red-600 bg-red-50 rounded px-3 py-2">{err}</div>}
     </Modal>
@@ -257,7 +262,7 @@ function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
 }
 
 // ── Panel : Détail contact ────────────────────────────────────────────────────
-function ContactDetail({ contact, historique, taches, profile, onClose, onRefresh }) {
+function ContactDetail({ contact, historique, taches, profile, allProfiles, onClose, onRefresh }) {
   const [modal,setModal] = useState(null);
   const [deleting,setDeleting] = useState(false);
   const isOwner = profile.role==='admin' || contact.responsable===profile.nom;
@@ -335,7 +340,7 @@ function ContactDetail({ contact, historique, taches, profile, onClose, onRefres
           </div>
         </div>
       </div>
-      {modal==='edit'  && <ContactEditModal   contact={contact} profile={profile} onClose={()=>setModal(null)} onSaved={saved} />}
+      {modal==='edit'  && <ContactEditModal   contact={contact} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved} />}
       {modal==='hist'  && <AddHistoriqueModal contact={contact} profile={profile} onClose={()=>setModal(null)} onSaved={saved}/>}
       {modal==='tache' && <AddTacheModal contacts={[contact]} profile={profile} onClose={()=>setModal(null)} onSaved={saved} defaultContactId={contact.id}/>}
     </div>
@@ -367,9 +372,13 @@ function AddHistMissionModal({ mission, profile, onClose, onSaved }) {
 }
 
 // ── Panel : Détail mission ────────────────────────────────────────────────────
-function MissionDetail({ mission, histMissions, profile, onClose, onRefresh }) {
+function MissionDetail({ mission, histMissions, profile, allProfiles, onClose, onRefresh }) {
   const [showAdd,setShowAdd] = useState(false);
-  const isOwner = profile.role==='admin' || mission.responsable===profile.nom;
+  const [resp,setResp]=useState(mission.responsable||'');
+  const [savingResp,setSavingResp]=useState(false);
+  const isAdmin=profile.role==='admin';
+  const isOwner = isAdmin || mission.responsable===profile.nom;
+  const saveResp=async(newResp)=>{ setSavingResp(true); await sb.from('missions').update({responsable:newResp}).eq('id',mission.id); setSavingResp(false); if(onRefresh)onRefresh(); };
   const hist = (histMissions||[]).filter(h=>h.mission_id===mission.id)
     .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 
@@ -418,7 +427,14 @@ function MissionDetail({ mission, histMissions, profile, onClose, onRefresh }) {
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div><span className="text-gray-400 text-xs">TJM vente</span><br/><span className="font-mono font-semibold text-gray-800">{mission.tjm>0?`${mission.tjm}€`:'—'}</span></div>
             <div><span className="text-gray-400 text-xs">TJM achat</span><br/><span className="font-mono text-gray-600">{mission.cjm>0?`${mission.cjm}€`:'—'}</span></div>
-            <div><span className="text-gray-400 text-xs">Responsable</span><br/><span className="text-gray-700">{mission.responsable||'—'}</span></div>
+            <div><span className="text-gray-400 text-xs">Responsable</span><br/>
+              {isAdmin&&allProfiles&&allProfiles.length>0
+                ? <select value={resp} onChange={e=>{setResp(e.target.value);saveResp(e.target.value);}} disabled={savingResp} className="mt-0.5 text-sm border rounded-lg px-2 py-1 focus:outline-none text-gray-700 bg-white w-full">
+                    {allProfiles.map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}
+                  </select>
+                : <span className="text-gray-700">{mission.responsable||'—'}</span>
+              }
+            </div>
             <div><span className="text-gray-400 text-xs">Marge</span><br/><span className="text-purple-700 font-medium">{fmtCurrency(margeTotal)}</span></div>
           </div>
 
@@ -565,7 +581,7 @@ function TabProspects({ contacts, historique, taches, profile, allProfiles, onRe
           ))}</tbody>
         </table>
       </div>
-      {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} profile={profile} onRefresh={()=>{onRefresh();setSelected(null);}} onClose={()=>setSelected(null)}/>}
+      {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} profile={profile} allProfiles={allProfiles} onRefresh={()=>{onRefresh();setSelected(null);}} onClose={()=>setSelected(null)}/>}
       {showAdd&&<AddContactModal profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
     </div>
   );
@@ -662,6 +678,35 @@ function CompleteTaskModal({ task, contact, profile, onClose, onSaved }) {
   );
 }
 
+// ── Modal : Édition tâche ─────────────────────────────────────────────────────
+function EditTacheModal({ task, contacts, profile, allProfiles, onClose, onSaved }) {
+  const [f,setF]=useState({ titre:task.titre||'', due_date:task.due_date||'', statut:task.statut||'a_faire', notes:task.notes||'', responsable:task.responsable||profile.nom, contact_id:task.contact_id?String(task.contact_id):'' });
+  const [saving,setSaving]=useState(false);
+  const isAdmin=profile.role==='admin';
+  const myContacts=useMemo(()=>contacts.filter(c=>isAdmin||c.responsable===profile.nom).sort((a,b)=>(a.nom||'').localeCompare(b.nom||'')),[contacts,profile,isAdmin]);
+  const save=async()=>{
+    if(!f.titre.trim())return;
+    setSaving(true);
+    const{error}=await sb.from('taches').update({ titre:f.titre.trim(), due_date:f.due_date||null, statut:f.statut, notes:f.notes||null, responsable:f.responsable, contact_id:f.contact_id?parseInt(f.contact_id):null }).eq('id',task.id);
+    if(!error)onSaved();else setSaving(false);
+  };
+  return (
+    <Modal title="✏️ Modifier la tâche" onClose={onClose}
+      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Annuler</button><button onClick={save} disabled={saving||!f.titre.trim()} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">{saving?'Enregistrement...':'Enregistrer'}</button></>}>
+      <Field label="Titre *"><input type="text" value={f.titre} autoFocus onChange={e=>setF(v=>({...v,titre:e.target.value}))} className={inputCls}/></Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Échéance"><input type="date" value={f.due_date} onChange={e=>setF(v=>({...v,due_date:e.target.value}))} className={inputCls}/></Field>
+        <Field label="Statut"><select value={f.statut} onChange={e=>setF(v=>({...v,statut:e.target.value}))} className={inputCls}><option value="a_faire">À faire</option><option value="en_cours">En cours</option></select></Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Contact lié"><select value={f.contact_id} onChange={e=>setF(v=>({...v,contact_id:e.target.value}))} className={inputCls}><option value="">Aucun</option>{myContacts.map(c=><option key={c.id} value={c.id}>{c.prenom} {c.nom} — {c.groupe}</option>)}</select></Field>
+        {isAdmin&&<Field label="Responsable"><select value={f.responsable} onChange={e=>setF(v=>({...v,responsable:e.target.value}))} className={inputCls}>{(allProfiles.length>0?allProfiles:[{nom:profile.nom}]).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>}
+      </div>
+      <Field label="Notes"><textarea rows={2} value={f.notes} onChange={e=>setF(v=>({...v,notes:e.target.value}))} className={inputCls+' resize-none'}/></Field>
+    </Modal>
+  );
+}
+
 // ── Calendrier tâches ─────────────────────────────────────────────────────────
 const MOIS=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 const JOURS_COURT=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
@@ -730,13 +775,14 @@ function CalendarTaches({ taches, contactMap, profile, isAdmin, onComplete }) {
 }
 
 // ── Onglet Tâches ─────────────────────────────────────────────────────────────
-function TabTaches({ taches, contacts, profile, onRefresh, navKey, navEcheance }) {
+function TabTaches({ taches, contacts, profile, allProfiles, onRefresh, navKey, navEcheance }) {
   const [search,setSearch]=useState(''); const [showAdd,setShowAdd]=useState(false);
   const [filterStatut,setFilterStatut]=useState(''); const [filterResp,setFilterResp]=useState('');
   const [filterEcheance,setFilterEcheance]=useState('');
   const [viewMode,setViewMode]=useState('list');
   useEffect(()=>{ if(navEcheance) setFilterEcheance(navEcheance); },[navKey]);
   const [completingModal,setCompletingModal]=useState(null);
+  const [editingTask,setEditingTask]=useState(null);
   const contactMap=useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
   const isAdmin=profile.role==='admin';
   const responsables=useMemo(()=>[...new Set(taches.map(t=>t.responsable).filter(Boolean))].sort(),[taches]);
@@ -810,7 +856,8 @@ function TabTaches({ taches, contacts, profile, onRefresh, navKey, navEcheance }
                 <div className="flex flex-col items-end gap-1 shrink-0">
                   <div className="text-xs text-gray-400">{t.responsable}</div>
                   {t.due_date&&<div className={`text-xs font-medium ${t.overdue?'text-red-600':'text-gray-500'}`}>{t.due_date}</div>}
-                  {canEdit&&<button onClick={()=>setCompletingModal(t)} className="mt-1 text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2.5 py-1 rounded-lg font-medium">✓ Fait</button>}
+                  {isAdmin&&<button onClick={e=>{e.stopPropagation();setEditingTask(t);}} className="mt-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2.5 py-1 rounded-lg font-medium">✏️</button>}
+                {canEdit&&<button onClick={()=>setCompletingModal(t)} className="mt-1 text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2.5 py-1 rounded-lg font-medium">✓ Fait</button>}
                 </div>
               </div>
             </div>
@@ -821,15 +868,17 @@ function TabTaches({ taches, contacts, profile, onRefresh, navKey, navEcheance }
       )}
       {showAdd&&<AddTacheModal contacts={contacts} profile={profile} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
       {completingModal&&<CompleteTaskModal task={completingModal} contact={contactMap[completingModal.contact_id]||null} profile={profile} onClose={()=>setCompletingModal(null)} onSaved={()=>{setCompletingModal(null);onRefresh();}}/>}
+      {editingTask&&<EditTacheModal task={editingTask} contacts={contacts} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingTask(null)} onSaved={()=>{setEditingTask(null);onRefresh();}}/>}
     </div>
   );
 }
 
 // ── Onglet Pipeline ───────────────────────────────────────────────────────────
-function TabBesoins({ contacts, besoins, historique, taches, profile }) {
+function TabBesoins({ contacts, besoins, historique, taches, profile, allProfiles, onRefresh }) {
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
   const [filterResp,setFilterResp]=useState('');
   const isAdmin=profile.role==='admin';
+  const changeResp=async(contactId,newResp)=>{ await sb.from('contacts').update({responsable:newResp,updated_at:new Date().toISOString()}).eq('id',contactId); if(onRefresh)onRefresh(); };
   const contactMap=useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
   const histMap=useMemo(()=>{const m={};historique.forEach(h=>{if(!h.id_prospect)return;if(!m[h.id_prospect]||(h.date||'')>(m[h.id_prospect].date||''))m[h.id_prospect]=h;});return m;},[historique]);
   const SKIP=new Set(['-','non','nan','none','']);
@@ -913,7 +962,15 @@ function TabBesoins({ contacts, besoins, historique, taches, profile }) {
               {tachesActives.length>0&&<div className="mt-2 flex flex-wrap gap-1">{tachesActives.map(t=><span key={t.id} className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 px-2 py-0.5 rounded-full">⏰ {t.titre} {t.due_date?`(${t.due_date})`:''}</span>)}</div>}
               {besoin.notes&&<div className="mt-2 text-xs text-gray-400 italic border-l-2 border-gray-100 pl-2">{besoin.notes}</div>}
             </div>
-            {besoin.trello&&<a href={besoin.trello} target="_blank" className="shrink-0 text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium">Trello →</a>}
+            <div className="shrink-0 flex flex-col gap-2 items-end">
+              {besoin.trello&&<a href={besoin.trello} target="_blank" className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium">Trello →</a>}
+              {isAdmin&&allProfiles&&allProfiles.length>0
+                ? <select value={contact.responsable||''} onChange={e=>changeResp(contact.id,e.target.value)} className="text-xs border rounded-lg px-2 py-1 focus:outline-none text-gray-600 bg-gray-50 hover:bg-white" title="Changer le responsable">
+                    {allProfiles.map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}
+                  </select>
+                : <span className="text-xs text-gray-400">{contact.responsable}</span>
+              }
+            </div>
           </div>
         </div>
       ))}</div>
@@ -922,7 +979,7 @@ function TabBesoins({ contacts, besoins, historique, taches, profile }) {
 }
 
 // ── Onglet Historique ─────────────────────────────────────────────────────────
-function TabHistorique({ historique, contacts, taches, profile, onRefresh }) {
+function TabHistorique({ historique, contacts, taches, profile, allProfiles, onRefresh }) {
   const [search,setSearch]=useState(''); const [filterResp,setFilterResp]=useState('');
   const [filterType,setFilterType]=useState('');
   const [selected,setSelected]=useState(null);
@@ -1001,13 +1058,13 @@ function TabHistorique({ historique, contacts, taches, profile, onRefresh }) {
           );
         })}
       </div>
-      {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} profile={profile} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
+      {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
     </div>
   );
 }
 
 // ── Onglet TDB Missions ───────────────────────────────────────────────────────
-function TabTDB({ missions, histMissions, profile, onRefresh }) {
+function TabTDB({ missions, histMissions, profile, allProfiles, onRefresh }) {
   const [selected,setSelected] = useState(null);
   const [search,setSearch] = useState(''); const [filterStatut,setFilterStatut] = useState('');
   const [filterAgence,setFilterAgence] = useState('');
@@ -1179,7 +1236,7 @@ function TabTDB({ missions, histMissions, profile, onRefresh }) {
         </div>
       </div>
 
-      {selected&&<MissionDetail mission={selected} histMissions={histMissions} profile={profile} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
+      {selected&&<MissionDetail mission={selected} histMissions={histMissions} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
     </div>
   );
 }
@@ -1337,10 +1394,10 @@ function App() {
       )}
       <div className="max-w-7xl mx-auto px-4 py-6">
         {tab==='prospects'&&<TabProspects contacts={vContacts} historique={vHistorique} taches={vTaches} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
-        {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} profile={activeProfile} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance}/>}
-        {tab==='besoins'  &&<TabBesoins  contacts={vContacts} besoins={vBesoins} historique={vHistorique} taches={vTaches} profile={activeProfile}/>}
-        {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} taches={vTaches} profile={activeProfile} onRefresh={fetchAll}/>}
-        {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} profile={activeProfile} onRefresh={fetchAll}/>}
+        {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance}/>}
+        {tab==='besoins'  &&<TabBesoins  contacts={vContacts} besoins={vBesoins} historique={vHistorique} taches={vTaches} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
+        {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} taches={vTaches} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
+        {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
       </div>
     </div>
   );
