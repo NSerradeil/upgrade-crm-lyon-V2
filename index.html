@@ -32,6 +32,12 @@ const TYPES_HIST_MISS  = ['Appel consultant','Mail','RDV consultant','CR mensuel
 const MOIS_LABELS      = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
 const MOIS_KEYS        = ['jan','fev','mar','avr','mai','jun','jul','aou','sep','oct','nov','dec'];
 
+// ── Normalisation des champs contact ─────────────────────────────────────────
+const normNom    = v => (v||'').toUpperCase();
+const normPrenom = v => (v||'').split(' ').map(p=>p.split('-').map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join('-')).join(' ');
+const normVille  = v => (v||'').split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
+const normEmail  = v => (v||'').toLowerCase();
+
 function daysSince(d) {
   if (!d) return 999;
   return Math.floor((new Date() - new Date(d)) / 86400000);
@@ -149,9 +155,12 @@ function ContactEditModal({ contact, profile, onClose, onSaved }) {
   return (
     <Modal title={`✏️ Modifier — ${contact.prenom} ${contact.nom}`} onClose={onClose}
       footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">{saving?'Enregistrement...':'Enregistrer'}</button></>}>
-      {[['Groupe / Société','groupe','text'],['Rôle / Poste','role','text'],['Ville','ville','text'],['Téléphone','telephone','tel'],['Email','email','email']].map(([l,k,t])=>(
+      {[['Groupe / Société','groupe','text'],['Rôle / Poste','role','text']].map(([l,k,t])=>(
         <Field key={k} label={l}><input type={t} value={f[k]} onChange={s(k)} className={inputCls}/></Field>
       ))}
+      <Field label="Ville"><input type="text" value={f.ville} onChange={e=>setF(v=>({...v,ville:normVille(e.target.value)}))} className={inputCls}/></Field>
+      <Field label="Téléphone"><input type="tel" value={f.telephone} onChange={s('telephone')} className={inputCls}/></Field>
+      <Field label="Email"><input type="email" value={f.email} onChange={e=>setF(v=>({...v,email:normEmail(e.target.value)}))} className={inputCls}/></Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Statut"><select value={f.statut} onChange={s('statut')} className={inputCls}>{STATUTS_CONTACT.map(x=><option key={x} value={x}>{x}</option>)}</select></Field>
         <Field label="Date de relance"><input type="date" value={f.date_relance} onChange={s('date_relance')} className={inputCls}/></Field>
@@ -210,6 +219,7 @@ function AddContactModal({ profile, onClose, onSaved }) {
   const [f,setF] = useState({ prenom:'', nom:'', groupe:'', ville:'', role:'', telephone:'', email:'', statut:'Prospect', responsable:profile.nom, commentaires:'' });
   const [saving,setSaving]=useState(false); const [err,setErr]=useState('');
   const s = k => e => setF(v=>({...v,[k]:e.target.value}));
+  const sNorm = (k,fn) => e => setF(v=>({...v,[k]:fn(e.target.value)}));
   const save = async () => {
     if (!f.nom.trim()) { setErr('Le nom est obligatoire.'); return; }
     setSaving(true);
@@ -226,12 +236,15 @@ function AddContactModal({ profile, onClose, onSaved }) {
     <Modal title="👤 Nouveau contact" onClose={onClose}
       footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">{saving?'Enregistrement...':'+ Créer'}</button></>}>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Prénom"><input type="text" value={f.prenom} autoFocus onChange={s('prenom')} className={inputCls}/></Field>
-        <Field label="Nom *"><input type="text" value={f.nom} onChange={s('nom')} className={inputCls}/></Field>
+        <Field label="Prénom"><input type="text" value={f.prenom} autoFocus onChange={sNorm('prenom',normPrenom)} className={inputCls} placeholder="ex: Jean-Pierre"/></Field>
+        <Field label="Nom *"><input type="text" value={f.nom} onChange={sNorm('nom',normNom)} className={inputCls} placeholder="ex: DUPONT"/></Field>
       </div>
-      {[['Groupe / Société','groupe','text'],['Rôle / Poste','role','text'],['Ville','ville','text'],['Téléphone','telephone','tel'],['Email','email','email']].map(([l,k,t])=>(
+      {[['Groupe / Société','groupe','text'],['Rôle / Poste','role','text']].map(([l,k,t])=>(
         <Field key={k} label={l}><input type={t} value={f[k]} onChange={s(k)} className={inputCls}/></Field>
       ))}
+      <Field label="Ville"><input type="text" value={f.ville} onChange={sNorm('ville',normVille)} className={inputCls}/></Field>
+      <Field label="Téléphone"><input type="tel" value={f.telephone} onChange={s('telephone')} className={inputCls}/></Field>
+      <Field label="Email"><input type="email" value={f.email} onChange={sNorm('email',normEmail)} className={inputCls}/></Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Statut"><select value={f.statut} onChange={s('statut')} className={inputCls}>{STATUTS_CONTACT.map(x=><option key={x} value={x}>{x}</option>)}</select></Field>
         <Field label="Responsable"><input type="text" value={f.responsable} onChange={s('responsable')} className={inputCls}/></Field>
