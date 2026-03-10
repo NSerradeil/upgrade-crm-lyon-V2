@@ -571,13 +571,104 @@ function TabProspects({ contacts, historique, taches, profile, allProfiles, onRe
   );
 }
 
+// ── Modal : Compléter une tâche ───────────────────────────────────────────────
+function CompleteTaskModal({ task, contact, profile, onClose, onSaved }) {
+  const [note,setNote]=useState('');
+  const [createRelance,setCreateRelance]=useState(false);
+  const [preset,setPreset]=useState('');
+  const [customDate,setCustomDate]=useState('');
+  const [relanceNote,setRelanceNote]=useState('');
+  const [saving,setSaving]=useState(false);
+
+  const addDays=n=>{ const d=new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
+  const relanceDate = preset==='1j'?addDays(1) : preset==='3j'?addDays(3) : preset==='7j'?addDays(7) : customDate;
+
+  const PRESETS=[
+    {key:'1j', label:'Demain',    date:()=>addDays(1)},
+    {key:'3j', label:'3 jours',   date:()=>addDays(3)},
+    {key:'7j', label:'1 semaine', date:()=>addDays(7)},
+    {key:'custom', label:'📅 Choisir'},
+  ];
+
+  const save=async()=>{
+    if(createRelance&&!relanceDate) return;
+    setSaving(true);
+    await sb.from('taches').update({statut:'fait',date_completion:TODAY}).eq('id',task.id);
+    if(task.contact_id){
+      const details=note?`✅ ${task.titre} — ${note}`:`✅ ${task.titre}`;
+      await sb.from('historique_actions').insert({id_prospect:task.contact_id,date:TODAY,type_action:'Tâche accomplie',details,responsable:profile.nom});
+    }
+    if(createRelance&&relanceDate){
+      await sb.from('taches').insert({
+        id:`tw_${Date.now()}`,
+        titre:`Relance — ${task.titre}`,
+        statut:'a_faire',
+        due_date:relanceDate,
+        contact_id:task.contact_id||null,
+        notes:relanceNote||null,
+        responsable:task.responsable||profile.nom,
+      });
+    }
+    onSaved();
+  };
+
+  return (
+    <Modal title={`✅ Terminer — ${task.titre}`} onClose={onClose}
+      footer={<>
+        <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Annuler</button>
+        <button onClick={save} disabled={saving||(createRelance&&!relanceDate)}
+          className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+          {saving?'Enregistrement...':'✓ Marquer comme fait'}
+        </button>
+      </>}>
+      {contact&&<div className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">👤 {contact.prenom} {contact.nom} · {contact.groupe}</div>}
+      <Field label="Note de complétion (optionnel)">
+        <textarea rows={2} value={note} onChange={e=>setNote(e.target.value)}
+          placeholder="Ce qui a été fait, résultat de l'échange..."
+          className={inputCls+' resize-none'} autoFocus/>
+      </Field>
+      <div className="border-t pt-3">
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input type="checkbox" checked={createRelance} onChange={e=>setCreateRelance(e.target.checked)} className="w-4 h-4 accent-blue-600"/>
+          <span className="text-sm font-medium text-gray-700">Créer une tâche de relance</span>
+        </label>
+      </div>
+      {createRelance&&(
+        <div className="space-y-3 bg-blue-50 rounded-xl p-4 border border-blue-100">
+          <div>
+            <div className="text-xs font-medium text-gray-500 mb-2">Échéance</div>
+            <div className="flex gap-2 flex-wrap">
+              {PRESETS.map(p=>(
+                <button key={p.key} onClick={()=>setPreset(p.key)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap
+                    ${preset===p.key?'bg-blue-600 text-white border-blue-600':'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}>
+                  {p.label}{p.date&&<span className="ml-1 opacity-60">({p.date()})</span>}
+                </button>
+              ))}
+            </div>
+            {preset==='custom'&&(
+              <input type="date" value={customDate} min={addDays(1)}
+                onChange={e=>setCustomDate(e.target.value)} className={inputCls+' mt-2'}/>
+            )}
+          </div>
+          <Field label="Note pour la relance (optionnel)">
+            <textarea rows={2} value={relanceNote} onChange={e=>setRelanceNote(e.target.value)}
+              placeholder="Contexte pour la prochaine relance..."
+              className={inputCls+' resize-none'}/>
+          </Field>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 // ── Onglet Tâches ─────────────────────────────────────────────────────────────
 function TabTaches({ taches, contacts, profile, onRefresh, navKey, navEcheance }) {
   const [search,setSearch]=useState(''); const [showAdd,setShowAdd]=useState(false);
   const [filterStatut,setFilterStatut]=useState(''); const [filterResp,setFilterResp]=useState('');
   const [filterEcheance,setFilterEcheance]=useState('');
   useEffect(()=>{ if(navEcheance) setFilterEcheance(navEcheance); },[navKey]);
-  const [completing,setCompleting]=useState(null);
+  const [completingModal,setCompletingModal]=useState(null);
   const contactMap=useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
   const isAdmin=profile.role==='admin';
   const responsables=useMemo(()=>[...new Set(taches.map(t=>t.responsable).filter(Boolean))].sort(),[taches]);
@@ -597,7 +688,6 @@ function TabTaches({ taches, contacts, profile, onRefresh, navKey, navEcheance }
   const overdue=actives.filter(t=>t.overdue).length;
   const today_t=actives.filter(t=>t.due_date===TODAY).length;
   const ST={a_faire:{bg:'#eff6ff',color:'#1d4ed8',label:'À faire'},en_cours:{bg:'#fef9c3',color:'#92400e',label:'En cours'},'en cours':{bg:'#fef9c3',color:'#92400e',label:'En cours'}};
-  const complete=async(t)=>{setCompleting(t.id);await sb.from('taches').update({statut:'fait',date_completion:TODAY}).eq('id',t.id);setCompleting(null);onRefresh();};
   const hasFilter=search||filterStatut||filterResp||filterEcheance;
   const resetAll=()=>{setSearch('');setFilterStatut('');setFilterResp('');setFilterEcheance('');};
   return (
@@ -647,13 +737,14 @@ function TabTaches({ taches, contacts, profile, onRefresh, navKey, navEcheance }
               <div className="flex flex-col items-end gap-1 shrink-0">
                 <div className="text-xs text-gray-400">{t.responsable}</div>
                 {t.due_date&&<div className={`text-xs font-medium ${t.overdue?'text-red-600':'text-gray-500'}`}>{t.due_date}</div>}
-                {canEdit&&<button onClick={()=>complete(t)} disabled={completing===t.id} className="mt-1 text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2.5 py-1 rounded-lg font-medium disabled:opacity-50">{completing===t.id?'...':'✓ Fait'}</button>}
+                {canEdit&&<button onClick={()=>setCompletingModal(t)} className="mt-1 text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2.5 py-1 rounded-lg font-medium">✓ Fait</button>}
               </div>
             </div>
           </div>
         );
       })}</div>
       {showAdd&&<AddTacheModal contacts={contacts} profile={profile} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
+      {completingModal&&<CompleteTaskModal task={completingModal} contact={contactMap[completingModal.contact_id]||null} profile={profile} onClose={()=>setCompletingModal(null)} onSaved={()=>{setCompletingModal(null);onRefresh();}}/>}
     </div>
   );
 }
@@ -782,8 +873,9 @@ function TabHistorique({ historique, contacts, taches, profile, onRefresh }) {
     'Mail reçu':    {bg:'#dcfce7',color:'#15803d'},
     'RDV':          {bg:'#fef3c7',color:'#92400e'},
     'LinkedIn':     {bg:'#ede9fe',color:'#5b21b6'},
-    'Note interne': {bg:'#f3f4f6',color:'#4b5563'},
-    'Autre':        {bg:'#f3f4f6',color:'#4b5563'},
+    'Note interne':    {bg:'#f3f4f6',color:'#4b5563'},
+    'Tâche accomplie': {bg:'#dcfce7',color:'#166534'},
+    'Autre':           {bg:'#f3f4f6',color:'#4b5563'},
   };
 
   return (
