@@ -28,10 +28,18 @@ const TODAY = new Date().toISOString().slice(0, 10);
 
 const STATUTS_CONTACT = ['Prospect','Candidat','Client','Consultant CDI','CDI','Freelance','Prestataire','À définir'];
 const TYPES_ACTION    = ['Tel','Mail envoyé','Mail reçu','RDV','LinkedIn','Note interne','Autre'];
+const MOIS_LABELS     = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+const MOIS_KEYS       = ['jan','fev','mar','avr','mai','jun','jul','aou','sep','oct','nov','dec'];
 
 function daysSince(d) {
   if (!d) return 999;
   return Math.floor((new Date() - new Date(d)) / 86400000);
+}
+
+function fmtCurrency(n) {
+  if (n >= 1000000) return `${(n/1000000).toFixed(2)}M€`;
+  if (n >= 1000)    return `${(n/1000).toFixed(1)}k€`;
+  return `${Math.round(n)}€`;
 }
 
 const STATUT_STYLE = {
@@ -51,6 +59,15 @@ function StatutBadge({ statut }) {
 function BesoinBadge({ statut }) {
   const c = ({ 'Besoin Gagné':{bg:'#dcfce7',color:'#166534'}, 'Profil proposé':{bg:'#e0f2fe',color:'#0369a1'}, 'Entretien programmé':{bg:'#fef9c3',color:'#92400e'}, 'Entretien passé':{bg:'#fef3c7',color:'#b45309'}, 'Besoin ouvert':{bg:'#f0fdf4',color:'#15803d'}, 'Opportunité':{bg:'#ede9fe',color:'#5b21b6'}, 'Besoin Perdu':{bg:'#fee2e2',color:'#991b1b'}, 'Push opportuniste':{bg:'#f3f4f6',color:'#6b7280'} })[statut] || {bg:'#f3f4f6',color:'#6b7280'};
   return <span style={{ backgroundColor:c.bg, color:c.color, padding:'2px 8px', borderRadius:9999, fontSize:11, fontWeight:600 }}>{statut}</span>;
+}
+function MissionStatutBadge({ statut }) {
+  const s = ({
+    'En cours':    { bg:'#dcfce7', color:'#166534' },
+    'Intercontrat':{ bg:'#fef3c7', color:'#92400e' },
+    'Terminée':    { bg:'#f3f4f6', color:'#6b7280' },
+    'New':         { bg:'#e0f2fe', color:'#0369a1' },
+  })[statut] || { bg:'#f3f4f6', color:'#6b7280' };
+  return <span style={{ backgroundColor:s.bg, color:s.color, padding:'2px 7px', borderRadius:9999, fontSize:11, fontWeight:600, whiteSpace:'nowrap' }}>{statut}</span>;
 }
 function Loader({ label }) {
   return <div className="flex flex-col items-center justify-center min-h-screen gap-4"><div className="spin text-4xl">⚡</div><div className="text-gray-500 text-sm">{label}</div></div>;
@@ -461,6 +478,229 @@ function TabBesoins({ contacts, besoins, historique, taches }) {
   );
 }
 
+// ── Onglet TDB Missions ───────────────────────────────────────────────────────
+function TabTDB({ missions, profile }) {
+  const isAdmin = profile.role === 'admin';
+  const curMonthIdx = new Date().getMonth(); // 0-based
+
+  // KPI
+  const enMission    = missions.filter(m => m.statut === 'En cours' || m.statut === 'New');
+  const intercontrat = missions.filter(m => m.statut === 'Intercontrat');
+  const caYTD = missions.reduce((sum, m) => {
+    const tjm = parseFloat(m.tjm) || 0;
+    return sum + MOIS_KEYS.reduce((s, k) => s + (parseFloat(m[`jours_${k}`]) || 0) * tjm, 0);
+  }, 0);
+  const margeYTD = missions.reduce((sum, m) => {
+    const marge = (parseFloat(m.tjm) || 0) - (parseFloat(m.cjm) || 0);
+    return sum + MOIS_KEYS.reduce((s, k) => s + (parseFloat(m[`jours_${k}`]) || 0) * marge, 0);
+  }, 0);
+  const tauxMarge = caYTD > 0 ? (margeYTD / caYTD * 100) : 0;
+
+  // CA mensuel (pour le graphique)
+  const caMensuel = MOIS_KEYS.map(k =>
+    missions.reduce((sum, m) => sum + (parseFloat(m[`jours_${k}`]) || 0) * (parseFloat(m.tjm) || 0), 0)
+  );
+  const maxCA = Math.max(...caMensuel, 1);
+
+  // Missions triées : en cours d'abord, puis intercontrat, puis terminées
+  const ORDRE_STATUT = { 'En cours': 0, 'New': 1, 'Intercontrat': 2, 'Terminée': 3 };
+  const missionsTri = [...missions].sort((a, b) => {
+    const oa = ORDRE_STATUT[a.statut] ?? 9;
+    const ob = ORDRE_STATUT[b.statut] ?? 9;
+    if (oa !== ob) return oa - ob;
+    return (a.consultant || '').localeCompare(b.consultant || '');
+  });
+
+  if (missions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+        <div className="text-5xl mb-4">📊</div>
+        <div className="font-medium text-gray-600 mb-2">Aucune mission chargée</div>
+        <div className="text-sm text-center max-w-sm">
+          Lance <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">python3 supabase/populate_supabase.py</code> depuis le dossier CRM pour importer les missions du TDB.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+
+      {/* ── KPI cards ────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-xl border border-gray-100 p-4">
+          <div className="text-xs text-gray-400 font-medium mb-1 uppercase tracking-wide">En mission</div>
+          <div className="text-3xl font-bold text-blue-700">{enMission.length}</div>
+          <div className="text-xs text-gray-500 mt-1">consultant{enMission.length>1?'s':''} actif{enMission.length>1?'s':''}</div>
+        </div>
+
+        <div className={`bg-white rounded-xl border p-4 ${intercontrat.length > 0 ? 'border-orange-200 bg-orange-50' : 'border-gray-100'}`}>
+          <div className="text-xs text-gray-400 font-medium mb-1 uppercase tracking-wide">Intercontrat</div>
+          <div className={`text-3xl font-bold ${intercontrat.length > 0 ? 'text-orange-600' : 'text-gray-300'}`}>{intercontrat.length}</div>
+          <div className="text-xs text-gray-500 mt-1 truncate">
+            {intercontrat.length > 0
+              ? intercontrat.map(m => m.consultant.split(/\s+/)[0]).join(', ')
+              : 'Aucun'}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-100 p-4">
+          <div className="text-xs text-gray-400 font-medium mb-1 uppercase tracking-wide">CA YTD</div>
+          <div className="text-2xl font-bold text-green-700">{fmtCurrency(caYTD)}</div>
+          <div className="text-xs text-gray-500 mt-1">missions visibles</div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-100 p-4">
+          <div className="text-xs text-gray-400 font-medium mb-1 uppercase tracking-wide">Marge YTD</div>
+          <div className="text-2xl font-bold text-purple-700">{fmtCurrency(margeYTD)}</div>
+          <div className="text-xs text-gray-500 mt-1">{tauxMarge.toFixed(1)}% taux de marge</div>
+        </div>
+      </div>
+
+      {/* ── CA mensuel ───────────────────────────────────────── */}
+      <div className="bg-white rounded-xl border border-gray-100 p-5">
+        <div className="text-sm font-semibold text-gray-700 mb-1">CA mensuel 2026</div>
+        <div className="text-xs text-gray-400 mb-4">
+          {isAdmin ? 'Total Lyon' : `Missions de ${profile.nom}`} · Total YTD : {fmtCurrency(caYTD)}
+        </div>
+        <div className="flex items-end gap-1.5 h-28">
+          {caMensuel.map((ca, i) => {
+            const isPast    = i < curMonthIdx;
+            const isCurrent = i === curMonthIdx;
+            const pct = maxCA > 0 ? Math.max((ca / maxCA) * 100, ca > 0 ? 4 : 0) : 0;
+            return (
+              <div key={i} className="flex-1 flex flex-col items-center gap-0.5 group relative">
+                {ca > 0 && (
+                  <div className="text-xs text-gray-500 font-medium leading-tight mb-0.5" style={{fontSize:'10px'}}>
+                    {fmtCurrency(ca)}
+                  </div>
+                )}
+                <div
+                  className={`w-full rounded-t-md transition-all ${isCurrent ? 'bg-blue-600' : isPast ? 'bg-blue-400' : 'bg-gray-200'}`}
+                  style={{ height: `${pct}%`, minHeight: ca > 0 ? '4px' : '2px' }}
+                />
+                <div className={`text-xs font-medium mt-0.5 ${isCurrent ? 'text-blue-700' : 'text-gray-400'}`} style={{fontSize:'10px'}}>
+                  {MOIS_LABELS[i]}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Table missions ───────────────────────────────────── */}
+      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
+          <span className="text-sm font-semibold text-gray-700">
+            Missions — {missions.length} consultant{missions.length > 1 ? 's' : ''}
+          </span>
+          {!isAdmin && (
+            <span className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded-full">
+              Vos missions uniquement
+            </span>
+          )}
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 text-gray-500 text-xs uppercase">
+                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Consultant</th>
+                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Client</th>
+                <th className="px-3 py-2 text-left font-medium hidden lg:table-cell whitespace-nowrap">Projet</th>
+                <th className="px-3 py-2 text-right font-medium whitespace-nowrap">TJM</th>
+                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Statut</th>
+                {MOIS_LABELS.map((m, i) => (
+                  <th key={i} className={`px-2 py-2 text-right font-medium whitespace-nowrap ${i === curMonthIdx ? 'text-blue-700 bg-blue-50' : ''}`}
+                    style={{fontSize:'11px'}}>{m}</th>
+                ))}
+                <th className="px-3 py-2 text-right font-medium whitespace-nowrap">CA Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {missionsTri.map((m, idx) => {
+                const joursTotal = MOIS_KEYS.reduce((s, k) => s + (parseFloat(m[`jours_${k}`]) || 0), 0);
+                const caTotal    = joursTotal * (parseFloat(m.tjm) || 0);
+                const isInter    = m.statut === 'Intercontrat';
+                return (
+                  <tr key={m.id || idx} className={`border-t border-gray-50 hover:bg-blue-50 transition-colors ${isInter ? 'opacity-70' : ''}`}>
+                    <td className="px-3 py-2.5">
+                      <div className="font-medium text-gray-900 whitespace-nowrap">{m.consultant}</div>
+                      {m.type_contrat && <div className="text-xs text-gray-400">{m.type_contrat}</div>}
+                    </td>
+                    <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{m.client || '—'}</td>
+                    <td className="px-3 py-2.5 text-gray-500 hidden lg:table-cell text-xs max-w-xs">
+                      <span title={m.projet || ''}>
+                        {m.projet ? (m.projet.length > 45 ? m.projet.substring(0, 45) + '…' : m.projet) : '—'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono text-xs text-gray-700 whitespace-nowrap">
+                      {m.tjm > 0 ? `${m.tjm}€` : '—'}
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <MissionStatutBadge statut={m.statut} />
+                    </td>
+                    {MOIS_KEYS.map((k, i) => {
+                      const j = parseFloat(m[`jours_${k}`]) || 0;
+                      const rec = m[`statut_${k}`];
+                      let cellCls = 'text-gray-300';
+                      if (j > 0) {
+                        if (rec === 'Réceptionné') cellCls = 'text-green-600 font-semibold';
+                        else if (rec === 'Livré')  cellCls = 'text-blue-600';
+                        else                        cellCls = 'text-gray-600';
+                      }
+                      const bgCls = i === curMonthIdx ? 'bg-blue-50' : '';
+                      return (
+                        <td key={k} className={`px-2 py-2.5 text-right text-xs font-mono ${cellCls} ${bgCls}`}
+                          title={rec || ''}>
+                          {j > 0 ? (j % 1 === 0 ? j.toFixed(0) : j.toFixed(1)) : '—'}
+                        </td>
+                      );
+                    })}
+                    <td className="px-3 py-2.5 text-right font-semibold text-gray-700 whitespace-nowrap">
+                      {caTotal > 0 ? fmtCurrency(caTotal) : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-gray-200 bg-gray-50 text-xs font-semibold text-gray-700">
+                <td className="px-3 py-2.5 uppercase tracking-wide" colSpan={2}>TOTAL</td>
+                <td className="hidden lg:table-cell"></td>
+                <td></td>
+                <td></td>
+                {MOIS_KEYS.map((k, i) => {
+                  const totalJ  = missions.reduce((s, m) => s + (parseFloat(m[`jours_${k}`]) || 0), 0);
+                  const totalCA = missions.reduce((s, m) => s + (parseFloat(m[`jours_${k}`]) || 0) * (parseFloat(m.tjm) || 0), 0);
+                  const bgCls   = i === curMonthIdx ? 'bg-blue-100' : '';
+                  return (
+                    <td key={k} className={`px-2 py-2.5 text-right font-mono ${bgCls}`}>
+                      {totalJ > 0
+                        ? <><div>{totalJ % 1 === 0 ? totalJ.toFixed(0) : totalJ.toFixed(1)}j</div><div className="text-green-700 text-xs">{fmtCurrency(totalCA)}</div></>
+                        : <span className="text-gray-300">—</span>
+                      }
+                    </td>
+                  );
+                })}
+                <td className="px-3 py-2.5 text-right text-green-700">{fmtCurrency(caYTD)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
+      {/* ── Légende réception ────────────────────────────────── */}
+      <div className="flex gap-4 text-xs text-gray-400">
+        <span><span className="inline-block w-2 h-2 rounded-full bg-gray-300 mr-1"></span>Non livré</span>
+        <span><span className="text-blue-600 font-bold mr-1">●</span>Livré</span>
+        <span><span className="text-green-600 font-bold mr-1">●</span>Réceptionné</span>
+        <span className="text-gray-300">— = 0 jour</span>
+      </div>
+
+    </div>
+  );
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 function App() {
   const [user,setUser]=useState(undefined); const [profile,setProfile]=useState(null);
@@ -481,16 +721,21 @@ function App() {
     setLoading(true); setError(null);
     try {
       const [
-        {data:contacts,error:e1},{data:historique,error:e2},
-        {data:taches,error:e3},{data:besoins,error:e4},
+        {data:contacts,   error:e1},
+        {data:historique, error:e2},
+        {data:taches,     error:e3},
+        {data:besoins,    error:e4},
+        {data:missions,   error:e5},
       ] = await Promise.all([
         sb.from('contacts').select('*').order('id'),
         sb.from('historique_actions').select('*').order('date',{ascending:false}).limit(2000),
         sb.from('taches').select('*').order('due_date',{ascending:true,nullsFirst:false}),
         sb.from('besoins_statuts').select('*'),
+        sb.from('missions').select('*').order('consultant'),
       ]);
-      const err=e1||e2||e3||e4; if(err) throw new Error(err.message);
-      setData({contacts,historique,taches,besoins});
+      const err=e1||e2||e3||e4||(e5&&e5.code!=='PGRST116'?e5:null);
+      if(err) throw new Error(err.message);
+      setData({contacts,historique,taches,besoins,missions:missions||[]});
       setLastRefresh(new Date().toLocaleTimeString('fr-FR'));
     } catch(err){ setError(err.message); } finally{ setLoading(false); }
   },[]);
@@ -508,15 +753,16 @@ function App() {
   if(!data||!profile) return <Loader label="Chargement depuis Supabase..."/>;
   if(error) return <div className="flex items-center justify-center min-h-screen"><div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md text-center"><div className="text-3xl mb-3">❌</div><div className="font-semibold text-red-800">Erreur Supabase</div><div className="text-sm text-red-600 mt-2 font-mono">{error}</div><button onClick={fetchAll} className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg text-sm">Réessayer</button></div></div>;
 
-  const {contacts,historique,taches,besoins}=data;
+  const {contacts,historique,taches,besoins,missions}=data;
   const isAdmin=profile.role==='admin';
   const tachesActives=taches.filter(t=>t.statut!=='fait'&&t.statut!=='annule');
   const tachesRetard=tachesActives.filter(t=>t.due_date&&t.due_date<TODAY);
   const relancesRetard=contacts.filter(c=>c.date_relance&&c.date_relance<TODAY);
   const TABS=[
-    {id:'prospects',label:`📋 Contacts (${contacts.length})`},
-    {id:'taches',   label:`✅ Tâches (${tachesActives.length})${tachesRetard.length>0?' 🔴':''}`},
-    {id:'besoins',  label:`💼 Pipeline (${besoins.length})`},
+    {id:'prospects', label:`📋 Contacts (${contacts.length})`},
+    {id:'taches',    label:`✅ Tâches (${tachesActives.length})${tachesRetard.length>0?' 🔴':''}`},
+    {id:'besoins',   label:`💼 Pipeline (${besoins.length})`},
+    {id:'tdb',       label:`📊 TDB (${missions.length})`},
   ];
 
   return (
@@ -548,6 +794,7 @@ function App() {
         {tab==='prospects'&&<TabProspects contacts={contacts} historique={historique} taches={taches} profile={profile} onRefresh={fetchAll}/>}
         {tab==='taches'   &&<TabTaches   taches={taches} contacts={contacts} profile={profile} onRefresh={fetchAll}/>}
         {tab==='besoins'  &&<TabBesoins  contacts={contacts} besoins={besoins} historique={historique} taches={taches}/>}
+        {tab==='tdb'      &&<TabTDB      missions={missions} profile={profile}/>}
       </div>
     </div>
   );
