@@ -477,15 +477,26 @@ function MissionDetail({ mission, histMissions, profile, onClose, onRefresh }) {
 // ── Onglet Prospects ──────────────────────────────────────────────────────────
 function TabProspects({ contacts, historique, taches, profile, onRefresh }) {
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
+  const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState('');
   const [selected,setSelected]=useState(null); const [showAdd,setShowAdd]=useState(false);
   const isAdmin=profile.role==='admin';
   const statuts=useMemo(()=>[...new Set(contacts.map(c=>c.statut).filter(Boolean))].sort(),[contacts]);
+  const responsables=useMemo(()=>[...new Set(contacts.map(c=>c.responsable).filter(Boolean))].sort(),[contacts]);
   const filtered=useMemo(()=>{
     const q=search.toLowerCase();
     return contacts.map(c=>({...c,jours:daysSince(c.date_dernier),relance_en_retard:c.date_relance&&c.date_relance<TODAY,relance_aujourd_hui:c.date_relance===TODAY}))
-      .filter(c=>(!filterStatut||c.statut===filterStatut)&&(!q||[c.prenom,c.nom,c.groupe,c.ville,c.role,c.besoins].some(v=>(v||'').toLowerCase().includes(q))))
+      .filter(c=>{
+        if(filterStatut&&c.statut!==filterStatut) return false;
+        if(filterResp&&c.responsable!==filterResp) return false;
+        if(filterPeriode==='7j'&&c.jours>7) return false;
+        if(filterPeriode==='30j'&&c.jours>30) return false;
+        if(q&&![c.prenom,c.nom,c.groupe,c.ville,c.role,c.besoins].some(v=>(v||'').toLowerCase().includes(q))) return false;
+        return true;
+      })
       .sort((a,b)=>{if(a.relance_en_retard&&!b.relance_en_retard)return -1;if(!a.relance_en_retard&&b.relance_en_retard)return 1;return b.jours-a.jours;});
-  },[contacts,search,filterStatut]);
+  },[contacts,search,filterStatut,filterPeriode,filterResp]);
+  const hasFilter=search||filterStatut||filterPeriode||filterResp;
+  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterPeriode('');setFilterResp('');};
   const retard=filtered.filter(c=>c.relance_en_retard).length;
   return (
     <div>
@@ -494,7 +505,17 @@ function TabProspects({ contacts, historique, taches, profile, onRefresh }) {
         <select value={filterStatut} onChange={e=>setFilterStatut(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
           <option value="">Tous les statuts</option>{statuts.map(s=><option key={s} value={s}>{s}</option>)}
         </select>
-        {(search||filterStatut)&&<button onClick={()=>{setSearch('');setFilterStatut('');}} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">✕ Reset</button>}
+        <select value={filterPeriode} onChange={e=>setFilterPeriode(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
+          <option value="">Toute période</option>
+          <option value="7j">Contactés 7 derniers jours</option>
+          <option value="30j">Contactés 30 derniers jours</option>
+        </select>
+        {isAdmin&&responsables.length>1&&(
+          <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
+            <option value="">Tous les responsables</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}
+          </select>
+        )}
+        {hasFilter&&<button onClick={resetAll} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">✕ Reset</button>}
         <button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">+ Nouveau contact</button>
       </div>
       {retard>0&&<div className="mb-3 bg-red-50 border border-red-200 rounded-lg px-4 py-2 text-sm text-red-700">⚠️ {retard} relance{retard>1?'s':''} en retard</div>}
