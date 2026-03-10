@@ -838,6 +838,34 @@ function TabTDB({ missions, histMissions, profile, onRefresh }) {
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
+// ── Modal : Changer mot de passe ──────────────────────────────────────────────
+function ChangePasswordModal({ onClose }) {
+  const [pwd,setPwd]=useState(''); const [pwd2,setPwd2]=useState('');
+  const [saving,setSaving]=useState(false); const [err,setErr]=useState(''); const [ok,setOk]=useState(false);
+  const save = async () => {
+    if (pwd.length < 6)          { setErr('Le mot de passe doit faire au moins 6 caractères.'); return; }
+    if (pwd !== pwd2)             { setErr('Les mots de passe ne correspondent pas.'); return; }
+    setSaving(true); setErr('');
+    const { error } = await sb.auth.updateUser({ password: pwd });
+    if (error) { setErr(error.message); setSaving(false); }
+    else       { setOk(true); }
+  };
+  return (
+    <Modal title="🔑 Changer mon mot de passe" onClose={onClose}
+      footer={ok ? <button onClick={onClose} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium">Fermer</button>
+                 : <><button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Annuler</button><button onClick={save} disabled={saving||!pwd||!pwd2} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">{saving?'Enregistrement...':'Enregistrer'}</button></>}>
+      {ok
+        ? <div className="text-center py-4"><div className="text-3xl mb-2">✅</div><div className="text-sm text-green-700 font-medium">Mot de passe mis à jour avec succès !</div></div>
+        : <>
+            <Field label="Nouveau mot de passe"><input type="password" autoFocus value={pwd} onChange={e=>setPwd(e.target.value)} placeholder="Min. 6 caractères" className={inputCls}/></Field>
+            <Field label="Confirmer le mot de passe"><input type="password" value={pwd2} onChange={e=>setPwd2(e.target.value)} placeholder="Répéter le mot de passe" className={inputCls}/></Field>
+            {err && <div className="text-xs text-red-600 bg-red-50 rounded px-3 py-2">{err}</div>}
+          </>
+      }
+    </Modal>
+  );
+}
+
 function App() {
   const [user,setUser]=useState(undefined); const [profile,setProfile]=useState(null);
   const [data,setData]=useState(null); const [loading,setLoading]=useState(false);
@@ -882,6 +910,7 @@ function App() {
     fetchAll();
   },[user]);
 
+  const [showPwd,setShowPwd]=useState(false);
   const logout = async ()=>await sb.auth.signOut();
 
   if(user===undefined) return <Loader label="Vérification de la session..."/>;
@@ -917,8 +946,10 @@ function App() {
             <button onClick={fetchAll} disabled={loading} className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg font-medium disabled:opacity-50">{loading?'⟳ ...':'⟳ Refresh'}</button>
             <div className="flex items-center gap-2 border-l pl-3">
               <span className="text-xs text-gray-500 font-medium">{profile.nom}</span>
+              <button onClick={()=>setShowPwd(true)} title="Changer mon mot de passe" className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2 py-1.5 rounded-lg font-medium">🔑</button>
               <button onClick={logout} className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-lg font-medium">Déconnexion</button>
             </div>
+            {showPwd&&<ChangePasswordModal onClose={()=>setShowPwd(false)}/>}
           </div>
         </div>
         <div className="max-w-7xl mx-auto px-4 flex gap-1 pb-0">
