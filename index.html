@@ -670,19 +670,38 @@ function TabBesoins({ contacts, besoins, historique, taches, profile }) {
   },[pipeline,search,filterStatut,filterResp]);
   const hasFilter=search||filterStatut||filterResp;
   const resetAll=()=>{setSearch('');setFilterStatut('');setFilterResp('');};
+  const STATUT_BTNS=[
+    {label:'Tous',      value:'',                    icon:''},
+    {label:'Besoin ouvert', value:'Besoin ouvert',   icon:'🟢'},
+    {label:'Opportunité',   value:'Opportunité',     icon:'🔍'},
+    {label:'Profil proposé',value:'Profil proposé',  icon:''},
+    {label:'Entretien prog.',value:'Entretien programmé',icon:''},
+    {label:'Entretien passé',value:'Entretien passé',icon:''},
+    {label:'Push',      value:'Push opportuniste',   icon:'🟡'},
+    {label:'Gagné',     value:'Besoin Gagné',         icon:'🏆'},
+    {label:'Perdu',     value:'Besoin Perdu',         icon:'❌'},
+  ];
   return (
     <div>
-      <div className="flex gap-3 mb-4 flex-wrap">
+      <div className="flex gap-3 mb-3 flex-wrap">
         <input type="text" placeholder="Rechercher (nom, société, poste, candidat...)" value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-48 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
-        <select value={filterStatut} onChange={e=>setFilterStatut(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
-          <option value="">Tous les statuts</option>{statutsPipeline.map(s=><option key={s} value={s}>{s}</option>)}
-        </select>
         {isAdmin&&responsablesPipeline.length>1&&(
           <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
             <option value="">Tous les responsables</option>{responsablesPipeline.map(r=><option key={r} value={r}>{r}</option>)}
           </select>
         )}
         {hasFilter&&<button onClick={resetAll} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">✕ Reset</button>}
+      </div>
+      <div className="flex gap-1.5 flex-wrap mb-4">
+        {STATUT_BTNS.map(btn=>(
+          <button key={btn.value} onClick={()=>setFilterStatut(btn.value)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap
+              ${filterStatut===btn.value
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-600'}`}>
+            {btn.icon&&<span className="mr-1">{btn.icon}</span>}{btn.label}
+          </button>
+        ))}
       </div>
       <div className="text-xs text-gray-400 mb-3">{sorted.length} besoin{sorted.length>1?'s':''} en pipeline</div>
       <div className="space-y-3">{sorted.map(({contact,besoin,derniere,tachesActives},i)=>(
