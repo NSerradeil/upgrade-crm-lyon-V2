@@ -482,13 +482,25 @@ function MissionDetail({ mission, histMissions, profile, onClose, onRefresh }) {
 function TabProspects({ contacts, historique, taches, profile, allProfiles, onRefresh }) {
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
   const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState('');
+  const [sortCol,setSortCol]=useState('date_dernier'); const [sortDir,setSortDir]=useState('desc');
   const [selected,setSelected]=useState(null); const [showAdd,setShowAdd]=useState(false);
   const isAdmin=profile.role==='admin';
   const statuts=useMemo(()=>[...new Set(contacts.map(c=>c.statut).filter(Boolean))].sort(),[contacts]);
   const responsables=useMemo(()=>[...new Set(contacts.map(c=>c.responsable).filter(Boolean))].sort(),[contacts]);
+
+  const toggleSort = col => {
+    if(sortCol===col) setSortDir(d=>d==='asc'?'desc':'asc');
+    else { setSortCol(col); setSortDir(col==='date_dernier'||col==='date_relance'?'desc':'asc'); }
+  };
+  const SortIcon = ({col}) => {
+    if(sortCol!==col) return <span className="ml-1 text-gray-300">↕</span>;
+    return <span className="ml-1 text-blue-500">{sortDir==='asc'?'↑':'↓'}</span>;
+  };
+
   const filtered=useMemo(()=>{
     const q=search.toLowerCase();
-    return contacts.map(c=>({...c,jours:daysSince(c.date_dernier),relance_en_retard:c.date_relance&&c.date_relance<TODAY,relance_aujourd_hui:c.date_relance===TODAY}))
+    const rows=contacts
+      .map(c=>({...c,jours:daysSince(c.date_dernier),relance_en_retard:c.date_relance&&c.date_relance<TODAY,relance_aujourd_hui:c.date_relance===TODAY}))
       .filter(c=>{
         if(filterStatut&&c.statut!==filterStatut) return false;
         if(filterResp&&c.responsable!==filterResp) return false;
@@ -496,12 +508,27 @@ function TabProspects({ contacts, historique, taches, profile, allProfiles, onRe
         if(filterPeriode==='30j'&&c.jours>30) return false;
         if(q&&![c.prenom,c.nom,c.groupe,c.ville,c.role,c.besoins].some(v=>(v||'').toLowerCase().includes(q))) return false;
         return true;
-      })
-      .sort((a,b)=>{if(a.relance_en_retard&&!b.relance_en_retard)return -1;if(!a.relance_en_retard&&b.relance_en_retard)return 1;return b.jours-a.jours;});
-  },[contacts,search,filterStatut,filterPeriode,filterResp]);
+      });
+    rows.sort((a,b)=>{
+      let va,vb;
+      if(sortCol==='nom')          { va=(a.nom||'').toLowerCase();  vb=(b.nom||'').toLowerCase(); }
+      else if(sortCol==='groupe')  { va=(a.groupe||'').toLowerCase(); vb=(b.groupe||'').toLowerCase(); }
+      else if(sortCol==='ville')   { va=(a.ville||'').toLowerCase();  vb=(b.ville||'').toLowerCase(); }
+      else if(sortCol==='statut')  { va=(a.statut||'').toLowerCase(); vb=(b.statut||'').toLowerCase(); }
+      else if(sortCol==='date_dernier') { va=a.jours; vb=b.jours; }
+      else if(sortCol==='date_relance') { va=a.date_relance||'9999'; vb=b.date_relance||'9999'; }
+      else { va=a.jours; vb=b.jours; }
+      if(va<vb) return sortDir==='asc'?-1:1;
+      if(va>vb) return sortDir==='asc'?1:-1;
+      return 0;
+    });
+    return rows;
+  },[contacts,search,filterStatut,filterPeriode,filterResp,sortCol,sortDir]);
+
   const hasFilter=search||filterStatut||filterPeriode||filterResp;
   const resetAll=()=>{setSearch('');setFilterStatut('');setFilterPeriode('');setFilterResp('');};
   const retard=filtered.filter(c=>c.relance_en_retard).length;
+  const thCls="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-blue-600 whitespace-nowrap";
   return (
     <div>
       <div className="flex gap-3 mb-4 flex-wrap">
@@ -527,12 +554,12 @@ function TabProspects({ contacts, historique, taches, profile, allProfiles, onRe
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
         <table className="w-full text-sm">
           <thead><tr className="bg-gray-50 text-gray-500 text-xs uppercase">
-            <th className="px-4 py-3 text-left font-medium">Contact</th>
-            <th className="px-4 py-3 text-left font-medium">Société</th>
-            <th className="px-4 py-3 text-left font-medium hidden md:table-cell">Ville</th>
-            <th className="px-4 py-3 text-left font-medium">Statut</th>
-            <th className="px-4 py-3 text-left font-medium hidden lg:table-cell">Dernier contact</th>
-            <th className="px-4 py-3 text-left font-medium hidden lg:table-cell">Relance</th>
+            <th className={thCls} onClick={()=>toggleSort('nom')}>Contact<SortIcon col="nom"/></th>
+            <th className={thCls} onClick={()=>toggleSort('groupe')}>Société<SortIcon col="groupe"/></th>
+            <th className={thCls+" hidden md:table-cell"} onClick={()=>toggleSort('ville')}>Ville<SortIcon col="ville"/></th>
+            <th className={thCls} onClick={()=>toggleSort('statut')}>Statut<SortIcon col="statut"/></th>
+            <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('date_dernier')}>Dernier contact<SortIcon col="date_dernier"/></th>
+            <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('date_relance')}>Relance<SortIcon col="date_relance"/></th>
           </tr></thead>
           <tbody>{filtered.map(c=>(
             <tr key={c.id} onClick={()=>setSelected(c)} className="border-t border-gray-50 hover:bg-blue-50 cursor-pointer transition-colors">
@@ -1096,7 +1123,7 @@ function App() {
     {id:'prospects',  label:`📋 Contacts (${vContacts.length})`},
     {id:'taches',     label:`✅ Tâches (${tachesActives.length})${tachesRetard.length>0?' 🔴':''}`},
     {id:'besoins',    label:`💼 Pipeline (${vBesoins.length})`},
-    {id:'tdb',        label:`📊 TDB (${vMissions.length})`},
+    {id:'tdb',        label:`🎯 Missions (${vMissions.length})`},
     {id:'historique', label:`📖 Historique (${vHistorique.length})`},
   ];
 
