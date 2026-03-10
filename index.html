@@ -926,7 +926,7 @@ function App() {
   // ── Mode "Voir comme" ──────────────────────────────────
   const activeProfile = viewAs || profile;
   const activeIsAdmin = activeProfile.role==='admin';
-  const contactAgenceMap = useMemo(()=>Object.fromEntries(contacts.map(c=>[String(c.id),c.agence])),[contacts]);
+  const contactAgenceMap = Object.fromEntries(contacts.map(c=>[String(c.id),c.agence]));
   const vContacts   = contacts; // tous voient tous les contacts
   const vHistorique = activeIsAdmin ? historique : historique.filter(h=>h.responsable===activeProfile.nom);
   const vTaches     = activeIsAdmin ? taches     : taches.filter(t=>t.responsable===activeProfile.nom);
