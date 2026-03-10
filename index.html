@@ -871,6 +871,7 @@ function App() {
   const [data,setData]=useState(null); const [loading,setLoading]=useState(false);
   const [error,setError]=useState(null); const [tab,setTab]=useState('prospects');
   const [lastRefresh,setLastRefresh]=useState(null);
+  const [viewAs,setViewAs]=useState(null); const [allProfiles,setAllProfiles]=useState([]);
 
   useEffect(()=>{
     sb.auth.getUser().then(({data:{user}})=>setUser(user||null));
@@ -907,6 +908,7 @@ function App() {
   useEffect(()=>{
     if(!user) return;
     sb.from('profiles').select('*').eq('id',user.id).single().then(({data:p})=>setProfile(p));
+    sb.from('profiles').select('*').order('nom').then(({data:ps})=>setAllProfiles(ps||[]));
     fetchAll();
   },[user]);
 
@@ -920,15 +922,27 @@ function App() {
 
   const {contacts,historique,taches,besoins,missions,histMissions}=data;
   const isAdmin=profile.role==='admin';
-  const tachesActives=taches.filter(t=>t.statut!=='fait'&&t.statut!=='annule');
+
+  // ── Mode "Voir comme" ──────────────────────────────────
+  const activeProfile = viewAs || profile;
+  const activeIsAdmin = activeProfile.role==='admin';
+  const contactAgenceMap = useMemo(()=>Object.fromEntries(contacts.map(c=>[String(c.id),c.agence])),[contacts]);
+  const vContacts   = contacts; // tous voient tous les contacts
+  const vHistorique = activeIsAdmin ? historique : historique.filter(h=>h.responsable===activeProfile.nom);
+  const vTaches     = activeIsAdmin ? taches     : taches.filter(t=>t.responsable===activeProfile.nom);
+  const vMissions   = activeIsAdmin ? missions   : missions.filter(m=>m.responsable===activeProfile.nom);
+  const vBesoins    = activeIsAdmin ? besoins    : besoins.filter(b=>contactAgenceMap[String(b.contact_id)]===activeProfile.agence);
+  const vHistMiss   = histMissions; // filtré par missions déjà
+
+  const tachesActives=vTaches.filter(t=>t.statut!=='fait'&&t.statut!=='annule');
   const tachesRetard=tachesActives.filter(t=>t.due_date&&t.due_date<TODAY);
-  const relancesRetard=contacts.filter(c=>c.date_relance&&c.date_relance<TODAY);
+  const relancesRetard=vContacts.filter(c=>c.date_relance&&c.date_relance<TODAY);
   const TABS=[
-    {id:'prospects',  label:`📋 Contacts (${contacts.length})`},
+    {id:'prospects',  label:`📋 Contacts (${vContacts.length})`},
     {id:'taches',     label:`✅ Tâches (${tachesActives.length})${tachesRetard.length>0?' 🔴':''}`},
-    {id:'besoins',    label:`💼 Pipeline (${besoins.length})`},
-    {id:'tdb',        label:`📊 TDB (${missions.length})`},
-    {id:'historique', label:`📖 Historique (${historique.length})`},
+    {id:'besoins',    label:`💼 Pipeline (${vBesoins.length})`},
+    {id:'tdb',        label:`📊 TDB (${vMissions.length})`},
+    {id:'historique', label:`📖 Historique (${vHistorique.length})`},
   ];
 
   return (
@@ -944,6 +958,15 @@ function App() {
             {relancesRetard.length>0&&<span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full font-medium hidden sm:block">⚠️ {relancesRetard.length} relance{relancesRetard.length>1?'s':''} en retard</span>}
             <div className="text-xs text-gray-400 hidden sm:block">{lastRefresh&&`Actualisé ${lastRefresh}`}</div>
             <button onClick={fetchAll} disabled={loading} className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg font-medium disabled:opacity-50">{loading?'⟳ ...':'⟳ Refresh'}</button>
+            {isAdmin&&(
+              <select value={viewAs?.nom||''} onChange={e=>{const p=allProfiles.find(p=>p.nom===e.target.value);setViewAs(p||null);}}
+                className={`text-xs border rounded-lg px-2 py-1.5 font-medium focus:outline-none ${viewAs?'border-orange-400 bg-orange-50 text-orange-700':'text-gray-600'}`}>
+                <option value="">👁️ Vue normale</option>
+                {allProfiles.filter(p=>p.nom!==profile.nom).map(p=>(
+                  <option key={p.id} value={p.nom}>{p.nom} · {p.agence}</option>
+                ))}
+              </select>
+            )}
             <div className="flex items-center gap-2 border-l pl-3">
               <span className="text-xs text-gray-500 font-medium">{profile.nom}</span>
               <button onClick={()=>setShowPwd(true)} title="Changer mon mot de passe" className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2 py-1.5 rounded-lg font-medium">🔑</button>
@@ -958,12 +981,18 @@ function App() {
           ))}
         </div>
       </div>
+      {viewAs&&(
+        <div className="bg-orange-500 text-white text-center text-xs py-2 font-medium flex items-center justify-center gap-3">
+          <span>👁️ Vue simulée : <strong>{viewAs.nom}</strong> · {viewAs.agence} · {viewAs.role} — les données sont filtrées comme il/elle les verrait</span>
+          <button onClick={()=>setViewAs(null)} className="bg-white text-orange-600 px-3 py-0.5 rounded-full font-semibold hover:bg-orange-50">Quitter</button>
+        </div>
+      )}
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {tab==='prospects'&&<TabProspects contacts={contacts} historique={historique} taches={taches} profile={profile} onRefresh={fetchAll}/>}
-        {tab==='taches'   &&<TabTaches   taches={taches} contacts={contacts} profile={profile} onRefresh={fetchAll}/>}
-        {tab==='besoins'  &&<TabBesoins  contacts={contacts} besoins={besoins} historique={historique} taches={taches}/>}
-        {tab==='historique'&&<TabHistorique historique={historique} contacts={contacts} taches={taches} profile={profile} onRefresh={fetchAll}/>}
-        {tab==='tdb'      &&<TabTDB      missions={missions} histMissions={histMissions} profile={profile} onRefresh={fetchAll}/>}
+        {tab==='prospects'&&<TabProspects contacts={vContacts} historique={vHistorique} taches={vTaches} profile={activeProfile} onRefresh={fetchAll}/>}
+        {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} profile={activeProfile} onRefresh={fetchAll}/>}
+        {tab==='besoins'  &&<TabBesoins  contacts={vContacts} besoins={vBesoins} historique={vHistorique} taches={vTaches}/>}
+        {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} taches={vTaches} profile={activeProfile} onRefresh={fetchAll}/>}
+        {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} profile={activeProfile} onRefresh={fetchAll}/>}
       </div>
     </div>
   );
