@@ -662,11 +662,79 @@ function CompleteTaskModal({ task, contact, profile, onClose, onSaved }) {
   );
 }
 
+// ── Calendrier tâches ─────────────────────────────────────────────────────────
+const MOIS=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+const JOURS_COURT=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+function CalendarTaches({ taches, contactMap, profile, isAdmin, onComplete }) {
+  const todayD=new Date(TODAY);
+  const [calYear,setCalYear]=useState(todayD.getFullYear());
+  const [calMonth,setCalMonth]=useState(todayD.getMonth());
+  const prevMonth=()=>{ if(calMonth===0){setCalYear(y=>y-1);setCalMonth(11);}else setCalMonth(m=>m-1); };
+  const nextMonth=()=>{ if(calMonth===11){setCalYear(y=>y+1);setCalMonth(0);}else setCalMonth(m=>m+1); };
+  const tasksByDate=useMemo(()=>{
+    const map={};
+    taches.forEach(t=>{ if(t.due_date){ if(!map[t.due_date])map[t.due_date]=[]; map[t.due_date].push(t); } });
+    return map;
+  },[taches]);
+  const firstDow=(new Date(calYear,calMonth,1).getDay()+6)%7; // 0=Lun
+  const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
+  const slots=[];
+  for(let i=0;i<firstDow;i++)slots.push(null);
+  for(let d=1;d<=daysInMonth;d++)slots.push(d);
+  while(slots.length%7!==0)slots.push(null);
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={prevMonth} className="p-2 hover:bg-gray-100 rounded-lg text-gray-600 font-medium">← Préc.</button>
+        <div className="flex items-center gap-3">
+          <h2 className="text-base font-semibold text-gray-800">{MOIS[calMonth]} {calYear}</h2>
+          <button onClick={()=>{setCalYear(todayD.getFullYear());setCalMonth(todayD.getMonth());}} className="text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 font-medium">Aujourd'hui</button>
+        </div>
+        <button onClick={nextMonth} className="p-2 hover:bg-gray-100 rounded-lg text-gray-600 font-medium">Suiv. →</button>
+      </div>
+      <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-xl overflow-hidden border border-gray-200">
+        {JOURS_COURT.map(j=>(
+          <div key={j} className="bg-gray-50 text-center text-xs font-semibold text-gray-500 py-2">{j}</div>
+        ))}
+        {slots.map((day,i)=>{
+          if(!day) return <div key={i} className="bg-gray-50 min-h-28"/>;
+          const mm=String(calMonth+1).padStart(2,'0'), dd=String(day).padStart(2,'0');
+          const dateStr=`${calYear}-${mm}-${dd}`;
+          const dayTasks=tasksByDate[dateStr]||[];
+          const isToday=dateStr===TODAY;
+          const isPast=dateStr<TODAY;
+          const hasOver=isPast&&dayTasks.length>0;
+          return (
+            <div key={i} className={`min-h-28 p-1.5 ${isToday?'bg-blue-50':'bg-white'} ${hasOver?'bg-red-50':''}`} style={isToday?{outline:'2px solid #3b82f6',outlineOffset:'-2px'}:{}}>
+              <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday?'bg-blue-600 text-white':'text-gray-500'}`}>{day}</div>
+              <div className="space-y-0.5">
+                {dayTasks.slice(0,3).map(t=>{
+                  const canEdit=isAdmin||t.responsable===profile.nom;
+                  const cls=t.overdue?'bg-red-100 text-red-700 hover:bg-red-200':'bg-blue-50 text-blue-700 hover:bg-blue-100';
+                  return (
+                    <div key={t.id} title={`${t.titre}${t.notes?' — '+t.notes:''}`}
+                      onClick={()=>canEdit&&onComplete(t)}
+                      className={`text-xs px-1.5 py-0.5 rounded truncate ${cls} ${canEdit?'cursor-pointer':''}`}>
+                      {t.titre}
+                    </div>
+                  );
+                })}
+                {dayTasks.length>3&&<div className="text-xs text-gray-400 pl-1">+{dayTasks.length-3}</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Onglet Tâches ─────────────────────────────────────────────────────────────
 function TabTaches({ taches, contacts, profile, onRefresh, navKey, navEcheance }) {
   const [search,setSearch]=useState(''); const [showAdd,setShowAdd]=useState(false);
   const [filterStatut,setFilterStatut]=useState(''); const [filterResp,setFilterResp]=useState('');
   const [filterEcheance,setFilterEcheance]=useState('');
+  const [viewMode,setViewMode]=useState('list');
   useEffect(()=>{ if(navEcheance) setFilterEcheance(navEcheance); },[navKey]);
   const [completingModal,setCompletingModal]=useState(null);
   const contactMap=useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
@@ -715,34 +783,42 @@ function TabTaches({ taches, contacts, profile, onRefresh, navKey, navEcheance }
           {overdue>0&&<button onClick={()=>setFilterEcheance(filterEcheance==='retard'?'':'retard')} className={`text-xs px-2 py-0.5 rounded-full font-medium ${filterEcheance==='retard'?'bg-red-600 text-white':'bg-red-100 text-red-600 hover:bg-red-200'}`}>⚠️ {overdue} en retard</button>}
           {today_t>0&&<button onClick={()=>setFilterEcheance(filterEcheance==='today'?'':'today')} className={`text-xs px-2 py-0.5 rounded-full font-medium ${filterEcheance==='today'?'bg-orange-500 text-white':'bg-orange-100 text-orange-600 hover:bg-orange-200'}`}>📍 {today_t} aujourd'hui</button>}
         </div>
+        <div className="flex border rounded-lg overflow-hidden text-sm">
+          <button onClick={()=>setViewMode('list')} className={`px-3 py-2 font-medium ${viewMode==='list'?'bg-blue-600 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>☰ Liste</button>
+          <button onClick={()=>setViewMode('calendar')} className={`px-3 py-2 font-medium border-l ${viewMode==='calendar'?'bg-blue-600 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>📅 Calendrier</button>
+        </div>
         <button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">+ Nouvelle tâche</button>
       </div>
-      <div className="space-y-2">{actives.map(t=>{
-        const contact=t.contact_id?contactMap[t.contact_id]:null;
-        const st=ST[t.statut]||{bg:'#f9fafb',color:'#6b7280',label:t.statut};
-        const canEdit=isAdmin||t.responsable===profile.nom;
-        return (
-          <div key={t.id} className={`rounded-xl border p-4 ${t.overdue?'bg-red-50 border-red-200':'bg-white border-gray-100'}`}>
-            <div className="flex items-start gap-3">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-medium text-gray-900">{t.titre}</span>
-                  <span style={{backgroundColor:st.bg,color:st.color,padding:'1px 7px',borderRadius:9999,fontSize:11,fontWeight:600}}>{st.label}</span>
-                  {t.overdue&&<span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">En retard</span>}
-                  {t.due_date===TODAY&&!t.overdue&&<span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">Aujourd'hui</span>}
+      {viewMode==='list'?(
+        <div className="space-y-2">{actives.map(t=>{
+          const contact=t.contact_id?contactMap[t.contact_id]:null;
+          const st=ST[t.statut]||{bg:'#f9fafb',color:'#6b7280',label:t.statut};
+          const canEdit=isAdmin||t.responsable===profile.nom;
+          return (
+            <div key={t.id} className={`rounded-xl border p-4 ${t.overdue?'bg-red-50 border-red-200':'bg-white border-gray-100'}`}>
+              <div className="flex items-start gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-gray-900">{t.titre}</span>
+                    <span style={{backgroundColor:st.bg,color:st.color,padding:'1px 7px',borderRadius:9999,fontSize:11,fontWeight:600}}>{st.label}</span>
+                    {t.overdue&&<span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">En retard</span>}
+                    {t.due_date===TODAY&&!t.overdue&&<span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">Aujourd'hui</span>}
+                  </div>
+                  {contact&&<div className="text-xs text-gray-400 mt-1">👤 {contact.prenom} {contact.nom} · {contact.groupe}</div>}
+                  {t.notes&&<div className="text-xs text-gray-500 mt-1 italic">{t.notes}</div>}
                 </div>
-                {contact&&<div className="text-xs text-gray-400 mt-1">👤 {contact.prenom} {contact.nom} · {contact.groupe}</div>}
-                {t.notes&&<div className="text-xs text-gray-500 mt-1 italic">{t.notes}</div>}
-              </div>
-              <div className="flex flex-col items-end gap-1 shrink-0">
-                <div className="text-xs text-gray-400">{t.responsable}</div>
-                {t.due_date&&<div className={`text-xs font-medium ${t.overdue?'text-red-600':'text-gray-500'}`}>{t.due_date}</div>}
-                {canEdit&&<button onClick={()=>setCompletingModal(t)} className="mt-1 text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2.5 py-1 rounded-lg font-medium">✓ Fait</button>}
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <div className="text-xs text-gray-400">{t.responsable}</div>
+                  {t.due_date&&<div className={`text-xs font-medium ${t.overdue?'text-red-600':'text-gray-500'}`}>{t.due_date}</div>}
+                  {canEdit&&<button onClick={()=>setCompletingModal(t)} className="mt-1 text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2.5 py-1 rounded-lg font-medium">✓ Fait</button>}
+                </div>
               </div>
             </div>
-          </div>
-        );
-      })}</div>
+          );
+        })}</div>
+      ):(
+        <CalendarTaches taches={actives} contactMap={contactMap} profile={profile} isAdmin={isAdmin} onComplete={setCompletingModal}/>
+      )}
       {showAdd&&<AddTacheModal contacts={contacts} profile={profile} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
       {completingModal&&<CompleteTaskModal task={completingModal} contact={contactMap[completingModal.contact_id]||null} profile={profile} onClose={()=>setCompletingModal(null)} onSaved={()=>{setCompletingModal(null);onRefresh();}}/>}
     </div>
