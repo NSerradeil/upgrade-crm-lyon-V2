@@ -619,7 +619,7 @@ function TabProspects({ contacts, historique, taches, profile, allProfiles, onRe
           <option value="7j">Contactés 7 derniers jours</option>
           <option value="30j">Contactés 30 derniers jours</option>
         </select>
-        {isAdmin&&responsables.length>1&&(
+        {responsables.length>1&&(
           <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
             <option value="">Tous les responsables</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}
           </select>
