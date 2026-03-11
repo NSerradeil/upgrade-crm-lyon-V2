@@ -218,7 +218,97 @@ function tacheTypesFor(contact) {
   if (isEntretienStatut(contact.statut)) return TACHE_TYPES_CANDIDAT;
   return TACHE_TYPES_PROSPECT;
 }
-function AddTacheModal({ contacts, profile, allProfiles, onClose, onSaved, defaultContactId }) {
+
+// ── Picker contact searchable ─────────────────────────────────────────────────
+function ContactPicker({ contacts, besoins, value, onChange }) {
+  const [mode,setMode] = useState('contact');
+  const [query,setQuery] = useState('');
+  const [open,setOpen] = useState(false);
+
+  const cMap = useMemo(()=>Object.fromEntries(contacts.map(c=>[String(c.id),c])),[contacts]);
+  const selected = value ? cMap[value] : null;
+
+  // Aplatit les besoins en lignes {contact, label, statut}
+  const besoinRows = useMemo(()=>{
+    if(!besoins||!besoins.length) return [];
+    const rows=[];
+    besoins.forEach(b=>{
+      const c=cMap[String(b.contact_id)];
+      if(!c||!b.data) return;
+      const items=b.data.besoins_multiples||(b.data.label?[b.data]:[]);
+      items.forEach(item=>rows.push({contact:c,label:item.label||'',statut:item.statut||''}));
+    });
+    return rows;
+  },[besoins,cMap]);
+
+  const results = useMemo(()=>{
+    const q=query.trim().toLowerCase();
+    if(q.length<2) return [];
+    if(mode==='contact'){
+      return contacts.filter(c=>[c.prenom,c.nom,c.groupe,c.ville].some(v=>(v||'').toLowerCase().includes(q))).slice(0,7);
+    }
+    return besoinRows.filter(b=>[b.contact.prenom,b.contact.nom,b.contact.groupe,b.label].some(v=>(v||'').toLowerCase().includes(q))).slice(0,7);
+  },[mode,query,contacts,besoinRows]);
+
+  const pick = (cid)=>{ onChange(String(cid)); setQuery(''); setOpen(false); };
+  const clear = ()=>{ onChange(''); setQuery(''); };
+  const switchMode = (m)=>{ setMode(m); setQuery(''); setOpen(false); };
+
+  if(selected) return (
+    <div className="flex items-center gap-2 px-3 py-2 border border-blue-200 rounded-lg bg-blue-50">
+      <div className="flex-1 min-w-0">
+        <span className="text-sm font-medium text-blue-900">{selected.prenom} {selected.nom}</span>
+        {selected.groupe&&<span className="ml-2 text-xs text-blue-500">{selected.groupe}</span>}
+        {selected.statut&&<span className="ml-2 text-xs text-gray-400">{selected.statut}</span>}
+      </div>
+      <button type="button" onClick={clear} className="text-blue-300 hover:text-red-500 text-xl leading-none font-light shrink-0">×</button>
+    </div>
+  );
+
+  return (
+    <div className="relative">
+      <div className="flex gap-1 mb-2">
+        {[{id:'contact',label:'👤 Contact'},{id:'besoin',label:'🎯 Besoin'}].map(m=>(
+          <button key={m.id} type="button" onClick={()=>switchMode(m.id)}
+            className={`px-2.5 py-1 text-xs rounded-md font-medium border transition-colors ${mode===m.id?'bg-blue-600 text-white border-blue-600':'bg-white text-gray-500 border-gray-200 hover:border-blue-300'}`}>
+            {m.label}
+          </button>
+        ))}
+      </div>
+      <input type="text" value={query}
+        onChange={e=>{setQuery(e.target.value);setOpen(true);}}
+        onFocus={()=>setOpen(true)}
+        onBlur={()=>setTimeout(()=>setOpen(false),200)}
+        placeholder={mode==='contact'?'Rechercher par nom, société…':'Rechercher par poste, contact, société…'}
+        className={inputCls}/>
+      {open&&query.trim().length>=2&&(
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden max-h-60 overflow-y-auto">
+          {results.length===0
+            ? <div className="px-4 py-3 text-sm text-gray-400 text-center">Aucun résultat</div>
+            : results.map((item,i)=>{
+                const c=mode==='contact'?item:item.contact;
+                return (
+                  <button key={i} type="button" onMouseDown={()=>pick(c.id)}
+                    className="w-full text-left px-3 py-2.5 hover:bg-blue-50 flex items-center gap-3 border-b border-gray-50 last:border-0 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-900 truncate">{c.prenom} {c.nom}</div>
+                      <div className="text-xs text-gray-400 truncate">
+                        {c.groupe}
+                        {mode==='besoin'&&item.label?<span className="ml-2 text-blue-500">· {item.label}</span>:null}
+                      </div>
+                    </div>
+                    <span className="text-xs text-gray-300 shrink-0 whitespace-nowrap">{c.ville||''}</span>
+                  </button>
+                );
+              })
+          }
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AddTacheModal({ contacts, besoins, profile, allProfiles, onClose, onSaved, defaultContactId }) {
   const isAdmin = profile.role==='admin';
   const [f,setF] = useState({ type:'', titre:'', due_date:'', contact_id:defaultContactId?String(defaultContactId):'', notes:'', responsable:profile.nom });
   const [saving,setSaving]=useState(false);
@@ -248,15 +338,9 @@ function AddTacheModal({ contacts, profile, allProfiles, onClose, onSaved, defau
   return (
     <Modal title="✅ Nouvelle tâche" onClose={onClose}
       footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Annuler</button><button onClick={save} disabled={saving||!f.titre.trim()} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">{saving?'Enregistrement...':'+ Créer'}</button></>}>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Échéance"><input type="date" value={f.due_date} min={TODAY} onChange={e=>setF(v=>({...v,due_date:e.target.value}))} className={inputCls}/></Field>
-        <Field label="Contact lié">
-          <select value={f.contact_id} onChange={e=>handleContactChange(e.target.value)} className={inputCls}>
-            <option value="">Aucun</option>
-            {myContacts.map(c=><option key={c.id} value={c.id}>{c.prenom} {c.nom} — {c.groupe}</option>)}
-          </select>
-        </Field>
-      </div>
+      <Field label="Contact lié">
+        <ContactPicker contacts={myContacts} besoins={besoins||[]} value={f.contact_id} onChange={handleContactChange}/>
+      </Field>
       <Field label="Type">
         <div className="flex gap-1.5 flex-wrap mt-1">
           {types.map(t=>(
@@ -272,6 +356,7 @@ function AddTacheModal({ contacts, profile, allProfiles, onClose, onSaved, defau
         </div>
       </Field>
       <Field label="Titre *"><input type="text" value={f.titre} onChange={e=>setF(v=>({...v,titre:e.target.value}))} placeholder="Sélectionne un type ou saisis directement" className={inputCls}/></Field>
+      <Field label="Échéance"><input type="date" value={f.due_date} min={TODAY} onChange={e=>setF(v=>({...v,due_date:e.target.value}))} className={inputCls}/></Field>
       <Field label="Notes"><textarea rows={2} value={f.notes} onChange={e=>setF(v=>({...v,notes:e.target.value}))} className={inputCls+' resize-none'}/></Field>
       <Field label="Responsable">
         {isAdmin
@@ -409,7 +494,7 @@ function ContactDetail({ contact, historique, taches, profile, allProfiles, onCl
       </div>
       {modal==='edit'  && <ContactEditModal   contact={contact} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved} />}
       {modal==='hist'  && <AddHistoriqueModal contact={contact} profile={profile} onClose={()=>setModal(null)} onSaved={saved}/>}
-      {modal==='tache' && <AddTacheModal contacts={[contact]} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved} defaultContactId={contact.id}/>}
+      {modal==='tache' && <AddTacheModal contacts={[contact]} besoins={[]} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved} defaultContactId={contact.id}/>}
     </div>
   );
 }
@@ -843,7 +928,7 @@ function CalendarTaches({ taches, contactMap, profile, isAdmin, onComplete }) {
 }
 
 // ── Onglet Tâches ─────────────────────────────────────────────────────────────
-function TabTaches({ taches, contacts, profile, allProfiles, onRefresh, navKey, navEcheance }) {
+function TabTaches({ taches, contacts, besoins, profile, allProfiles, onRefresh, navKey, navEcheance }) {
   const [search,setSearch]=useState(''); const [showAdd,setShowAdd]=useState(false);
   const [filterStatut,setFilterStatut]=useState(''); const [filterResp,setFilterResp]=useState('');
   const [filterEcheance,setFilterEcheance]=useState('');
@@ -929,7 +1014,7 @@ function TabTaches({ taches, contacts, profile, allProfiles, onRefresh, navKey, 
       ):(
         <CalendarTaches taches={actives} contactMap={contactMap} profile={profile} isAdmin={isAdmin} onComplete={setCompletingModal}/>
       )}
-      {showAdd&&<AddTacheModal contacts={contacts} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
+      {showAdd&&<AddTacheModal contacts={contacts} besoins={besoins||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
       {completingModal&&<CompleteTaskModal task={completingModal} contact={contactMap[completingModal.contact_id]||null} profile={profile} onClose={()=>setCompletingModal(null)} onSaved={()=>{setCompletingModal(null);onRefresh();}}/>}
       {editingTask&&<EditTacheModal task={editingTask} contacts={contacts} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingTask(null)} onSaved={()=>{setEditingTask(null);onRefresh();}}/>}
     </div>
@@ -1458,7 +1543,7 @@ function App() {
       )}
       <div className="max-w-7xl mx-auto px-4 py-6">
         {tab==='prospects'&&<TabProspects contacts={vContacts} historique={vHistorique} taches={vTaches} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
-        {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance}/>}
+        {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance}/>}
         {tab==='besoins'  &&<TabBesoins  contacts={vContacts} besoins={vBesoins} historique={vHistorique} taches={vTaches} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
         {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} taches={vTaches} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
         {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
