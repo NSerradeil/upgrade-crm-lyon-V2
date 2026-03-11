@@ -927,6 +927,26 @@ function CalendarTaches({ taches, contactMap, profile, isAdmin, onComplete }) {
   );
 }
 
+function DeleteTacheModal({ task, onClose, onDeleted }) {
+  const [loading,setLoading]=useState(false);
+  const del=async()=>{
+    setLoading(true);
+    await sb.from('taches').delete().eq('id',task.id);
+    onDeleted();
+  };
+  return (
+    <Modal title="Supprimer la tâche" onClose={onClose}>
+      <div className="space-y-4">
+        <p className="text-gray-700">Supprimer définitivement <span className="font-semibold">"{task.titre}"</span> ?</p>
+        <div className="flex gap-2 justify-end">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg border text-sm text-gray-600 hover:bg-gray-50">Annuler</button>
+          <button onClick={del} disabled={loading} className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50">{loading?'Suppression...':'Supprimer'}</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ── Onglet Tâches ─────────────────────────────────────────────────────────────
 function TabTaches({ taches, contacts, besoins, profile, allProfiles, onRefresh, navKey, navEcheance }) {
   const [search,setSearch]=useState(''); const [showAdd,setShowAdd]=useState(false);
@@ -936,6 +956,7 @@ function TabTaches({ taches, contacts, besoins, profile, allProfiles, onRefresh,
   useEffect(()=>{ if(navEcheance) setFilterEcheance(navEcheance); },[navKey]);
   const [completingModal,setCompletingModal]=useState(null);
   const [editingTask,setEditingTask]=useState(null);
+  const [deletingTask,setDeletingTask]=useState(null);
   const contactMap=useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
   const isAdmin=profile.role==='admin';
   const responsables=useMemo(()=>[...new Set(taches.map(t=>t.responsable).filter(Boolean))].sort(),[taches]);
@@ -1005,6 +1026,7 @@ function TabTaches({ taches, contacts, besoins, profile, allProfiles, onRefresh,
                   <div className="text-xs text-gray-400">{t.responsable}</div>
                   {t.due_date&&<div className={`text-xs font-medium ${t.overdue?'text-red-600':'text-gray-500'}`}>{t.due_date}</div>}
                   {isAdmin&&<button onClick={e=>{e.stopPropagation();setEditingTask(t);}} className="mt-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2.5 py-1 rounded-lg font-medium">✏️</button>}
+                  {canEdit&&<button onClick={e=>{e.stopPropagation();setDeletingTask(t);}} className="mt-1 text-xs bg-red-50 hover:bg-red-100 text-red-500 px-2.5 py-1 rounded-lg font-medium">🗑️</button>}
                 {canEdit&&<button onClick={()=>setCompletingModal(t)} className="mt-1 text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2.5 py-1 rounded-lg font-medium">✓ Fait</button>}
                 </div>
               </div>
@@ -1017,6 +1039,7 @@ function TabTaches({ taches, contacts, besoins, profile, allProfiles, onRefresh,
       {showAdd&&<AddTacheModal contacts={contacts} besoins={besoins||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
       {completingModal&&<CompleteTaskModal task={completingModal} contact={contactMap[completingModal.contact_id]||null} profile={profile} onClose={()=>setCompletingModal(null)} onSaved={()=>{setCompletingModal(null);onRefresh();}}/>}
       {editingTask&&<EditTacheModal task={editingTask} contacts={contacts} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingTask(null)} onSaved={()=>{setEditingTask(null);onRefresh();}}/>}
+      {deletingTask&&<DeleteTacheModal task={deletingTask} onClose={()=>setDeletingTask(null)} onDeleted={()=>{setDeletingTask(null);onRefresh();}}/>}
     </div>
   );
 }
