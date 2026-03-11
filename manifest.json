@@ -2,7 +2,7 @@
   "name": "Upgrade CRM Lyon",
   "short_name": "CRM Lyon",
   "description": "CRM de gestion des contacts et missions — Upgrade Lyon",
-  "start_url": "/",
+  "start_url": "/upgrade-crm-lyon-V2/",
   "display": "standalone",
   "background_color": "#f8fafc",
   "theme_color": "#2563eb",
