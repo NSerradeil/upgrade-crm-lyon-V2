@@ -881,11 +881,6 @@ function TabTaches({ taches, contacts, profile, allProfiles, onRefresh, navKey, 
           <option value="a_faire">À faire</option>
           <option value="en_cours">En cours</option>
         </select>
-        <select value={filterEcheance} onChange={e=>setFilterEcheance(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
-          <option value="">Toutes échéances</option>
-          <option value="retard">En retard</option>
-          <option value="today">Aujourd'hui</option>
-        </select>
         {isAdmin&&responsables.length>1&&(
           <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
             <option value="">Tous les responsables</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}
