@@ -26,7 +26,7 @@ const SUPABASE_KEY = "sb_publishable_BaNIdlZ09xavRRhG0G-ScQ_mW4hVueJ";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const TODAY = new Date().toISOString().slice(0, 10);
 
-const STATUTS_CONTACT  = ['Prospect','Candidat','Client','Consultant CDI','CDI','Freelance','Prestataire','À définir'];
+const STATUTS_CONTACT  = ['Prospect','Candidat','Client','Consultant CDI','Freelance','Prestataire','À définir'];
 const TYPES_ACTION     = ['Tel','Mail envoyé','Mail reçu','RDV','LinkedIn','Note interne','Autre'];
 const STATUTS_ENTRETIEN = ['candidat','freelance','prestataire'];
 const isEntretienStatut = s => s && STATUTS_ENTRETIEN.includes(s.toLowerCase());
