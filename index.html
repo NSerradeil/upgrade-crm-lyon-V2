@@ -689,8 +689,8 @@ function TabProspects({ contacts, historique, taches, profile, allProfiles, onRe
     return rows;
   },[contacts,search,filterStatut,filterPeriode,filterResp,sortCol,sortDir]);
 
-  const hasFilter=search||filterStatut||filterPeriode||filterResp;
-  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterPeriode('');setFilterResp('');};
+  const hasFilter=search||filterStatut||filterPeriode||(isAdmin&&filterResp);
+  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterPeriode('');setFilterResp(isAdmin?'':profile.nom);};
   const thCls="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-blue-600 whitespace-nowrap";
   return (
     <div>
@@ -1154,8 +1154,8 @@ function TabBesoins({ contacts, besoins, historique, taches, profile, allProfile
       })
       .sort((a,b)=>ORDRE.indexOf(a.besoin.statut)-ORDRE.indexOf(b.besoin.statut));
   },[pipeline,search,filterStatut,filterResp]);
-  const hasFilter=search||filterStatut||filterResp;
-  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterResp('');};
+  const hasFilter=search||filterStatut||(isAdmin&&filterResp);
+  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterResp(isAdmin?'':profile.nom);};
   const STATUT_BTNS=[
     {label:'Tous',      value:'',                    icon:''},
     {label:'Besoin ouvert', value:'Besoin ouvert',   icon:'🟢'},
@@ -1274,7 +1274,7 @@ function TabHistorique({ historique, contacts, taches, profile, allProfiles, onR
             {responsables.map(r=><option key={r} value={r}>{r}</option>)}
           </select>
         )}
-        {(search||filterResp||filterType)&&<button onClick={()=>{setSearch('');setFilterResp('');setFilterType('');}} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">✕ Reset</button>}
+        {(search||(isAdmin&&filterResp)||filterType)&&<button onClick={()=>{setSearch('');setFilterResp(isAdmin?'':profile.nom);setFilterType('');}} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">✕ Reset</button>}
       </div>
       <div className="text-xs text-gray-400 mb-3">{filtered.length} action{filtered.length>1?'s':''}</div>
 
@@ -1330,8 +1330,8 @@ function TabTDB({ missions, histMissions, profile, allProfiles, onRefresh }) {
       return true;
     });
   },[missions,search,filterStatut,filterAgence,filterResp]);
-  const hasFilter=search||filterStatut||filterAgence||filterResp;
-  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterAgence('');setFilterResp('');};
+  const hasFilter=search||filterStatut||filterAgence||(isAdmin&&filterResp);
+  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterAgence('');setFilterResp(isAdmin?'':profile.nom);};
 
   const enMission    = missionsFiltrees.filter(m=>m.statut==='En cours'||m.statut==='New');
   const intercontrat = missionsFiltrees.filter(m=>m.statut==='Intercontrat');
