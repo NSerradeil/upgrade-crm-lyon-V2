@@ -16,13 +16,15 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
+  html, body { overflow-x: hidden; max-width: 100vw; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; padding-bottom: env(safe-area-inset-bottom); }
   .spin { animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   /* Tabs scrollables sans scrollbar visible */
-  .tabs-scroll { overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; white-space: nowrap; }
+  .tabs-scroll { overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; white-space: nowrap; display: flex; }
   .tabs-scroll::-webkit-scrollbar { display: none; }
-  .tabs-scroll button { display: inline-block; }
+  /* Truncate long text dans les cellules de tableau */
+  .cell-truncate { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
 <script>
   if ('serviceWorker' in navigator) {
@@ -562,45 +564,45 @@ function TabProspects({ contacts, historique, taches, profile, allProfiles, onRe
 
   const hasFilter=search||filterStatut||filterPeriode||filterResp;
   const resetAll=()=>{setSearch('');setFilterStatut('');setFilterPeriode('');setFilterResp('');};
-  const thCls="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-blue-600 whitespace-nowrap";
+  const thCls="px-3 py-3 text-left font-medium cursor-pointer select-none hover:text-blue-600 whitespace-nowrap text-xs";
   return (
     <div>
-      <div className="flex gap-3 mb-4 flex-wrap">
-        <input type="text" placeholder="Rechercher (nom, société, ville...)" value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-64 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
-        <select value={filterStatut} onChange={e=>setFilterStatut(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
-          <option value="">Tous les statuts</option>{statuts.map(s=><option key={s} value={s}>{s}</option>)}
+      <div className="flex gap-2 mb-3 flex-wrap items-center">
+        <input type="text" placeholder="Rechercher..." value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-0 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+        <select value={filterStatut} onChange={e=>setFilterStatut(e.target.value)} className="px-2 py-2 border rounded-lg text-sm focus:outline-none">
+          <option value="">Statut</option>{statuts.map(s=><option key={s} value={s}>{s}</option>)}
         </select>
-        <select value={filterPeriode} onChange={e=>setFilterPeriode(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
-          <option value="">Toute période</option>
-          <option value="7j">Contactés 7 derniers jours</option>
-          <option value="30j">Contactés 30 derniers jours</option>
+        <select value={filterPeriode} onChange={e=>setFilterPeriode(e.target.value)} className="px-2 py-2 border rounded-lg text-sm focus:outline-none">
+          <option value="">Période</option>
+          <option value="7j">7 jours</option>
+          <option value="30j">30 jours</option>
         </select>
         {isAdmin&&responsables.length>1&&(
-          <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
-            <option value="">Tous les responsables</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}
+          <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-2 py-2 border rounded-lg text-sm focus:outline-none">
+            <option value="">Resp.</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}
           </select>
         )}
-        {hasFilter&&<button onClick={resetAll} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">✕ Reset</button>}
-        <button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">+ Nouveau contact</button>
+        {hasFilter&&<button onClick={resetAll} className="px-2 py-2 text-sm text-gray-500 hover:text-gray-700">✕</button>}
+        <button onClick={()=>setShowAdd(true)} className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 whitespace-nowrap">+ Contact</button>
       </div>
       <div className="text-xs text-gray-400 mb-2">{filtered.length} contact{filtered.length>1?'s':''}</div>
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm" style={{minWidth:'480px'}}>
           <thead><tr className="bg-gray-50 text-gray-500 text-xs uppercase">
             <th className={thCls} onClick={()=>toggleSort('nom')}>Contact<SortIcon col="nom"/></th>
             <th className={thCls} onClick={()=>toggleSort('groupe')}>Société<SortIcon col="groupe"/></th>
-            <th className={thCls+" hidden md:table-cell"} onClick={()=>toggleSort('ville')}>Ville<SortIcon col="ville"/></th>
+            <th className={thCls} onClick={()=>toggleSort('ville')}>Ville<SortIcon col="ville"/></th>
             <th className={thCls} onClick={()=>toggleSort('statut')}>Statut<SortIcon col="statut"/></th>
-            <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('date_dernier')}>Dernier contact<SortIcon col="date_dernier"/></th>
+            <th className={thCls} onClick={()=>toggleSort('date_dernier')}>Dernier<SortIcon col="date_dernier"/></th>
           </tr></thead>
           <tbody>{filtered.map(c=>(
             <tr key={c.id} onClick={()=>setSelected(c)} className="border-t border-gray-50 hover:bg-blue-50 cursor-pointer transition-colors">
-              <td className="px-4 py-3"><div className="font-medium text-gray-900">{c.prenom} {c.nom}</div>{c.role&&<div className="text-xs text-gray-400">{c.role}</div>}</td>
-              <td className="px-4 py-3 text-gray-600">{c.groupe}</td>
-              <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{c.ville}</td>
-              <td className="px-4 py-3"><StatutBadge statut={c.statut}/></td>
-              <td className="px-4 py-3 hidden lg:table-cell">{c.jours<999?<span className={c.jours>90?'text-orange-500 font-medium':'text-gray-500'}>{c.jours}j</span>:<span className="text-gray-300">—</span>}</td>
+              <td className="px-3 py-3 whitespace-nowrap"><div className="font-medium text-gray-900">{c.prenom} {c.nom}</div>{c.role&&<div className="text-xs text-gray-400 truncate max-w-[130px]">{c.role}</div>}</td>
+              <td className="px-3 py-3 text-gray-600 whitespace-nowrap max-w-[120px] truncate">{c.groupe||'—'}</td>
+              <td className="px-3 py-3 text-gray-500 whitespace-nowrap">{c.ville||'—'}</td>
+              <td className="px-3 py-3 whitespace-nowrap"><StatutBadge statut={c.statut}/></td>
+              <td className="px-3 py-3 whitespace-nowrap">{c.jours<999?<span className={c.jours>90?'text-orange-500 font-medium':'text-gray-500'}>{c.jours}j</span>:<span className="text-gray-300">—</span>}</td>
             </tr>
           ))}</tbody>
         </table>
@@ -833,35 +835,35 @@ function TabTaches({ taches, contacts, profile, allProfiles, onRefresh, navKey, 
   const resetAll=()=>{setSearch('');setFilterStatut('');setFilterResp('');setFilterEcheance('');};
   return (
     <div>
-      <div className="flex gap-3 mb-4 flex-wrap">
-        <input type="text" placeholder="Rechercher une tâche..." value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-48 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
-        <select value={filterStatut} onChange={e=>setFilterStatut(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
-          <option value="">Tous les statuts</option>
+      <div className="flex gap-2 mb-4 flex-wrap items-center">
+        <input type="text" placeholder="Rechercher..." value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-0 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+        <select value={filterStatut} onChange={e=>setFilterStatut(e.target.value)} className="px-2 py-2 border rounded-lg text-sm focus:outline-none">
+          <option value="">Statut</option>
           <option value="a_faire">À faire</option>
           <option value="en_cours">En cours</option>
         </select>
-        <select value={filterEcheance} onChange={e=>setFilterEcheance(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
-          <option value="">Toutes échéances</option>
+        <select value={filterEcheance} onChange={e=>setFilterEcheance(e.target.value)} className="px-2 py-2 border rounded-lg text-sm focus:outline-none">
+          <option value="">Échéance</option>
           <option value="retard">En retard</option>
           <option value="today">Aujourd'hui</option>
         </select>
         {isAdmin&&responsables.length>1&&(
-          <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
-            <option value="">Tous les responsables</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}
+          <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-2 py-2 border rounded-lg text-sm focus:outline-none">
+            <option value="">Resp.</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}
           </select>
         )}
-        {hasFilter&&<button onClick={resetAll} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">✕ Reset</button>}
-        <div className="text-sm text-gray-500 self-center flex items-center gap-2 flex-wrap">
-          <span>{actives.length} tâche{actives.length>1?'s':''}</span>
-          {overdue>0&&<button onClick={()=>setFilterEcheance(filterEcheance==='retard'?'':'retard')} className={`text-xs px-2 py-0.5 rounded-full font-medium ${filterEcheance==='retard'?'bg-red-600 text-white':'bg-red-100 text-red-600 hover:bg-red-200'}`}>⚠️ {overdue} en retard</button>}
-          {today_t>0&&<button onClick={()=>setFilterEcheance(filterEcheance==='today'?'':'today')} className={`text-xs px-2 py-0.5 rounded-full font-medium ${filterEcheance==='today'?'bg-orange-500 text-white':'bg-orange-100 text-orange-600 hover:bg-orange-200'}`}>📍 {today_t} aujourd'hui</button>}
+        {hasFilter&&<button onClick={resetAll} className="px-2 py-2 text-sm text-gray-500 hover:text-gray-700">✕</button>}
+        <div className="flex border rounded-lg overflow-hidden text-sm shrink-0">
+          <button onClick={()=>setViewMode('list')} className={`px-2 py-2 font-medium ${viewMode==='list'?'bg-blue-600 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>☰</button>
+          <button onClick={()=>setViewMode('calendar')} className={`px-2 py-2 font-medium border-l ${viewMode==='calendar'?'bg-blue-600 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>📅</button>
         </div>
-        <div className="flex border rounded-lg overflow-hidden text-sm">
-          <button onClick={()=>setViewMode('list')} className={`px-3 py-2 font-medium ${viewMode==='list'?'bg-blue-600 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>☰ Liste</button>
-          <button onClick={()=>setViewMode('calendar')} className={`px-3 py-2 font-medium border-l ${viewMode==='calendar'?'bg-blue-600 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>📅 Calendrier</button>
-        </div>
-        <button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">+ Nouvelle tâche</button>
+        <button onClick={()=>setShowAdd(true)} className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 whitespace-nowrap shrink-0">+ Tâche</button>
       </div>
+      {(overdue>0||today_t>0)&&<div className="flex gap-2 mb-3 flex-wrap">
+        <span className="text-xs text-gray-400 self-center">{actives.length} tâche{actives.length>1?'s':''}</span>
+        {overdue>0&&<button onClick={()=>setFilterEcheance(filterEcheance==='retard'?'':'retard')} className={`text-xs px-2 py-0.5 rounded-full font-medium ${filterEcheance==='retard'?'bg-red-600 text-white':'bg-red-100 text-red-600 hover:bg-red-200'}`}>⚠️ {overdue} en retard</button>}
+        {today_t>0&&<button onClick={()=>setFilterEcheance(filterEcheance==='today'?'':'today')} className={`text-xs px-2 py-0.5 rounded-full font-medium ${filterEcheance==='today'?'bg-orange-500 text-white':'bg-orange-100 text-orange-600 hover:bg-orange-200'}`}>📍 {today_t} aujourd'hui</button>}
+      </div>}
       {viewMode==='list'?(
         <div className="space-y-2">{actives.map(t=>{
           const contact=t.contact_id?contactMap[t.contact_id]:null;
@@ -950,14 +952,14 @@ function TabBesoins({ contacts, besoins, historique, taches, profile, allProfile
   ];
   return (
     <div>
-      <div className="flex gap-3 mb-3 flex-wrap">
-        <input type="text" placeholder="Rechercher (nom, société, poste, candidat...)" value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-48 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+      <div className="flex gap-2 mb-3 flex-wrap items-center">
+        <input type="text" placeholder="Rechercher..." value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-0 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
         {isAdmin&&responsablesPipeline.length>1&&(
-          <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
-            <option value="">Tous les responsables</option>{responsablesPipeline.map(r=><option key={r} value={r}>{r}</option>)}
+          <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-2 py-2 border rounded-lg text-sm focus:outline-none">
+            <option value="">Resp.</option>{responsablesPipeline.map(r=><option key={r} value={r}>{r}</option>)}
           </select>
         )}
-        {hasFilter&&<button onClick={resetAll} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">✕ Reset</button>}
+        {hasFilter&&<button onClick={resetAll} className="px-2 py-2 text-sm text-gray-500 hover:text-gray-700">✕</button>}
       </div>
       <div className="flex gap-1.5 flex-wrap mb-4">
         {STATUT_BTNS.map(btn=>(
@@ -1040,21 +1042,21 @@ function TabHistorique({ historique, contacts, taches, profile, allProfiles, onR
 
   return (
     <div>
-      <div className="flex gap-3 mb-4 flex-wrap">
-        <input type="text" placeholder="Rechercher (nom, société, type, détails, date...)"
+      <div className="flex gap-2 mb-4 flex-wrap items-center">
+        <input type="text" placeholder="Rechercher..."
           value={search} onChange={e=>setSearch(e.target.value)}
-          className="flex-1 min-w-64 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
-        <select value={filterType} onChange={e=>setFilterType(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
-          <option value="">Tous les types</option>
+          className="flex-1 min-w-0 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+        <select value={filterType} onChange={e=>setFilterType(e.target.value)} className="px-2 py-2 border rounded-lg text-sm focus:outline-none">
+          <option value="">Type</option>
           {typesAction.map(t=><option key={t} value={t}>{t}</option>)}
         </select>
         {isAdmin&&responsables.length>1&&(
-          <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
-            <option value="">Tous les commerciaux</option>
+          <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-2 py-2 border rounded-lg text-sm focus:outline-none">
+            <option value="">Resp.</option>
             {responsables.map(r=><option key={r} value={r}>{r}</option>)}
           </select>
         )}
-        {(search||filterResp||filterType)&&<button onClick={()=>{setSearch('');setFilterResp('');setFilterType('');}} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">✕ Reset</button>}
+        {(search||filterResp||filterType)&&<button onClick={()=>{setSearch('');setFilterResp('');setFilterType('');}} className="px-2 py-2 text-sm text-gray-500 hover:text-gray-700">✕</button>}
       </div>
       <div className="text-xs text-gray-400 mb-3">{filtered.length} action{filtered.length>1?'s':''}</div>
 
@@ -1177,22 +1179,22 @@ function TabTDB({ missions, histMissions, profile, allProfiles, onRefresh }) {
 
       {/* Table missions — cliquer sur une ligne ouvre le détail */}
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-3 flex-wrap">
-          <span className="text-sm font-semibold text-gray-700 mr-auto">Missions — {missionsTri.length}/{missions.length} consultant{missions.length>1?'s':''}</span>
-          <input type="text" placeholder="Consultant, client..." value={search} onChange={e=>setSearch(e.target.value)} className="px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 w-44"/>
-          <select value={filterStatut} onChange={e=>setFilterStatut(e.target.value)} className="px-3 py-1.5 border rounded-lg text-sm focus:outline-none">
-            <option value="">Tous statuts</option>
+        <div className="px-3 py-3 border-b border-gray-50 flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-semibold text-gray-700">Missions <span className="text-gray-400 font-normal">{missionsTri.length}/{missions.length}</span></span>
+          <input type="text" placeholder="Rechercher..." value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-0 px-2 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+          <select value={filterStatut} onChange={e=>setFilterStatut(e.target.value)} className="px-2 py-1.5 border rounded-lg text-sm focus:outline-none">
+            <option value="">Statut</option>
             <option value="En cours">En cours</option>
             <option value="New">New</option>
             <option value="Intercontrat">Intercontrat</option>
             <option value="Terminée">Terminée</option>
           </select>
           {isAdmin&&agences.length>1&&(
-            <select value={filterAgence} onChange={e=>setFilterAgence(e.target.value)} className="px-3 py-1.5 border rounded-lg text-sm focus:outline-none">
-              <option value="">Toutes agences</option>{agences.map(a=><option key={a} value={a}>{a}</option>)}
+            <select value={filterAgence} onChange={e=>setFilterAgence(e.target.value)} className="px-2 py-1.5 border rounded-lg text-sm focus:outline-none">
+              <option value="">Agence</option>{agences.map(a=><option key={a} value={a}>{a}</option>)}
             </select>
           )}
-          {hasFilter&&<button onClick={resetAll} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">✕ Reset</button>}
+          {hasFilter&&<button onClick={resetAll} className="px-2 py-1.5 text-sm text-gray-500 hover:text-gray-700">✕</button>}
           {!isAdmin&&<span className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded-full">Vos missions uniquement</span>}
         </div>
         <div className="overflow-x-auto">
@@ -1378,38 +1380,38 @@ function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b sticky top-0 z-40 shadow-sm">
-        <div className="max-w-7xl mx-auto px-3 py-2 flex items-center justify-between gap-2">
+    <div className="min-h-screen bg-gray-50" style={{overflowX:'hidden',maxWidth:'100vw'}}>
+      <div className="bg-white border-b sticky top-0 z-40 shadow-sm" style={{maxWidth:'100vw',overflowX:'hidden'}}>
+        <div className="px-3 py-2 flex items-center justify-between gap-2 overflow-hidden">
           <div className="flex items-center gap-2 shrink-0">
-            <svg width="90" height="16" viewBox="0 0 153 28" fill="none" xmlns="http://www.w3.org/2000/svg"><g clipPath="url(#clip0_1676_1976)"><path d="M51.2008 14.2605C51.2008 15.2809 51.0226 16.1409 50.6706 16.8493C50.3186 17.5533 49.8329 18.0925 49.2136 18.4668C48.5942 18.8411 47.9036 19.0237 47.1416 19.0237C46.0054 19.0237 45.1321 18.6717 44.5217 17.9633C43.9157 17.2593 43.6127 16.2077 43.6127 14.8175V6.35156H40.6719V15.1472C40.6719 16.5775 40.9036 17.7628 41.3625 18.7074C41.8215 19.652 42.4809 20.356 43.332 20.8239C44.183 21.2917 45.19 21.5279 46.3485 21.5279C47.507 21.5279 48.4828 21.2739 49.3472 20.7615C50.2117 20.2535 50.8667 19.5451 51.3167 18.645L51.5217 21.1759H54.1416V6.35156H51.2008V14.265V14.2605Z" fill="black"/><path d="M70.0083 7.02928C68.9389 6.34309 67.7002 6 66.2878 6C65.4055 6 64.6347 6.12922 63.9797 6.3832C63.3247 6.63717 62.7588 6.9669 62.291 7.36792C61.8186 7.76894 61.4265 8.19669 61.1146 8.64672L60.8206 6.35201H58.1738V27.6461H61.1146V18.9128C61.6226 19.7371 62.3221 20.3787 63.2044 20.8377C64.0866 21.2966 65.107 21.5283 66.261 21.5283C67.6735 21.5283 68.9122 21.1941 69.9816 20.5302C71.051 19.8619 71.8887 18.9484 72.4946 17.781C73.1006 16.6136 73.4081 15.2858 73.4081 13.7976C73.4081 12.3094 73.1095 10.9771 72.5125 9.81413C71.9154 8.64672 71.0822 7.71992 70.0128 7.03374L70.0083 7.02928ZM69.8346 16.4978C69.4335 17.282 68.8855 17.888 68.1859 18.3202C67.4908 18.7524 66.6888 18.9663 65.7887 18.9663C64.8887 18.9663 64.0599 18.7524 63.3603 18.3202C62.6652 17.888 62.1216 17.282 61.7295 16.4978C61.3374 15.7136 61.1414 14.8001 61.1414 13.7619C61.1414 12.7237 61.3374 11.8148 61.7295 11.0395C62.1216 10.2642 62.6652 9.65818 63.3603 9.21706C64.0554 8.77594 64.8664 8.55315 65.7887 8.55315C66.7111 8.55315 67.4908 8.77594 68.1859 9.21706C68.881 9.65818 69.4291 10.2642 69.8346 11.0395C70.2356 11.8148 70.4361 12.7193 70.4361 13.7619C70.4361 14.8046 70.2356 15.7136 69.8346 16.4978Z" fill="black"/><path d="M82.1733 6C80.939 6 79.8786 6.24061 78.9963 6.72183C78.1141 7.20306 77.4413 7.84023 76.9823 8.63335C76.5189 9.42648 76.2917 10.3265 76.2917 11.3246C76.2917 12.3227 76.5234 13.1961 76.9823 14.0025C77.2497 14.4749 77.6017 14.8803 78.0116 15.2368L75.4674 17.8568V18.5341C75.7213 18.788 76.0288 19.0331 76.3942 19.2693C76.6615 19.443 76.9779 19.6079 77.3432 19.7594C77.1516 19.8975 76.9734 20.0356 76.8174 20.1827C76.2872 20.6728 75.904 21.1852 75.6723 21.7288C75.4362 22.268 75.3203 22.8027 75.3203 23.3329C75.3203 24.3533 75.6055 25.2132 76.1714 25.9217C76.7417 26.6257 77.5437 27.1515 78.5819 27.4946C79.6201 27.8377 80.8187 28.0115 82.1688 28.0115C83.6971 28.0115 84.9492 27.7664 85.9206 27.2763C86.8919 26.7861 87.6048 26.1579 88.0682 25.3959C88.5272 24.6295 88.7589 23.8275 88.7589 22.9854C88.7589 22.1432 88.5717 21.3768 88.2019 20.7486C87.8321 20.1203 87.235 19.6213 86.4241 19.247C85.6087 18.8727 84.5348 18.641 83.2026 18.543C82.2802 18.4628 81.5361 18.387 80.9658 18.3068C80.3954 18.2266 79.9454 18.1419 79.6112 18.0439C79.277 17.9459 79.0141 17.8345 78.8181 17.7053C78.7735 17.6785 78.7245 17.6429 78.68 17.6162L80.0523 16.3463C80.6895 16.529 81.3891 16.6314 82.1733 16.6314C83.4075 16.6314 84.4635 16.3953 85.3369 15.9274C86.2102 15.4551 86.8741 14.8179 87.3375 14.0159C87.7964 13.2139 88.0281 12.3183 88.0281 11.338C88.0281 10.3577 87.7964 9.43985 87.3375 8.64672C87.3152 8.61108 87.2885 8.57989 87.2662 8.54424L89.9664 8.3972V6.36983H84.468C83.7863 6.13813 83.0243 6.01782 82.1688 6.01782L82.1733 6ZM82.5565 20.7352C83.8887 20.8154 84.7933 21.0649 85.2611 21.4838C85.7334 21.9071 85.9651 22.4284 85.9651 23.0567C85.9651 23.5869 85.8092 24.0458 85.4973 24.4379C85.1809 24.83 84.7398 25.133 84.1739 25.3514C83.6036 25.5652 82.9397 25.6766 82.1733 25.6766C81.4069 25.6766 80.6895 25.5786 80.0702 25.3826C79.4508 25.1865 78.9696 24.8924 78.6131 24.5003C78.2611 24.1082 78.0829 23.6181 78.0829 23.0299C78.0829 22.5398 78.2522 22.0363 78.5953 21.515C78.8582 21.1184 79.3127 20.7619 79.9632 20.45C80.6895 20.5703 81.5495 20.6639 82.552 20.7352H82.5565ZM84.468 13.5124C83.8977 14.0115 83.1357 14.261 82.1733 14.261C81.2108 14.261 80.44 14.0115 79.8518 13.5124C79.2637 13.0134 78.9696 12.2826 78.9696 11.3202C78.9696 10.3577 79.2637 9.62699 79.8518 9.12794C80.44 8.6289 81.2153 8.37938 82.1733 8.37938C83.1313 8.37938 83.8977 8.6289 84.468 9.12794C85.0383 9.62699 85.319 10.3577 85.319 11.3202C85.319 12.2826 85.0339 13.0134 84.468 13.5124Z" fill="black"/><path d="M97.1139 7.45258C96.5837 7.91152 96.1514 8.4774 95.8217 9.14577L95.5588 6.35201H92.9121V21.1763H95.8529V13.7931C95.8529 12.8931 95.9688 12.1356 96.2049 11.5296C96.4411 10.9236 96.7708 10.4424 97.1896 10.0904C97.6129 9.73838 98.0986 9.48886 98.6467 9.34182C99.1947 9.19478 99.774 9.11903 100.38 9.11903H101.44V6C100.518 6 99.6982 6.12922 98.9853 6.3832C98.2679 6.63717 97.6486 6.99809 97.1183 7.45703L97.1139 7.45258Z" fill="black"/><path d="M113.908 6.7352C112.968 6.24507 111.801 6 110.41 6C109.35 6 108.352 6.20051 107.412 6.60153C106.471 7.00255 105.701 7.57288 105.104 8.30808C104.506 9.04328 104.15 9.92998 104.03 10.9682H106.97C107.126 10.1439 107.519 9.52005 108.147 9.10121C108.775 8.67791 109.528 8.46849 110.41 8.46849C111.172 8.46849 111.805 8.61108 112.308 8.89624C112.808 9.18141 113.186 9.60917 113.44 10.175C113.694 10.7454 113.823 11.4583 113.823 12.3227H109.969C108.655 12.3227 107.527 12.5099 106.587 12.8797C105.647 13.254 104.921 13.7887 104.413 14.4838C103.905 15.1789 103.646 16.0166 103.646 16.9968C103.646 17.7989 103.843 18.5519 104.235 19.247C104.627 19.9421 105.224 20.499 106.03 20.909C106.832 21.3189 107.844 21.5283 109.06 21.5283C109.688 21.5283 110.263 21.4526 110.78 21.3055C111.297 21.1585 111.76 20.958 112.161 20.704C112.562 20.45 112.91 20.147 113.204 19.7906C113.498 19.4386 113.752 19.0643 113.97 18.6722L114.207 21.1719H116.764V11.9975C116.764 10.7632 116.524 9.69828 116.042 8.80713C115.561 7.91598 114.853 7.22533 113.908 6.7352ZM113.761 14.4971C113.743 15.0853 113.636 15.6601 113.454 16.2171C113.266 16.774 112.995 17.2775 112.629 17.7187C112.268 18.1598 111.832 18.5073 111.319 18.7613C110.811 19.0153 110.241 19.1445 109.613 19.1445C108.984 19.1445 108.485 19.0465 108.053 18.8504C107.621 18.6544 107.291 18.387 107.069 18.0439C106.841 17.7008 106.73 17.282 106.73 16.7919C106.73 16.3017 106.846 15.9096 107.082 15.5576C107.318 15.2056 107.692 14.9249 108.214 14.7199C108.731 14.515 109.417 14.4125 110.259 14.4125H113.757V14.5016L113.761 14.4971Z" fill="black"/><path d="M132.26 8.64863C131.77 7.80649 131.084 7.15595 130.202 6.69255C129.319 6.23361 128.299 6.00191 127.145 6.00191C125.733 6.00191 124.485 6.34055 123.393 7.01782C122.306 7.6951 121.459 8.61299 120.862 9.76703C120.265 10.9255 119.967 12.2578 119.967 13.7683C119.967 15.2788 120.265 16.5888 120.862 17.7518C121.459 18.9192 122.297 19.8415 123.375 20.5143C124.454 21.1916 125.697 21.5302 127.109 21.5302C127.974 21.5302 128.736 21.401 129.404 21.147C130.072 20.8931 130.638 20.5633 131.111 20.1623C131.583 19.7613 131.962 19.3335 132.256 18.8835L132.581 21.1782H135.201V0H132.26V8.64863ZM131.659 16.4997C131.276 17.2839 130.732 17.8899 130.028 18.3221C129.324 18.7543 128.508 18.9682 127.586 18.9682C126.664 18.9682 125.911 18.7543 125.202 18.3221C124.498 17.8899 123.946 17.2839 123.554 16.4997C123.162 15.7155 122.966 14.802 122.966 13.7638C122.966 12.7257 123.162 11.8167 123.554 11.0414C123.946 10.2661 124.494 9.66009 125.202 9.21897C125.911 8.77785 126.704 8.55506 127.586 8.55506C128.468 8.55506 129.319 8.77785 130.028 9.21897C130.736 9.66009 131.276 10.2661 131.659 11.0414C132.042 11.8167 132.234 12.7212 132.234 13.7638C132.234 14.8065 132.042 15.7155 131.659 16.4997Z" fill="black"/><path d="M152.142 9.54288C151.571 8.4735 150.769 7.61799 149.731 6.96745C148.693 6.32136 147.445 5.99609 145.997 5.99609C144.549 5.99609 143.27 6.32582 142.174 6.98082C141.078 7.64027 140.218 8.54924 139.599 9.71665C138.979 10.8841 138.672 12.252 138.672 13.8204C138.672 15.3888 138.979 16.6944 139.599 17.8484C140.218 19.0069 141.074 19.907 142.174 20.5531C143.275 21.1992 144.527 21.5244 145.939 21.5244C147.098 21.5244 148.118 21.3195 149.014 20.9051C149.905 20.4951 150.653 19.9293 151.264 19.2119C151.87 18.4945 152.302 17.688 152.556 16.7835H149.615C149.321 17.4875 148.871 18.0489 148.261 18.4589C147.65 18.8688 146.879 19.0782 145.939 19.0782C145.155 19.0782 144.429 18.8866 143.765 18.5034C143.096 18.1202 142.562 17.5543 142.161 16.7969C141.813 16.1463 141.626 15.3621 141.577 14.4576H152.939C152.957 14.1813 152.975 13.9318 152.984 13.709C152.993 13.4818 152.997 13.2724 152.997 13.0763C152.997 11.7841 152.712 10.5989 152.146 9.53397L152.142 9.54288ZM141.604 12.3812C141.684 11.6816 141.867 11.0801 142.161 10.5722C142.562 9.87706 143.096 9.34683 143.765 8.98591C144.433 8.62499 145.168 8.44231 145.97 8.44231C147.107 8.44231 148.06 8.78986 148.822 9.48495C149.588 10.1801 149.998 11.147 150.056 12.3812H141.604Z" fill="black"/><path d="M13.6162 5.49664C13.6117 5.59913 13.5226 9.31077 13.7142 11.4362C14.7836 11.5297 22.6659 9.82319 18.9453 13.8289C15.9198 16.5781 11.0541 17.5584 9.17827 13.3477C8.51436 10.9951 8.63912 8.06316 8.71487 5.49219H0.21773C-1.31505 16.2172 5.35522 24.5495 14.543 22.0899C19.0433 20.6819 21.24 17.4069 22.0911 16.0167C23.6283 13.5036 24.6576 17.2153 23.2362 22.5176C23.5035 22.5266 27.9771 22.6736 29.8886 22.3662V5.49664H13.6162Z" fill="black"/></g><defs><clipPath id="clip0_1676_1976"><rect width="152.997" height="28" fill="white"/></clipPath></defs></svg>
-            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">⚡ Live</span>
-            {isAdmin&&<span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">Admin</span>}
+            <svg width="80" height="14" viewBox="0 0 153 28" fill="none" xmlns="http://www.w3.org/2000/svg"><g clipPath="url(#clip0_1676_1976)"><path d="M51.2008 14.2605C51.2008 15.2809 51.0226 16.1409 50.6706 16.8493C50.3186 17.5533 49.8329 18.0925 49.2136 18.4668C48.5942 18.8411 47.9036 19.0237 47.1416 19.0237C46.0054 19.0237 45.1321 18.6717 44.5217 17.9633C43.9157 17.2593 43.6127 16.2077 43.6127 14.8175V6.35156H40.6719V15.1472C40.6719 16.5775 40.9036 17.7628 41.3625 18.7074C41.8215 19.652 42.4809 20.356 43.332 20.8239C44.183 21.2917 45.19 21.5279 46.3485 21.5279C47.507 21.5279 48.4828 21.2739 49.3472 20.7615C50.2117 20.2535 50.8667 19.5451 51.3167 18.645L51.5217 21.1759H54.1416V6.35156H51.2008V14.265V14.2605Z" fill="black"/><path d="M70.0083 7.02928C68.9389 6.34309 67.7002 6 66.2878 6C65.4055 6 64.6347 6.12922 63.9797 6.3832C63.3247 6.63717 62.7588 6.9669 62.291 7.36792C61.8186 7.76894 61.4265 8.19669 61.1146 8.64672L60.8206 6.35201H58.1738V27.6461H61.1146V18.9128C61.6226 19.7371 62.3221 20.3787 63.2044 20.8377C64.0866 21.2966 65.107 21.5283 66.261 21.5283C67.6735 21.5283 68.9122 21.1941 69.9816 20.5302C71.051 19.8619 71.8887 18.9484 72.4946 17.781C73.1006 16.6136 73.4081 15.2858 73.4081 13.7976C73.4081 12.3094 73.1095 10.9771 72.5125 9.81413C71.9154 8.64672 71.0822 7.71992 70.0128 7.03374L70.0083 7.02928ZM69.8346 16.4978C69.4335 17.282 68.8855 17.888 68.1859 18.3202C67.4908 18.7524 66.6888 18.9663 65.7887 18.9663C64.8887 18.9663 64.0599 18.7524 63.3603 18.3202C62.6652 17.888 62.1216 17.282 61.7295 16.4978C61.3374 15.7136 61.1414 14.8001 61.1414 13.7619C61.1414 12.7237 61.3374 11.8148 61.7295 11.0395C62.1216 10.2642 62.6652 9.65818 63.3603 9.21706C64.0554 8.77594 64.8664 8.55315 65.7887 8.55315C66.7111 8.55315 67.4908 8.77594 68.1859 9.21706C68.881 9.65818 69.4291 10.2642 69.8346 11.0395C70.2356 11.8148 70.4361 12.7193 70.4361 13.7619C70.4361 14.8046 70.2356 15.7136 69.8346 16.4978Z" fill="black"/><path d="M82.1733 6C80.939 6 79.8786 6.24061 78.9963 6.72183C78.1141 7.20306 77.4413 7.84023 76.9823 8.63335C76.5189 9.42648 76.2917 10.3265 76.2917 11.3246C76.2917 12.3227 76.5234 13.1961 76.9823 14.0025C77.2497 14.4749 77.6017 14.8803 78.0116 15.2368L75.4674 17.8568V18.5341C75.7213 18.788 76.0288 19.0331 76.3942 19.2693C76.6615 19.443 76.9779 19.6079 77.3432 19.7594C77.1516 19.8975 76.9734 20.0356 76.8174 20.1827C76.2872 20.6728 75.904 21.1852 75.6723 21.7288C75.4362 22.268 75.3203 22.8027 75.3203 23.3329C75.3203 24.3533 75.6055 25.2132 76.1714 25.9217C76.7417 26.6257 77.5437 27.1515 78.5819 27.4946C79.6201 27.8377 80.8187 28.0115 82.1688 28.0115C83.6971 28.0115 84.9492 27.7664 85.9206 27.2763C86.8919 26.7861 87.6048 26.1579 88.0682 25.3959C88.5272 24.6295 88.7589 23.8275 88.7589 22.9854C88.7589 22.1432 88.5717 21.3768 88.2019 20.7486C87.8321 20.1203 87.235 19.6213 86.4241 19.247C85.6087 18.8727 84.5348 18.641 83.2026 18.543C82.2802 18.4628 81.5361 18.387 80.9658 18.3068C80.3954 18.2266 79.9454 18.1419 79.6112 18.0439C79.277 17.9459 79.0141 17.8345 78.8181 17.7053C78.7735 17.6785 78.7245 17.6429 78.68 17.6162L80.0523 16.3463C80.6895 16.529 81.3891 16.6314 82.1733 16.6314C83.4075 16.6314 84.4635 16.3953 85.3369 15.9274C86.2102 15.4551 86.8741 14.8179 87.3375 14.0159C87.7964 13.2139 88.0281 12.3183 88.0281 11.338C88.0281 10.3577 87.7964 9.43985 87.3375 8.64672C87.3152 8.61108 87.2885 8.57989 87.2662 8.54424L89.9664 8.3972V6.36983H84.468C83.7863 6.13813 83.0243 6.01782 82.1688 6.01782L82.1733 6ZM82.5565 20.7352C83.8887 20.8154 84.7933 21.0649 85.2611 21.4838C85.7334 21.9071 85.9651 22.4284 85.9651 23.0567C85.9651 23.5869 85.8092 24.0458 85.4973 24.4379C85.1809 24.83 84.7398 25.133 84.1739 25.3514C83.6036 25.5652 82.9397 25.6766 82.1733 25.6766C81.4069 25.6766 80.6895 25.5786 80.0702 25.3826C79.4508 25.1865 78.9696 24.8924 78.6131 24.5003C78.2611 24.1082 78.0829 23.6181 78.0829 23.0299C78.0829 22.5398 78.2522 22.0363 78.5953 21.515C78.8582 21.1184 79.3127 20.7619 79.9632 20.45C80.6895 20.5703 81.5495 20.6639 82.552 20.7352H82.5565ZM84.468 13.5124C83.8977 14.0115 83.1357 14.261 82.1733 14.261C81.2108 14.261 80.44 14.0115 79.8518 13.5124C79.2637 13.0134 78.9696 12.2826 78.9696 11.3202C78.9696 10.3577 79.2637 9.62699 79.8518 9.12794C80.44 8.6289 81.2153 8.37938 82.1733 8.37938C83.1313 8.37938 83.8977 8.6289 84.468 9.12794C85.0383 9.62699 85.319 10.3577 85.319 11.3202C85.319 12.2826 85.0339 13.0134 84.468 13.5124Z" fill="black"/><path d="M97.1139 7.45258C96.5837 7.91152 96.1514 8.4774 95.8217 9.14577L95.5588 6.35201H92.9121V21.1763H95.8529V13.7931C95.8529 12.8931 95.9688 12.1356 96.2049 11.5296C96.4411 10.9236 96.7708 10.4424 97.1896 10.0904C97.6129 9.73838 98.0986 9.48886 98.6467 9.34182C99.1947 9.19478 99.774 9.11903 100.38 9.11903H101.44V6C100.518 6 99.6982 6.12922 98.9853 6.3832C98.2679 6.63717 97.6486 6.99809 97.1183 7.45703L97.1139 7.45258Z" fill="black"/><path d="M113.908 6.7352C112.968 6.24507 111.801 6 110.41 6C109.35 6 108.352 6.20051 107.412 6.60153C106.471 7.00255 105.701 7.57288 105.104 8.30808C104.506 9.04328 104.15 9.92998 104.03 10.9682H106.97C107.126 10.1439 107.519 9.52005 108.147 9.10121C108.775 8.67791 109.528 8.46849 110.41 8.46849C111.172 8.46849 111.805 8.61108 112.308 8.89624C112.808 9.18141 113.186 9.60917 113.44 10.175C113.694 10.7454 113.823 11.4583 113.823 12.3227H109.969C108.655 12.3227 107.527 12.5099 106.587 12.8797C105.647 13.254 104.921 13.7887 104.413 14.4838C103.905 15.1789 103.646 16.0166 103.646 16.9968C103.646 17.7989 103.843 18.5519 104.235 19.247C104.627 19.9421 105.224 20.499 106.03 20.909C106.832 21.3189 107.844 21.5283 109.06 21.5283C109.688 21.5283 110.263 21.4526 110.78 21.3055C111.297 21.1585 111.76 20.958 112.161 20.704C112.562 20.45 112.91 20.147 113.204 19.7906C113.498 19.4386 113.752 19.0643 113.97 18.6722L114.207 21.1719H116.764V11.9975C116.764 10.7632 116.524 9.69828 116.042 8.80713C115.561 7.91598 114.853 7.22533 113.908 6.7352ZM113.761 14.4971C113.743 15.0853 113.636 15.6601 113.454 16.2171C113.266 16.774 112.995 17.2775 112.629 17.7187C112.268 18.1598 111.832 18.5073 111.319 18.7613C110.811 19.0153 110.241 19.1445 109.613 19.1445C108.984 19.1445 108.485 19.0465 108.053 18.8504C107.621 18.6544 107.291 18.387 107.069 18.0439C106.841 17.7008 106.73 17.282 106.73 16.7919C106.73 16.3017 106.846 15.9096 107.082 15.5576C107.318 15.2056 107.692 14.9249 108.214 14.7199C108.731 14.515 109.417 14.4125 110.259 14.4125H113.757V14.5016L113.761 14.4971Z" fill="black"/><path d="M132.26 8.64863C131.77 7.80649 131.084 7.15595 130.202 6.69255C129.319 6.23361 128.299 6.00191 127.145 6.00191C125.733 6.00191 124.485 6.34055 123.393 7.01782C122.306 7.6951 121.459 8.61299 120.862 9.76703C120.265 10.9255 119.967 12.2578 119.967 13.7683C119.967 15.2788 120.265 16.5888 120.862 17.7518C121.459 18.9192 122.297 19.8415 123.375 20.5143C124.454 21.1916 125.697 21.5302 127.109 21.5302C127.974 21.5302 128.736 21.401 129.404 21.147C130.072 20.8931 130.638 20.5633 131.111 20.1623C131.583 19.7613 131.962 19.3335 132.256 18.8835L132.581 21.1782H135.201V0H132.26V8.64863ZM131.659 16.4997C131.276 17.2839 130.732 17.8899 130.028 18.3221C129.324 18.7543 128.508 18.9682 127.586 18.9682C126.664 18.9682 125.911 18.7543 125.202 18.3221C124.498 17.8899 123.946 17.2839 123.554 16.4997C123.162 15.7155 122.966 14.802 122.966 13.7638C122.966 12.7257 123.162 11.8167 123.554 11.0414C123.946 10.2661 124.494 9.66009 125.202 9.21897C125.911 8.77785 126.704 8.55506 127.586 8.55506C128.468 8.55506 129.319 8.77785 130.028 9.21897C130.736 9.66009 131.276 10.2661 131.659 11.0414C132.042 11.8167 132.234 12.7212 132.234 13.7638C132.234 14.8065 132.042 15.7155 131.659 16.4997Z" fill="black"/><path d="M152.142 9.54288C151.571 8.4735 150.769 7.61799 149.731 6.96745C148.693 6.32136 147.445 5.99609 145.997 5.99609C144.549 5.99609 143.27 6.32582 142.174 6.98082C141.078 7.64027 140.218 8.54924 139.599 9.71665C138.979 10.8841 138.672 12.252 138.672 13.8204C138.672 15.3888 138.979 16.6944 139.599 17.8484C140.218 19.0069 141.074 19.907 142.174 20.5531C143.275 21.1992 144.527 21.5244 145.939 21.5244C147.098 21.5244 148.118 21.3195 149.014 20.9051C149.905 20.4951 150.653 19.9293 151.264 19.2119C151.87 18.4945 152.302 17.688 152.556 16.7835H149.615C149.321 17.4875 148.871 18.0489 148.261 18.4589C147.65 18.8688 146.879 19.0782 145.939 19.0782C145.155 19.0782 144.429 18.8866 143.765 18.5034C143.096 18.1202 142.562 17.5543 142.161 16.7969C141.813 16.1463 141.626 15.3621 141.577 14.4576H152.939C152.957 14.1813 152.975 13.9318 152.984 13.709C152.993 13.4818 152.997 13.2724 152.997 13.0763C152.997 11.7841 152.712 10.5989 152.146 9.53397L152.142 9.54288ZM141.604 12.3812C141.684 11.6816 141.867 11.0801 142.161 10.5722C142.562 9.87706 143.096 9.34683 143.765 8.98591C144.433 8.62499 145.168 8.44231 145.97 8.44231C147.107 8.44231 148.06 8.78986 148.822 9.48495C149.588 10.1801 149.998 11.147 150.056 12.3812H141.604Z" fill="black"/><path d="M13.6162 5.49664C13.6117 5.59913 13.5226 9.31077 13.7142 11.4362C14.7836 11.5297 22.6659 9.82319 18.9453 13.8289C15.9198 16.5781 11.0541 17.5584 9.17827 13.3477C8.51436 10.9951 8.63912 8.06316 8.71487 5.49219H0.21773C-1.31505 16.2172 5.35522 24.5495 14.543 22.0899C19.0433 20.6819 21.24 17.4069 22.0911 16.0167C23.6283 13.5036 24.6576 17.2153 23.2362 22.5176C23.5035 22.5266 27.9771 22.6736 29.8886 22.3662V5.49664H13.6162Z" fill="black"/></g><defs><clipPath id="clip0_1676_1976"><rect width="152.997" height="28" fill="white"/></clipPath></defs></svg>
+            <span className="hidden sm:inline text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">⚡</span>
+            {isAdmin&&<span className="hidden sm:inline text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">Admin</span>}
+            {tachesRetard.length>0&&<button onClick={()=>navToTaches('retard')} className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-0.5 rounded-full font-medium hidden sm:inline">⚠️ {tachesRetard.length}</button>}
           </div>
-          <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
-            {tachesRetard.length>0&&<button onClick={()=>navToTaches('retard')} className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded-full font-medium hidden sm:block">⚠️ {tachesRetard.length} en retard</button>}
-            <div className="text-xs text-gray-400 hidden md:block">{lastRefresh&&`Actualisé ${lastRefresh}`}</div>
-            <button onClick={fetchAll} disabled={loading} className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-2 py-1.5 rounded-lg font-medium disabled:opacity-50 shrink-0">{loading?'⟳':'⟳ Refresh'}</button>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="text-xs text-gray-400 hidden lg:block">{lastRefresh&&`Actualisé ${lastRefresh}`}</div>
             {isAdmin&&(
               <select value={viewAs?.nom||''} onChange={e=>{const p=allProfiles.find(p=>p.nom===e.target.value);setViewAs(p||null);}}
-                className={`hidden md:block text-xs border rounded-lg px-2 py-1.5 font-medium focus:outline-none ${viewAs?'border-orange-400 bg-orange-50 text-orange-700':'text-gray-600'}`}>
-                <option value="">👁️ Vue normale</option>
+                className={`hidden sm:block text-xs border rounded-lg px-2 py-1 font-medium focus:outline-none max-w-[120px] ${viewAs?'border-orange-400 bg-orange-50 text-orange-700':'text-gray-600'}`}>
+                <option value="">👁️ Vue</option>
                 {allProfiles.filter(p=>p.nom!==profile.nom).map(p=>(
-                  <option key={p.id} value={p.nom}>{p.nom} · {p.agence}</option>
+                  <option key={p.id} value={p.nom}>{p.nom}</option>
                 ))}
               </select>
             )}
-            <div className="flex items-center gap-1.5 border-l pl-2 sm:pl-3 shrink-0">
-              <span className="text-xs text-gray-500 font-medium hidden sm:inline">{profile.nom}</span>
-              <button onClick={()=>setShowPwd(true)} title="Changer mon mot de passe" className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2 py-1.5 rounded-lg font-medium">🔑</button>
-              <button onClick={logout} className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2 sm:px-3 py-1.5 rounded-lg font-medium">⎋<span className="hidden sm:inline"> Déco.</span></button>
+            <button onClick={fetchAll} disabled={loading} className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-2 py-1.5 rounded-lg font-medium disabled:opacity-50" title="Actualiser">{loading?'⟳':'⟳'}<span className="hidden sm:inline"> Refresh</span></button>
+            <div className="flex items-center gap-1.5 border-l pl-2 shrink-0">
+              <span className="text-xs text-gray-500 font-medium hidden md:inline">{profile.nom}</span>
+              <button onClick={()=>setShowPwd(true)} title="Changer mon mot de passe" className="text-gray-400 hover:text-gray-700 px-1 py-1 rounded font-medium text-base leading-none">🔑</button>
+              <button onClick={logout} title="Déconnexion" className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2 py-1.5 rounded-lg font-medium">⎋</button>
             </div>
             {showPwd&&<ChangePasswordModal onClose={()=>setShowPwd(false)}/>}
           </div>
         </div>
-        <div className="max-w-7xl mx-auto px-2 tabs-scroll pb-0">
+        <div className="px-2 tabs-scroll pb-0">
           {TABS.map(t=>(
-            <button key={t.id} onClick={()=>setTab(t.id)} className={`px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${tab===t.id?'border-blue-600 text-blue-700':'border-transparent text-gray-500 hover:text-gray-700'}`}>{t.label}</button>
+            <button key={t.id} onClick={()=>setTab(t.id)} className={`px-3 py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${tab===t.id?'border-blue-600 text-blue-700':'border-transparent text-gray-500 hover:text-gray-700'}`}>{t.label}</button>
           ))}
         </div>
       </div>
@@ -1419,7 +1421,7 @@ function App() {
           <button onClick={()=>setViewAs(null)} className="bg-white text-orange-600 px-3 py-0.5 rounded-full font-semibold hover:bg-orange-50">Quitter</button>
         </div>
       )}
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
         {tab==='prospects'&&<TabProspects contacts={vContacts} historique={vHistorique} taches={vTaches} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
         {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance}/>}
         {tab==='besoins'  &&<TabBesoins  contacts={vContacts} besoins={vBesoins} historique={vHistorique} taches={vTaches} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
