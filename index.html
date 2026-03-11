@@ -1034,6 +1034,10 @@ function TabTaches({ taches, contacts, besoins, profile, allProfiles, onRefresh,
   },[besoins]);
   const isAdmin=profile.role==='admin';
   const responsables=useMemo(()=>[...new Set(taches.map(t=>t.responsable).filter(Boolean))].sort(),[taches]);
+  const endOfWeek=useMemo(()=>{
+    const d=new Date(TODAY); const dow=d.getDay(); const diff=dow===0?0:7-dow;
+    d.setDate(d.getDate()+diff); return d.toISOString().slice(0,10);
+  },[]);
   const actives=useMemo(()=>taches
     .filter(t=>t.statut!=='fait'&&t.statut!=='annule')
     .map(t=>({...t,overdue:!!(t.due_date&&t.due_date<TODAY)}))
@@ -1041,10 +1045,11 @@ function TabTaches({ taches, contacts, besoins, profile, allProfiles, onRefresh,
       if(filterResp&&t.responsable!==filterResp) return false;
       if(filterEcheance==='retard'&&!t.overdue) return false;
       if(filterEcheance==='today'&&t.due_date!==TODAY) return false;
+      if(filterEcheance==='semaine'&&!(t.due_date&&t.due_date>=TODAY&&t.due_date<=endOfWeek)) return false;
       if(search&&!(t.titre||'').toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     })
-  ,[taches,search,filterResp,filterEcheance]);
+  ,[taches,search,filterResp,filterEcheance,endOfWeek]);
 
   // Sections
   const enRetard  = actives.filter(t=>t.overdue);
@@ -1055,6 +1060,11 @@ function TabTaches({ taches, contacts, besoins, profile, allProfiles, onRefresh,
 
   const overdue=enRetard.length;
   const today_t=aujourdhui.length;
+  // Tâches cette semaine (hors aujourd'hui et retard) pour le badge
+  const thisWeek_t=useMemo(()=>taches
+    .filter(t=>t.statut!=='fait'&&t.statut!=='annule'&&t.due_date&&t.due_date>TODAY&&t.due_date<=endOfWeek&&(filterResp?t.responsable===filterResp:true))
+    .length
+  ,[taches,filterResp,endOfWeek]);
   // Pour les commerciaux : filterResp est toujours leur nom, non réinitialisable à vide
   const hasFilter=search||(isAdmin&&filterResp)||filterEcheance;
   const resetAll=()=>{setSearch('');setFilterResp(isAdmin?'':profile.nom);setFilterEcheance('');};
@@ -1080,6 +1090,7 @@ function TabTaches({ taches, contacts, besoins, profile, allProfiles, onRefresh,
           <span>{actives.length} tâche{actives.length>1?'s':''}</span>
           {overdue>0&&<button onClick={()=>setFilterEcheance(filterEcheance==='retard'?'':'retard')} className={`text-xs px-2 py-0.5 rounded-full font-medium ${filterEcheance==='retard'?'bg-red-600 text-white':'bg-red-100 text-red-600 hover:bg-red-200'}`}>⚠️ {overdue} en retard</button>}
           {today_t>0&&<button onClick={()=>setFilterEcheance(filterEcheance==='today'?'':'today')} className={`text-xs px-2 py-0.5 rounded-full font-medium ${filterEcheance==='today'?'bg-orange-500 text-white':'bg-orange-100 text-orange-600 hover:bg-orange-200'}`}>📍 {today_t} aujourd'hui</button>}
+          {thisWeek_t>0&&<button onClick={()=>setFilterEcheance(filterEcheance==='semaine'?'':'semaine')} className={`text-xs px-2 py-0.5 rounded-full font-medium ${filterEcheance==='semaine'?'bg-blue-600 text-white':'bg-blue-100 text-blue-600 hover:bg-blue-200'}`}>📆 {thisWeek_t} cette semaine</button>}
         </div>
         <div className="flex border rounded-lg overflow-hidden text-sm">
           <button onClick={()=>setViewMode('list')} className={`px-3 py-2 font-medium ${viewMode==='list'?'bg-blue-600 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>☰ Liste</button>
