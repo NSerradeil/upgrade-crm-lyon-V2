@@ -831,11 +831,10 @@ function CompleteTaskModal({ task, contact, profile, onClose, onSaved }) {
 }
 
 // ── Modal : Édition tâche ─────────────────────────────────────────────────────
-function EditTacheModal({ task, contacts, profile, allProfiles, onClose, onSaved }) {
+function EditTacheModal({ task, contacts, besoins, profile, allProfiles, onClose, onSaved }) {
   const [f,setF]=useState({ titre:task.titre||'', due_date:task.due_date||'', statut:task.statut||'a_faire', notes:task.notes||'', responsable:task.responsable||profile.nom, contact_id:task.contact_id?String(task.contact_id):'' });
   const [saving,setSaving]=useState(false);
   const isAdmin=profile.role==='admin';
-  const myContacts=useMemo(()=>contacts.filter(c=>isAdmin||c.responsable===profile.nom).sort((a,b)=>(a.nom||'').localeCompare(b.nom||'')),[contacts,profile,isAdmin]);
   const save=async()=>{
     if(!f.titre.trim())return;
     setSaving(true);
@@ -850,10 +849,10 @@ function EditTacheModal({ task, contacts, profile, allProfiles, onClose, onSaved
         <Field label="Échéance"><input type="date" value={f.due_date} min={TODAY} onChange={e=>setF(v=>({...v,due_date:e.target.value}))} className={inputCls}/></Field>
         <Field label="Statut"><select value={f.statut} onChange={e=>setF(v=>({...v,statut:e.target.value}))} className={inputCls}><option value="a_faire">À faire</option><option value="en_cours">En cours</option></select></Field>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Contact lié"><select value={f.contact_id} onChange={e=>setF(v=>({...v,contact_id:e.target.value}))} className={inputCls}><option value="">Aucun</option>{myContacts.map(c=><option key={c.id} value={c.id}>{c.prenom} {c.nom} — {c.groupe}</option>)}</select></Field>
-        {isAdmin&&<Field label="Responsable"><select value={f.responsable} onChange={e=>setF(v=>({...v,responsable:e.target.value}))} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>}
-      </div>
+      {isAdmin&&<Field label="Responsable"><select value={f.responsable} onChange={e=>setF(v=>({...v,responsable:e.target.value}))} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>}
+      <Field label="Contact lié">
+        <ContactPicker contacts={contacts} besoins={besoins||[]} value={f.contact_id} onChange={cid=>setF(v=>({...v,contact_id:cid}))}/>
+      </Field>
       <Field label="Notes"><textarea rows={2} value={f.notes} onChange={e=>setF(v=>({...v,notes:e.target.value}))} className={inputCls+' resize-none'}/></Field>
     </Modal>
   );
@@ -1025,7 +1024,7 @@ function TabTaches({ taches, contacts, besoins, profile, allProfiles, onRefresh,
                 <div className="flex flex-col items-end gap-1 shrink-0">
                   <div className="text-xs text-gray-400">{t.responsable}</div>
                   {t.due_date&&<div className={`text-xs font-medium ${t.overdue?'text-red-600':'text-gray-500'}`}>{t.due_date}</div>}
-                  {isAdmin&&<button onClick={e=>{e.stopPropagation();setEditingTask(t);}} className="mt-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2.5 py-1 rounded-lg font-medium">✏️</button>}
+                  {canEdit&&<button onClick={e=>{e.stopPropagation();setEditingTask(t);}} className="mt-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2.5 py-1 rounded-lg font-medium">✏️</button>}
                   {canEdit&&<button onClick={e=>{e.stopPropagation();setDeletingTask(t);}} className="mt-1 text-xs bg-red-50 hover:bg-red-100 text-red-500 px-2.5 py-1 rounded-lg font-medium">🗑️</button>}
                 {canEdit&&<button onClick={()=>setCompletingModal(t)} className="mt-1 text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2.5 py-1 rounded-lg font-medium">✓ Fait</button>}
                 </div>
@@ -1038,7 +1037,7 @@ function TabTaches({ taches, contacts, besoins, profile, allProfiles, onRefresh,
       )}
       {showAdd&&<AddTacheModal contacts={contacts} besoins={besoins||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
       {completingModal&&<CompleteTaskModal task={completingModal} contact={contactMap[completingModal.contact_id]||null} profile={profile} onClose={()=>setCompletingModal(null)} onSaved={()=>{setCompletingModal(null);onRefresh();}}/>}
-      {editingTask&&<EditTacheModal task={editingTask} contacts={contacts} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingTask(null)} onSaved={()=>{setEditingTask(null);onRefresh();}}/>}
+      {editingTask&&<EditTacheModal task={editingTask} contacts={contacts} besoins={besoins||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingTask(null)} onSaved={()=>{setEditingTask(null);onRefresh();}}/>}
       {deletingTask&&<DeleteTacheModal task={deletingTask} onClose={()=>setDeletingTask(null)} onDeleted={()=>{setDeletingTask(null);onRefresh();}}/>}
     </div>
   );
