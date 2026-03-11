@@ -210,46 +210,77 @@ function AddHistoriqueModal({ contact, profile, onClose, onSaved }) {
     </Modal>
   );
 }
-function AddTacheModal({ contacts, profile, onClose, onSaved, defaultContactId }) {
-  const [f,setF] = useState({ titre:'', due_date:'', contact_id:defaultContactId?String(defaultContactId):'', notes:'', responsable:profile.nom });
+const TACHE_TYPES_CANDIDAT  = ['Appel','Entretien','Envoi CV','Suivi','Relance','Autre'];
+const TACHE_TYPES_PROSPECT  = ['Appel','RDV','Email','Proposition commerciale','Relance','Autre'];
+const TACHE_TYPES_LIBRE     = ['Appel','RDV','Email','Entretien','Relance','Autre'];
+function tacheTypesFor(contact) {
+  if (!contact) return TACHE_TYPES_LIBRE;
+  if (isEntretienStatut(contact.statut)) return TACHE_TYPES_CANDIDAT;
+  return TACHE_TYPES_PROSPECT;
+}
+function AddTacheModal({ contacts, profile, allProfiles, onClose, onSaved, defaultContactId }) {
+  const isAdmin = profile.role==='admin';
+  const [f,setF] = useState({ type:'', titre:'', due_date:'', contact_id:defaultContactId?String(defaultContactId):'', notes:'', responsable:profile.nom });
   const [saving,setSaving]=useState(false);
-  const myContacts = useMemo(()=>contacts.filter(c=>profile.role==='admin'||c.responsable===profile.nom).sort((a,b)=>(a.nom||'').localeCompare(b.nom||'')),[contacts,profile]);
+  const myContacts = useMemo(()=>contacts.filter(c=>isAdmin||c.responsable===profile.nom).sort((a,b)=>(a.nom||'').localeCompare(b.nom||'')),[contacts,profile,isAdmin]);
   const contactMap = useMemo(()=>Object.fromEntries(myContacts.map(c=>[String(c.id),c])),[myContacts]);
   const selContact = f.contact_id ? contactMap[f.contact_id] : null;
-  const showEntretien = isEntretienStatut(selContact?.statut);
-  const applyEntretien = () => {
-    if (!selContact) return;
-    const titre = `Entretien — ${selContact.prenom||''} ${selContact.nom||''}`.trim();
-    setF(v=>({...v, titre}));
+  const types = useMemo(()=>tacheTypesFor(selContact),[selContact]);
+
+  const selectType = (t) => {
+    const contactPart = selContact ? ` — ${[selContact.prenom,selContact.nom].filter(Boolean).join(' ')}` : '';
+    setF(v=>({...v, type:t, titre: t + contactPart}));
   };
+  const handleContactChange = (cid) => {
+    setF(v => {
+      const c = cid ? contactMap[cid] : null;
+      const newTitre = v.type ? v.type + (c ? ` — ${[c.prenom,c.nom].filter(Boolean).join(' ')}` : '') : v.titre;
+      return {...v, contact_id:cid, titre:newTitre};
+    });
+  };
+
   const save = async () => {
     if (!f.titre.trim()) return; setSaving(true);
     const { error } = await sb.from('taches').insert({ id:`tw_${Date.now()}`, titre:f.titre.trim(), statut:'a_faire', due_date:f.due_date||null, contact_id:f.contact_id?parseInt(f.contact_id):null, notes:f.notes||null, responsable:f.responsable });
     if (!error) onSaved(); else setSaving(false);
   };
+
   return (
     <Modal title="✅ Nouvelle tâche" onClose={onClose}
       footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Annuler</button><button onClick={save} disabled={saving||!f.titre.trim()} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">{saving?'Enregistrement...':'+ Créer'}</button></>}>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Échéance"><input type="date" value={f.due_date} onChange={e=>setF(v=>({...v,due_date:e.target.value}))} className={inputCls}/></Field>
         <Field label="Contact lié">
-          <select value={f.contact_id} onChange={e=>setF(v=>({...v,contact_id:e.target.value}))} className={inputCls}>
+          <select value={f.contact_id} onChange={e=>handleContactChange(e.target.value)} className={inputCls}>
             <option value="">Aucun</option>
             {myContacts.map(c=><option key={c.id} value={c.id}>{c.prenom} {c.nom} — {c.groupe}</option>)}
           </select>
         </Field>
       </div>
-      {showEntretien&&(
-        <div className="flex items-center gap-2 bg-purple-50 border border-purple-100 rounded-lg px-3 py-2">
-          <span className="text-xs text-purple-700 font-medium flex-1">📅 {selContact.statut} détecté</span>
-          <button type="button" onClick={applyEntretien}
-            className="text-xs bg-purple-600 text-white px-3 py-1 rounded-lg hover:bg-purple-700 font-medium whitespace-nowrap">
-            Pré-remplir "Entretien"
-          </button>
+      <Field label="Type">
+        <div className="flex gap-1.5 flex-wrap mt-1">
+          {types.map(t=>(
+            <button key={t} type="button" onClick={()=>selectType(t)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap
+                ${f.type===t
+                  ? t==='Entretien' ? 'bg-purple-600 text-white border-purple-600'
+                                    : 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-600'}`}>
+              {t==='Entretien'?'📅 Entretien':t}
+            </button>
+          ))}
         </div>
-      )}
-      <Field label="Titre *"><input type="text" value={f.titre} autoFocus onChange={e=>setF(v=>({...v,titre:e.target.value}))} placeholder="Ex: Relance tel Dupont" className={inputCls}/></Field>
+      </Field>
+      <Field label="Titre *"><input type="text" value={f.titre} onChange={e=>setF(v=>({...v,titre:e.target.value}))} placeholder="Sélectionne un type ou saisis directement" className={inputCls}/></Field>
       <Field label="Notes"><textarea rows={2} value={f.notes} onChange={e=>setF(v=>({...v,notes:e.target.value}))} className={inputCls+' resize-none'}/></Field>
+      <Field label="Responsable">
+        {isAdmin
+          ? <select value={f.responsable} onChange={e=>setF(v=>({...v,responsable:e.target.value}))} className={inputCls}>
+              {respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}
+            </select>
+          : <div className="px-3 py-2 border rounded-lg text-sm bg-gray-50 text-gray-600">{profile.nom}</div>
+        }
+      </Field>
     </Modal>
   );
 }
@@ -378,7 +409,7 @@ function ContactDetail({ contact, historique, taches, profile, allProfiles, onCl
       </div>
       {modal==='edit'  && <ContactEditModal   contact={contact} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved} />}
       {modal==='hist'  && <AddHistoriqueModal contact={contact} profile={profile} onClose={()=>setModal(null)} onSaved={saved}/>}
-      {modal==='tache' && <AddTacheModal contacts={[contact]} profile={profile} onClose={()=>setModal(null)} onSaved={saved} defaultContactId={contact.id}/>}
+      {modal==='tache' && <AddTacheModal contacts={[contact]} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved} defaultContactId={contact.id}/>}
     </div>
   );
 }
@@ -903,7 +934,7 @@ function TabTaches({ taches, contacts, profile, allProfiles, onRefresh, navKey, 
       ):(
         <CalendarTaches taches={actives} contactMap={contactMap} profile={profile} isAdmin={isAdmin} onComplete={setCompletingModal}/>
       )}
-      {showAdd&&<AddTacheModal contacts={contacts} profile={profile} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
+      {showAdd&&<AddTacheModal contacts={contacts} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
       {completingModal&&<CompleteTaskModal task={completingModal} contact={contactMap[completingModal.contact_id]||null} profile={profile} onClose={()=>setCompletingModal(null)} onSaved={()=>{setCompletingModal(null);onRefresh();}}/>}
       {editingTask&&<EditTacheModal task={editingTask} contacts={contacts} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingTask(null)} onSaved={()=>{setEditingTask(null);onRefresh();}}/>}
     </div>
