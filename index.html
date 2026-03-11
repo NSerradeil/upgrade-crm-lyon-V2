@@ -646,7 +646,7 @@ function MissionDetail({ mission, histMissions, profile, allProfiles, onClose, o
 // ── Onglet Prospects ──────────────────────────────────────────────────────────
 function TabProspects({ contacts, historique, taches, profile, allProfiles, onRefresh }) {
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
-  const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState(profile.role==='admin'?'':profile.nom);
+  const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState(profile.nom);
   const [sortCol,setSortCol]=useState('date_dernier'); const [sortDir,setSortDir]=useState('desc');
   const [selected,setSelected]=useState(null); const [showAdd,setShowAdd]=useState(false);
   const isAdmin=profile.role==='admin';
@@ -930,7 +930,7 @@ function CalendarTaches({ taches, contactMap, profile, isAdmin, onComplete }) {
 // ── Onglet Tâches ─────────────────────────────────────────────────────────────
 function TabTaches({ taches, contacts, besoins, profile, allProfiles, onRefresh, navKey, navEcheance }) {
   const [search,setSearch]=useState(''); const [showAdd,setShowAdd]=useState(false);
-  const [filterStatut,setFilterStatut]=useState(''); const [filterResp,setFilterResp]=useState('');
+  const [filterStatut,setFilterStatut]=useState(''); const [filterResp,setFilterResp]=useState(profile.nom);
   const [filterEcheance,setFilterEcheance]=useState('');
   const [viewMode,setViewMode]=useState('list');
   useEffect(()=>{ if(navEcheance) setFilterEcheance(navEcheance); },[navKey]);
@@ -1024,7 +1024,7 @@ function TabTaches({ taches, contacts, besoins, profile, allProfiles, onRefresh,
 // ── Onglet Pipeline ───────────────────────────────────────────────────────────
 function TabBesoins({ contacts, besoins, historique, taches, profile, allProfiles, onRefresh }) {
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
-  const [filterResp,setFilterResp]=useState('');
+  const [filterResp,setFilterResp]=useState(profile.nom);
   const isAdmin=profile.role==='admin';
   const changeResp=async(contactId,newResp)=>{ await sb.from('contacts').update({responsable:newResp,updated_at:new Date().toISOString()}).eq('id',contactId); if(onRefresh)onRefresh(); };
   const contactMap=useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
@@ -1128,7 +1128,7 @@ function TabBesoins({ contacts, besoins, historique, taches, profile, allProfile
 
 // ── Onglet Historique ─────────────────────────────────────────────────────────
 function TabHistorique({ historique, contacts, taches, profile, allProfiles, onRefresh }) {
-  const [search,setSearch]=useState(''); const [filterResp,setFilterResp]=useState('');
+  const [search,setSearch]=useState(''); const [filterResp,setFilterResp]=useState(profile.nom);
   const [filterType,setFilterType]=useState('');
   const [selected,setSelected]=useState(null);
   const isAdmin=profile.role==='admin';
@@ -1217,6 +1217,7 @@ function TabTDB({ missions, histMissions, profile, allProfiles, onRefresh }) {
   const [selected,setSelected] = useState(null);
   const [search,setSearch] = useState(''); const [filterStatut,setFilterStatut] = useState('');
   const [filterAgence,setFilterAgence] = useState('');
+  const [filterResp,setFilterResp] = useState(profile.nom);
   const isAdmin = profile.role==='admin';
   const curMonthIdx = new Date().getMonth();
 
@@ -1226,15 +1227,16 @@ function TabTDB({ missions, histMissions, profile, allProfiles, onRefresh }) {
     return missions.filter(m=>{
       if(filterStatut&&m.statut!==filterStatut) return false;
       if(filterAgence&&m.agence!==filterAgence) return false;
+      if(filterResp&&m.responsable!==filterResp) return false;
       if(q&&![(m.consultant||''),(m.client||'')].some(v=>v.toLowerCase().includes(q))) return false;
       return true;
     });
-  },[missions,search,filterStatut,filterAgence]);
-  const hasFilter=search||filterStatut||filterAgence;
-  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterAgence('');};
+  },[missions,search,filterStatut,filterAgence,filterResp]);
+  const hasFilter=search||filterStatut||filterAgence||filterResp;
+  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterAgence('');setFilterResp('');};
 
-  const enMission    = missions.filter(m=>m.statut==='En cours'||m.statut==='New');
-  const intercontrat = missions.filter(m=>m.statut==='Intercontrat');
+  const enMission    = missionsFiltrees.filter(m=>m.statut==='En cours'||m.statut==='New');
+  const intercontrat = missionsFiltrees.filter(m=>m.statut==='Intercontrat');
   const caYTD = missionsFiltrees.reduce((sum,m)=>{ const tjm=parseFloat(m.tjm)||0; return sum+MOIS_KEYS.reduce((s,k)=>s+(parseFloat(m[`jours_${k}`])||0)*tjm,0); },0);
   const margeYTD = missionsFiltrees.reduce((sum,m)=>{ const mg=(parseFloat(m.tjm)||0)-(parseFloat(m.cjm)||0); return sum+MOIS_KEYS.reduce((s,k)=>s+(parseFloat(m[`jours_${k}`])||0)*mg,0); },0);
   const tauxMarge = caYTD>0?(margeYTD/caYTD*100):0;
@@ -1312,6 +1314,11 @@ function TabTDB({ missions, histMissions, profile, allProfiles, onRefresh }) {
           {isAdmin&&agences.length>1&&(
             <select value={filterAgence} onChange={e=>setFilterAgence(e.target.value)} className="px-3 py-1.5 border rounded-lg text-sm focus:outline-none">
               <option value="">Toutes agences</option>{agences.map(a=><option key={a} value={a}>{a}</option>)}
+            </select>
+          )}
+          {isAdmin&&(
+            <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-1.5 border rounded-lg text-sm focus:outline-none">
+              <option value="">Tous responsables</option>{allProfiles.map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}
             </select>
           )}
           {hasFilter&&<button onClick={resetAll} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">✕ Reset</button>}
