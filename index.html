@@ -1055,8 +1055,9 @@ function TabTaches({ taches, contacts, besoins, profile, allProfiles, onRefresh,
 
   const overdue=enRetard.length;
   const today_t=aujourdhui.length;
-  const hasFilter=search||filterResp||filterEcheance;
-  const resetAll=()=>{setSearch('');setFilterResp('');setFilterEcheance('');};
+  // Pour les commerciaux : filterResp est toujours leur nom, non réinitialisable à vide
+  const hasFilter=search||(isAdmin&&filterResp)||filterEcheance;
+  const resetAll=()=>{setSearch('');setFilterResp(isAdmin?'':profile.nom);setFilterEcheance('');};
 
   const openDetail=(t)=>setDetailTask(t);
   const handleComplete=(t)=>{ setDetailTask(null); setCompletingModal(t); };
