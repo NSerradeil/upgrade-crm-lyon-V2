@@ -561,7 +561,7 @@ function MissionDetail({ mission, histMissions, profile, allProfiles, onClose, o
 // ── Onglet Prospects ──────────────────────────────────────────────────────────
 function TabProspects({ contacts, historique, taches, profile, allProfiles, onRefresh }) {
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
-  const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState('');
+  const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState(profile.role==='admin'?'':profile.nom);
   const [sortCol,setSortCol]=useState('date_dernier'); const [sortDir,setSortDir]=useState('desc');
   const [selected,setSelected]=useState(null); const [showAdd,setShowAdd]=useState(false);
   const isAdmin=profile.role==='admin';
