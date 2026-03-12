@@ -597,7 +597,9 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, onClose, on
       tjm:parseFloat(f.tjm)||0,cjm:parseFloat(f.cjm)||0,statut:f.statut,type_contrat:f.type_contrat||null,
       responsable:f.responsable,agence:f.agence||profile.agence||'Lyon',
       num_commande:f.num_commande||null,date_debut_mission:f.date_debut_mission||null,date_fin_mission:f.date_fin_mission||null,
-      referent:f.referent||null,contact_consultant_id:f.contact_consultant_id||null,contact_referent_id:f.contact_referent_id||null};
+      referent:f.referent||null};
+    if(f.contact_consultant_id) row.contact_consultant_id=f.contact_consultant_id;
+    if(f.contact_referent_id) row.contact_referent_id=f.contact_referent_id;
     if(prefillBesoinId) row.besoin_id=prefillBesoinId;
     MOIS_KEYS.forEach(k=>{row[`jours_${k}`]=parseFloat(jours[k])||0;});
     if(isEdit){
