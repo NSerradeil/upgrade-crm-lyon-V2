@@ -582,7 +582,7 @@ const MISSION_CONTRATS=['CDI','Freelance','Prestataire','CDD','Alternance'];
 function MissionFormModal({ mission, profile, allProfiles, onClose, onSaved }) {
   const isEdit=!!mission;
   const isAdmin=profile.role==='admin';
-  const init=mission||{consultant:'',client:'',projet:'',tjm:'',cjm:'',statut:'En cours',type_contrat:'CDI',responsable:profile.nom,agence:profile.agence||'Lyon'};
+  const init=mission||{consultant:'',client:'',projet:'',tjm:'',cjm:'',statut:'En cours',type_contrat:'CDI',responsable:profile.nom,agence:profile.agence||'Lyon',num_commande:'',date_debut_mission:'',date_fin_mission:''};
   const [f,setF]=useState({...init});
   const [jours,setJours]=useState(()=>{
     const j={};MOIS_KEYS.forEach(k=>{j[k]=mission?mission[`jours_${k}`]||'':'';});return j;
@@ -595,7 +595,8 @@ function MissionFormModal({ mission, profile, allProfiles, onClose, onSaved }) {
     setSaving(true);
     const row={consultant:f.consultant.trim(),client:f.client||null,projet:f.projet||null,
       tjm:parseFloat(f.tjm)||0,cjm:parseFloat(f.cjm)||0,statut:f.statut,type_contrat:f.type_contrat||null,
-      responsable:f.responsable,agence:f.agence||profile.agence||'Lyon'};
+      responsable:f.responsable,agence:f.agence||profile.agence||'Lyon',
+      num_commande:f.num_commande||null,date_debut_mission:f.date_debut_mission||null,date_fin_mission:f.date_fin_mission||null};
     MOIS_KEYS.forEach(k=>{row[`jours_${k}`]=parseFloat(jours[k])||0;});
     if(isEdit){
       await sb.from('missions').update(row).eq('id',mission.id);
@@ -613,6 +614,11 @@ function MissionFormModal({ mission, profile, allProfiles, onClose, onSaved }) {
           <Field label="Client"><input value={f.client||''} onChange={s('client')} className={inputCls} placeholder="Entreprise cliente"/></Field>
         </div>
         <Field label="Projet"><input value={f.projet||''} onChange={s('projet')} className={inputCls} placeholder="Intitulé du projet"/></Field>
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="N° commande"><input value={f.num_commande||''} onChange={s('num_commande')} className={inputCls} placeholder="5090-4210617888"/></Field>
+          <Field label="Début mission"><input type="date" value={f.date_debut_mission||''} onChange={s('date_debut_mission')} className={inputCls}/></Field>
+          <Field label="Fin mission"><input type="date" value={f.date_fin_mission||''} onChange={s('date_fin_mission')} className={inputCls}/></Field>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="TJM vente (€)"><input type="number" value={f.tjm} onChange={s('tjm')} className={inputCls}/></Field>
           <Field label="CJM achat (€)"><input type="number" value={f.cjm} onChange={s('cjm')} className={inputCls}/></Field>
@@ -705,12 +711,14 @@ function MissionDetail({ mission, histMissions, profile, allProfiles, onClose, o
           </div>
         </div>
 
-        {/* Infos TJM */}
+        {/* Infos mission */}
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div><span className="text-gray-400 text-xs">TJM vente</span><br/><span className="font-mono font-semibold text-gray-800">{mission.tjm>0?`${mission.tjm}€`:'—'}</span></div>
           <div><span className="text-gray-400 text-xs">TJM achat</span><br/><span className="font-mono text-gray-600">{mission.cjm>0?`${mission.cjm}€`:'—'}</span></div>
           <div><span className="text-gray-400 text-xs">Responsable</span><br/><span className="text-gray-700">{mission.responsable||'—'}</span></div>
-          <div><span className="text-gray-400 text-xs">Marge</span><br/><span className="text-purple-700 font-medium">{fmtCurrency(margeTotal)}</span></div>
+          <div><span className="text-gray-400 text-xs">Marge</span><br/><span className="text-purple-700 font-medium">{fmtCurrency(margeTotal)} ({tauxMarge.toFixed(1)}%)</span></div>
+          {mission.num_commande&&<div><span className="text-gray-400 text-xs">N° commande</span><br/><span className="text-gray-700 font-mono text-xs">{mission.num_commande}</span></div>}
+          {(mission.date_debut_mission||mission.date_fin_mission)&&<div><span className="text-gray-400 text-xs">Période mission</span><br/><span className="text-gray-700">{mission.date_debut_mission||'?'} → {mission.date_fin_mission||'?'}</span></div>}
         </div>
 
         {/* Jours par mois */}
