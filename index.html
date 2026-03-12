@@ -1579,12 +1579,27 @@ function KanbanBesoins({ besoins, contacts, onSelect, onStatutChange }) {
 function TabBesoins({ contacts, besoins, historique, taches, profile, allProfiles, onRefresh }) {
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
   const [filterResp,setFilterResp]=useState(profile.nom);
-  const [filterAgence,setFilterAgence]=useState('');
+  const [filterAgence,setFilterAgence]=useState(profile.role==='admin'?'':profile.agence);
   const [selected,setSelected]=useState(null);
   const [showAdd,setShowAdd]=useState(false);
   const [viewMode,setViewMode]=useState('list');
   const isAdmin=profile.role==='admin';
   const contactMap=useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
+
+  // Mapping agence → commerciaux depuis allProfiles (configurable via table profiles)
+  const agences=useMemo(()=>[...new Set(allProfiles.map(p=>p.agence).filter(Boolean))].sort(),[allProfiles]);
+  const commerciauxParAgence=useMemo(()=>{
+    const map={};
+    allProfiles.forEach(p=>{if(p.agence&&p.nom) {if(!map[p.agence])map[p.agence]=[];map[p.agence].push(p.nom);}});
+    Object.values(map).forEach(arr=>arr.sort());
+    return map;
+  },[allProfiles]);
+  // Liste des responsables visibles selon le filtre agence actif
+  const responsablesVisibles=useMemo(()=>{
+    if(isAdmin&&!filterAgence) return [...new Set(allProfiles.map(p=>p.nom).filter(Boolean))].sort();
+    const ag=filterAgence||profile.agence;
+    return commerciauxParAgence[ag]||[];
+  },[isAdmin,filterAgence,profile.agence,allProfiles,commerciauxParAgence]);
 
   const sorted=useMemo(()=>{
     const q=search.toLowerCase();
@@ -1603,10 +1618,8 @@ function TabBesoins({ contacts, besoins, historique, taches, profile, allProfile
       .sort((a,b)=>BESOIN_STATUTS_ORDRE.indexOf(a.statut)-BESOIN_STATUTS_ORDRE.indexOf(b.statut));
   },[besoins,search,filterStatut,filterResp,filterAgence,contactMap]);
 
-  const responsables=useMemo(()=>[...new Set(besoins.map(b=>b.responsable).filter(Boolean))].sort(),[besoins]);
-  const agences=useMemo(()=>[...new Set(besoins.map(b=>b.agence).filter(Boolean))].sort(),[besoins]);
-  const hasFilter=search||filterStatut||filterResp!==profile.nom||filterAgence;
-  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterResp(profile.nom);setFilterAgence('');};
+  const hasFilter=search||filterStatut||filterResp!==profile.nom||(isAdmin?filterAgence!=='':filterAgence!==profile.agence);
+  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterResp(profile.nom);setFilterAgence(isAdmin?'':profile.agence);};
 
   const STATUT_BTNS=[
     {label:'Tous',value:'',icon:''},
@@ -1624,23 +1637,18 @@ function TabBesoins({ contacts, besoins, historique, taches, profile, allProfile
     <div>
       <div className="flex gap-2 sm:gap-3 mb-3 flex-wrap items-center">
         <input type="text" placeholder="Rechercher..." value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-[140px] sm:min-w-48 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
-        {isAdmin?(
-          <React.Fragment>
-            <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
-              <option value="">Tous commerciaux</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}
-            </select>
-            {agences.length>1&&(
-              <select value={filterAgence} onChange={e=>setFilterAgence(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
-                <option value="">Toutes agences</option>{agences.map(a=><option key={a} value={a}>{a}</option>)}
-              </select>
-            )}
-          </React.Fragment>
-        ):(
-          <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
-            <option value={profile.nom}>Mes besoins</option>
-            <option value="">Mon agence ({profile.agence})</option>
+        {isAdmin&&agences.length>1&&(
+          <select value={filterAgence} onChange={e=>{setFilterAgence(e.target.value);setFilterResp(e.target.value?'':profile.nom);}} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
+            <option value="">Toutes agences</option>{agences.map(a=><option key={a} value={a}>{a}</option>)}
           </select>
         )}
+        {!isAdmin&&(
+          <span className="px-3 py-2 bg-gray-50 border rounded-lg text-sm text-gray-500">{profile.agence}</span>
+        )}
+        <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
+          <option value="">Tous{!isAdmin?` (${profile.agence})`:filterAgence?` (${filterAgence})`:''}</option>
+          {responsablesVisibles.map(r=><option key={r} value={r}>{r}{r===profile.nom?' (moi)':''}</option>)}
+        </select>
         {hasFilter&&<button onClick={resetAll} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">✕</button>}
         <div className="flex border rounded-lg overflow-hidden text-sm">
           <button onClick={()=>setViewMode('list')} className={`px-3 py-2 font-medium ${viewMode==='list'?'bg-blue-600 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>☰ Liste</button>
