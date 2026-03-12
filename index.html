@@ -579,10 +579,10 @@ function AddHistMissionModal({ mission, profile, onClose, onSaved }) {
 const MISSION_STATUTS=['En cours','New','Intercontrat','Terminée'];
 const MISSION_CONTRATS=['CDI','Freelance','Prestataire','CDD','Alternance'];
 
-function MissionFormModal({ mission, profile, allProfiles, onClose, onSaved, prefillBesoinId }) {
+function MissionFormModal({ mission, profile, allProfiles, contacts, onClose, onSaved, prefillBesoinId }) {
   const isEdit=!!mission&&!!mission.id;
   const isAdmin=profile.role==='admin';
-  const init=mission||{consultant:'',client:'',projet:'',tjm:'',cjm:'',statut:'En cours',type_contrat:'CDI',responsable:profile.nom,agence:profile.agence||'Lyon',num_commande:'',date_debut_mission:'',date_fin_mission:'',referent:''};
+  const init=mission||{consultant:'',client:'',projet:'',tjm:'',cjm:'',statut:'En cours',type_contrat:'CDI',responsable:profile.nom,agence:profile.agence||'Lyon',num_commande:'',date_debut_mission:'',date_fin_mission:'',referent:'',contact_consultant_id:null,contact_referent_id:null};
   const [f,setF]=useState({...init});
   const [jours,setJours]=useState(()=>{
     const j={};MOIS_KEYS.forEach(k=>{j[k]=mission?mission[`jours_${k}`]||'':'';});return j;
@@ -596,7 +596,8 @@ function MissionFormModal({ mission, profile, allProfiles, onClose, onSaved, pre
     const row={consultant:f.consultant.trim(),client:f.client||null,projet:f.projet||null,
       tjm:parseFloat(f.tjm)||0,cjm:parseFloat(f.cjm)||0,statut:f.statut,type_contrat:f.type_contrat||null,
       responsable:f.responsable,agence:f.agence||profile.agence||'Lyon',
-      num_commande:f.num_commande||null,date_debut_mission:f.date_debut_mission||null,date_fin_mission:f.date_fin_mission||null,referent:f.referent||null};
+      num_commande:f.num_commande||null,date_debut_mission:f.date_debut_mission||null,date_fin_mission:f.date_fin_mission||null,
+      referent:f.referent||null,contact_consultant_id:f.contact_consultant_id||null,contact_referent_id:f.contact_referent_id||null};
     if(prefillBesoinId) row.besoin_id=prefillBesoinId;
     MOIS_KEYS.forEach(k=>{row[`jours_${k}`]=parseFloat(jours[k])||0;});
     if(isEdit){
@@ -613,12 +614,12 @@ function MissionFormModal({ mission, profile, allProfiles, onClose, onSaved, pre
       footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Annuler</button><button onClick={save} disabled={saving||!f.consultant.trim()} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">{saving?'Enregistrement...':(isEdit?'Enregistrer':'Créer')}</button></>}>
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Consultant *"><input value={f.consultant} onChange={s('consultant')} className={inputCls} placeholder="Nom du consultant"/></Field>
+          <Field label="Consultant *"><ContactSearchField contacts={contacts||[]} value={f.contact_consultant_id} onChange={(id,name)=>setF(v=>({...v,contact_consultant_id:id,consultant:name||v.consultant}))} statuts={['Consultant CDI','Freelance','Prestataire']} placeholder="Rechercher consultant CDI/freelance/prestataire..."/>{!f.contact_consultant_id&&<input value={f.consultant} onChange={s('consultant')} className={inputCls+' mt-1'} placeholder="Ou saisir manuellement"/>}</Field>
           <Field label="Client"><input value={f.client||''} onChange={s('client')} className={inputCls} placeholder="Entreprise cliente"/></Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Projet"><input value={f.projet||''} onChange={s('projet')} className={inputCls} placeholder="Intitulé du projet"/></Field>
-          <Field label="Référent client"><input value={f.referent||''} onChange={s('referent')} className={inputCls} placeholder="Nom du référent"/></Field>
+          <Field label="Référent client"><ContactSearchField contacts={contacts||[]} value={f.contact_referent_id} onChange={(id,name)=>setF(v=>({...v,contact_referent_id:id,referent:name||v.referent}))} statuts={['Client','Prospect','Decision Maker']} placeholder="Rechercher contact client..."/>{!f.contact_referent_id&&<input value={f.referent||''} onChange={s('referent')} className={inputCls+' mt-1'} placeholder="Ou saisir manuellement"/>}</Field>
         </div>
         <div className="grid grid-cols-3 gap-3">
           <Field label="N° commande"><input value={f.num_commande||''} onChange={s('num_commande')} className={inputCls} placeholder="5090-4210617888"/></Field>
@@ -782,7 +783,7 @@ function MissionDetail({ mission, histMissions, contacts, profile, allProfiles, 
         </div>
       </div>
       {showAdd&&<AddHistMissionModal mission={mission} profile={profile} onClose={()=>setShowAdd(false)} onSaved={saved}/>}
-      {modal==='edit'&&<MissionFormModal mission={mission} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved}/>}
+      {modal==='edit'&&<MissionFormModal mission={mission} profile={profile} allProfiles={allProfiles} contacts={contacts} onClose={()=>setModal(null)} onSaved={saved}/>}
       {modal==='confirmDel'&&<DeleteMissionModal mission={mission} onClose={()=>setModal(null)} onDeleted={()=>{onClose();onRefresh();}}/>}
       {viewContact&&<ContactDetail contact={viewContact} historique={[]} taches={[]} profile={profile} allProfiles={allProfiles} onClose={()=>setViewContact(null)} onRefresh={()=>{setViewContact(null);onRefresh();}}/>}
     </SidePanel>
@@ -1356,6 +1357,35 @@ function CandidatSelector({ contacts, value, onChange }) {
   );
 }
 
+// Sélecteur de contact par recherche, filtré par statuts autorisés
+function ContactSearchField({ contacts, value, onChange, statuts, placeholder }) {
+  const [q,setQ]=useState('');
+  const pool=useMemo(()=>contacts.filter(c=>statuts.includes(c.statut)),[contacts,statuts]);
+  const selected=pool.find(c=>c.id===value);
+  const filtered=useMemo(()=>{if(!q)return pool.slice(0,20);const s=q.toLowerCase();return pool.filter(c=>[c.prenom,c.nom,c.groupe].some(v=>(v||'').toLowerCase().includes(s))).slice(0,20);},[pool,q]);
+  if(selected) return (
+    <div className="flex items-center gap-2">
+      <span className="text-sm bg-blue-50 text-blue-700 px-2 py-1 rounded-lg">{selected.prenom} {selected.nom} <StatutBadge statut={selected.statut}/>{selected.groupe?<span className="text-xs text-gray-400 ml-1">{selected.groupe}</span>:null}</span>
+      <button type="button" onClick={()=>onChange(null,'')} className="text-gray-400 hover:text-red-500 text-sm">×</button>
+    </div>
+  );
+  return (
+    <div className="relative">
+      <input type="text" value={q} onChange={e=>setQ(e.target.value)} placeholder={placeholder||'Rechercher...'} className={inputCls}/>
+      {q&&filtered.length>0&&(
+        <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+          {filtered.map(c=>(
+            <div key={c.id} onClick={()=>{onChange(c.id,`${c.prenom||''} ${c.nom||''}`.trim());setQ('');}} className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm flex items-center gap-2">
+              <span>{c.prenom} {c.nom}</span><StatutBadge statut={c.statut}/>{c.groupe&&<span className="text-xs text-gray-400">{c.groupe}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      {q&&filtered.length===0&&<div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border rounded-lg shadow-lg px-3 py-2 text-sm text-gray-400">Aucun résultat</div>}
+    </div>
+  );
+}
+
 // Stepper visuel de statut
 function BesoinStatusStepper({ value, onChange }) {
   return (
@@ -1641,7 +1671,7 @@ function BesoinDetail({ besoin, contacts, historique, taches, profile, allProfil
             date_fin_mission:besoin.date_fin||'',
             besoin_id:besoin.id
           }}
-          profile={profile} allProfiles={allProfiles}
+          profile={profile} allProfiles={allProfiles} contacts={contacts}
           onClose={()=>{setModal(null);onRefresh();}}
           onSaved={()=>{setModal(null);onRefresh();}}
           prefillBesoinId={besoin.id}
@@ -2193,7 +2223,7 @@ function TabTDB({ missions, histMissions, contacts, profile, allProfiles, onRefr
       </div>
 
       {selected&&<MissionDetail mission={selected} histMissions={histMissions} contacts={contacts||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
-      {showAdd&&<MissionFormModal profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
+      {showAdd&&<MissionFormModal profile={profile} allProfiles={allProfiles} contacts={contacts||[]} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
     </div>
   );
 }
