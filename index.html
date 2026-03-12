@@ -575,14 +575,99 @@ function AddHistMissionModal({ mission, profile, onClose, onSaved }) {
   );
 }
 
+// ── Modal : Créer / Modifier mission ─────────────────────────────────────────
+const MISSION_STATUTS=['En cours','New','Intercontrat','Terminée'];
+const MISSION_CONTRATS=['CDI','Freelance','Prestataire','CDD','Alternance'];
+
+function MissionFormModal({ mission, profile, allProfiles, onClose, onSaved }) {
+  const isEdit=!!mission;
+  const isAdmin=profile.role==='admin';
+  const init=mission||{consultant:'',client:'',projet:'',tjm:'',cjm:'',statut:'En cours',type_contrat:'CDI',responsable:profile.nom,agence:profile.agence||'Lyon'};
+  const [f,setF]=useState({...init});
+  const [jours,setJours]=useState(()=>{
+    const j={};MOIS_KEYS.forEach(k=>{j[k]=mission?mission[`jours_${k}`]||'':'';});return j;
+  });
+  const [saving,setSaving]=useState(false);
+  const s=key=>e=>setF(v=>({...v,[key]:e.target.value}));
+
+  const save=async()=>{
+    if(!f.consultant.trim()){alert('Le nom du consultant est requis.');return;}
+    setSaving(true);
+    const row={consultant:f.consultant.trim(),client:f.client||null,projet:f.projet||null,
+      tjm:parseFloat(f.tjm)||0,cjm:parseFloat(f.cjm)||0,statut:f.statut,type_contrat:f.type_contrat||null,
+      responsable:f.responsable,agence:f.agence||profile.agence||'Lyon'};
+    MOIS_KEYS.forEach(k=>{row[`jours_${k}`]=parseFloat(jours[k])||0;});
+    if(isEdit){
+      await sb.from('missions').update(row).eq('id',mission.id);
+    } else {
+      await sb.from('missions').insert(row);
+    }
+    onSaved();
+  };
+  return (
+    <Modal title={isEdit?`✏️ Modifier — ${mission.consultant}`:'➕ Nouvelle mission'} onClose={onClose}
+      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Annuler</button><button onClick={save} disabled={saving||!f.consultant.trim()} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">{saving?'Enregistrement...':(isEdit?'Enregistrer':'Créer')}</button></>}>
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Consultant *"><input value={f.consultant} onChange={s('consultant')} className={inputCls} placeholder="Nom du consultant"/></Field>
+          <Field label="Client"><input value={f.client||''} onChange={s('client')} className={inputCls} placeholder="Entreprise cliente"/></Field>
+        </div>
+        <Field label="Projet"><input value={f.projet||''} onChange={s('projet')} className={inputCls} placeholder="Intitulé du projet"/></Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="TJM vente (€)"><input type="number" value={f.tjm} onChange={s('tjm')} className={inputCls}/></Field>
+          <Field label="CJM achat (€)"><input type="number" value={f.cjm} onChange={s('cjm')} className={inputCls}/></Field>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Statut"><select value={f.statut} onChange={s('statut')} className={inputCls}>{MISSION_STATUTS.map(x=><option key={x} value={x}>{x}</option>)}</select></Field>
+          <Field label="Contrat"><select value={f.type_contrat||''} onChange={s('type_contrat')} className={inputCls}><option value="">—</option>{MISSION_CONTRATS.map(x=><option key={x} value={x}>{x}</option>)}</select></Field>
+          {isAdmin?<Field label="Responsable"><select value={f.responsable} onChange={s('responsable')} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>
+            :<Field label="Responsable"><span className="text-sm text-gray-700">{f.responsable}</span></Field>}
+        </div>
+        {isAdmin&&<Field label="Agence"><select value={f.agence} onChange={s('agence')} className={inputCls}>{[...new Set(allProfiles.map(p=>p.agence).filter(Boolean))].sort().map(a=><option key={a} value={a}>{a}</option>)}</select></Field>}
+        <div>
+          <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">Jours par mois</div>
+          <div className="grid grid-cols-6 gap-1">
+            {MOIS_KEYS.map((k,i)=>(
+              <div key={k} className="text-center">
+                <div className="text-xs text-gray-400 mb-0.5">{MOIS_LABELS[i]}</div>
+                <input type="number" step="0.5" min="0" value={jours[k]} onChange={e=>setJours(v=>({...v,[k]:e.target.value}))} className="w-full text-center text-sm border rounded-lg px-1 py-1 focus:outline-none focus:ring-1 focus:ring-blue-300"/>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function DeleteMissionModal({ mission, onClose, onDeleted }) {
+  const [loading,setLoading]=useState(false);
+  const del=async()=>{
+    setLoading(true);
+    await sb.from('historique_missions').delete().eq('mission_id',mission.id);
+    await sb.from('missions').delete().eq('id',mission.id);
+    onDeleted();
+  };
+  return (
+    <Modal title="Supprimer la mission" onClose={onClose}>
+      <div className="space-y-4">
+        <p className="text-gray-700">Supprimer définitivement la mission de <span className="font-semibold">"{mission.consultant}"</span>{mission.client?` chez ${mission.client}`:''} ?</p>
+        <p className="text-xs text-gray-400">L'historique des actions liées sera également supprimé.</p>
+        <div className="flex gap-2 justify-end">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg border text-sm text-gray-600 hover:bg-gray-50">Annuler</button>
+          <button onClick={del} disabled={loading} className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50">{loading?'Suppression...':'Supprimer'}</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ── Panel : Détail mission ────────────────────────────────────────────────────
 function MissionDetail({ mission, histMissions, profile, allProfiles, onClose, onRefresh }) {
   const [showAdd,setShowAdd] = useState(false);
-  const [resp,setResp]=useState(mission.responsable||'');
-  const [savingResp,setSavingResp]=useState(false);
+  const [modal,setModal]=useState(null);
   const isAdmin=profile.role==='admin';
-  const isOwner = isAdmin || mission.responsable===profile.nom;
-  const saveResp=async(newResp)=>{ setSavingResp(true); await sb.from('missions').update({responsable:newResp}).eq('id',mission.id); setSavingResp(false); if(onRefresh)onRefresh(); };
+  const canEdit = isAdmin || mission.responsable===profile.nom;
   const hist = (histMissions||[]).filter(h=>h.mission_id===mission.id)
     .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 
@@ -591,107 +676,87 @@ function MissionDetail({ mission, histMissions, profile, allProfiles, onClose, o
   const margeTotal = joursTotal*((parseFloat(mission.tjm)||0)-(parseFloat(mission.cjm)||0));
   const tauxMarge  = caTotal>0?(margeTotal/caTotal*100):0;
 
-  const saved = () => { setShowAdd(false); onRefresh(); };
+  const saved = () => { setShowAdd(false); setModal(null); onRefresh(); };
+
+  const actions = canEdit ? (<div className="flex gap-2 flex-wrap">
+    <button onClick={()=>setModal('edit')} className="px-3 py-1.5 text-xs bg-blue-50 text-blue-700 rounded-lg font-medium hover:bg-blue-100">✏️ Modifier</button>
+    <button onClick={()=>setShowAdd(true)} className="px-3 py-1.5 text-xs bg-green-50 text-green-700 rounded-lg font-medium hover:bg-green-100">➕ Action</button>
+    <button onClick={()=>setModal('confirmDel')} className="px-3 py-1.5 text-xs bg-red-50 text-red-700 rounded-lg font-medium hover:bg-red-100">🗑️</button>
+  </div>) : null;
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex justify-end" onClick={onClose}>
-      <div className="w-full max-w-lg bg-white h-full overflow-y-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
-        {/* Header */}
-        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-start justify-between">
-          <div>
-            <div className="font-bold text-lg">{mission.consultant}</div>
-            <div className="text-sm text-gray-500">{mission.client}{mission.projet?` · ${mission.projet.substring(0,40)}`:''}</div>
-            <div className="flex gap-2 mt-1.5 flex-wrap">
-              <MissionStatutBadge statut={mission.statut}/>
-              {mission.agence&&<span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">{mission.agence}</span>}
-              {mission.type_contrat&&<span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{mission.type_contrat}</span>}
-            </div>
+    <SidePanel title={mission.consultant} badge={<div className="flex gap-2 flex-wrap"><MissionStatutBadge statut={mission.statut}/>{mission.agence&&<span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">{mission.agence}</span>}{mission.type_contrat&&<span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{mission.type_contrat}</span>}</div>} onClose={onClose} actions={actions}>
+      <div className="space-y-6">
+        <div className="text-sm text-gray-500">{mission.client}{mission.projet?` · ${mission.projet.substring(0,60)}`:''}</div>
+
+        {/* KPI mini */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-gray-50 rounded-xl p-3 text-center">
+            <div className="text-xs text-gray-400 mb-0.5">Jours YTD</div>
+            <div className="text-xl font-bold text-gray-800">{joursTotal%1===0?joursTotal.toFixed(0):joursTotal.toFixed(1)}</div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-2xl leading-none mt-1">×</button>
+          <div className="bg-gray-50 rounded-xl p-3 text-center">
+            <div className="text-xs text-gray-400 mb-0.5">CA YTD</div>
+            <div className="text-xl font-bold text-green-700">{fmtCurrency(caTotal)}</div>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-3 text-center">
+            <div className="text-xs text-gray-400 mb-0.5">Taux marge</div>
+            <div className={`text-xl font-bold ${tauxMarge>=30?'text-green-700':tauxMarge>=20?'text-orange-600':'text-red-600'}`}>{tauxMarge.toFixed(1)}%</div>
+          </div>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* KPI mini */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-gray-50 rounded-xl p-3 text-center">
-              <div className="text-xs text-gray-400 mb-0.5">Jours YTD</div>
-              <div className="text-xl font-bold text-gray-800">{joursTotal%1===0?joursTotal.toFixed(0):joursTotal.toFixed(1)}</div>
-            </div>
-            <div className="bg-gray-50 rounded-xl p-3 text-center">
-              <div className="text-xs text-gray-400 mb-0.5">CA YTD</div>
-              <div className="text-xl font-bold text-green-700">{fmtCurrency(caTotal)}</div>
-            </div>
-            <div className="bg-gray-50 rounded-xl p-3 text-center">
-              <div className="text-xs text-gray-400 mb-0.5">Taux marge</div>
-              <div className={`text-xl font-bold ${tauxMarge>=30?'text-green-700':tauxMarge>=20?'text-orange-600':'text-red-600'}`}>{tauxMarge.toFixed(1)}%</div>
-            </div>
-          </div>
+        {/* Infos TJM */}
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div><span className="text-gray-400 text-xs">TJM vente</span><br/><span className="font-mono font-semibold text-gray-800">{mission.tjm>0?`${mission.tjm}€`:'—'}</span></div>
+          <div><span className="text-gray-400 text-xs">TJM achat</span><br/><span className="font-mono text-gray-600">{mission.cjm>0?`${mission.cjm}€`:'—'}</span></div>
+          <div><span className="text-gray-400 text-xs">Responsable</span><br/><span className="text-gray-700">{mission.responsable||'—'}</span></div>
+          <div><span className="text-gray-400 text-xs">Marge</span><br/><span className="text-purple-700 font-medium">{fmtCurrency(margeTotal)}</span></div>
+        </div>
 
-          {/* Infos TJM */}
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div><span className="text-gray-400 text-xs">TJM vente</span><br/><span className="font-mono font-semibold text-gray-800">{mission.tjm>0?`${mission.tjm}€`:'—'}</span></div>
-            <div><span className="text-gray-400 text-xs">TJM achat</span><br/><span className="font-mono text-gray-600">{mission.cjm>0?`${mission.cjm}€`:'—'}</span></div>
-            <div><span className="text-gray-400 text-xs">Responsable</span><br/>
-              {isAdmin&&allProfiles&&allProfiles.length>0
-                ? <select value={resp} onChange={e=>{setResp(e.target.value);saveResp(e.target.value);}} disabled={savingResp} className="mt-0.5 text-sm border rounded-lg px-2 py-1 focus:outline-none text-gray-700 bg-white w-full">
-                    {respOptions(allProfiles,resp).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}
-                  </select>
-                : <span className="text-gray-700">{mission.responsable||'—'}</span>
-              }
-            </div>
-            <div><span className="text-gray-400 text-xs">Marge</span><br/><span className="text-purple-700 font-medium">{fmtCurrency(margeTotal)}</span></div>
-          </div>
-
-          {/* Jours par mois (mini tableau) */}
-          <div>
-            <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">Jours facturés 2026</div>
-            <div className="grid grid-cols-6 gap-1">
-              {MOIS_KEYS.map((k,i)=>{
-                const j=parseFloat(mission[`jours_${k}`])||0;
-                const rec=mission[`statut_${k}`];
-                const color=rec==='Réceptionné'?'text-green-700 bg-green-50':rec==='Livré'?'text-blue-700 bg-blue-50':j>0?'text-gray-700 bg-gray-50':'text-gray-300 bg-gray-50';
-                return (
-                  <div key={k} className={`rounded-lg p-2 text-center ${color}`} title={rec||''}>
-                    <div className="text-xs text-gray-400">{MOIS_LABELS[i]}</div>
-                    <div className="text-sm font-bold">{j>0?(j%1===0?j.toFixed(0):j.toFixed(1)):'—'}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Bouton ajouter action */}
-          {isOwner&&(
-            <button onClick={()=>setShowAdd(true)} className="px-3 py-1.5 text-xs bg-green-50 text-green-700 rounded-lg font-medium hover:bg-green-100">
-              ➕ Ajouter une action
-            </button>
-          )}
-
-          {/* Historique */}
-          <div>
-            <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">
-              Historique ({hist.length} action{hist.length>1?'s':''})
-            </div>
-            {hist.length===0
-              ? <div className="text-sm text-gray-400 italic">Aucune action enregistrée — clique sur "Ajouter une action" pour commencer le suivi.</div>
-              : <div className="space-y-2">
-                  {hist.map((h,i)=>(
-                    <div key={i} className="flex gap-3 text-sm border-l-2 border-gray-100 pl-3">
-                      <div className="text-gray-400 shrink-0 w-14">{h.date||'—'}</div>
-                      <div>
-                        <span className="font-medium text-gray-700">{h.type_action}</span>
-                        {h.responsable&&<span className="ml-1 text-xs text-gray-400">({h.responsable})</span>}
-                        {h.details&&<div className="text-gray-500 text-xs mt-0.5">{h.details}</div>}
-                      </div>
-                    </div>
-                  ))}
+        {/* Jours par mois */}
+        <div>
+          <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">Jours facturés 2026</div>
+          <div className="grid grid-cols-6 gap-1">
+            {MOIS_KEYS.map((k,i)=>{
+              const j=parseFloat(mission[`jours_${k}`])||0;
+              const rec=mission[`statut_${k}`];
+              const color=rec==='Réceptionné'?'text-green-700 bg-green-50':rec==='Livré'?'text-blue-700 bg-blue-50':j>0?'text-gray-700 bg-gray-50':'text-gray-300 bg-gray-50';
+              return (
+                <div key={k} className={`rounded-lg p-2 text-center ${color}`} title={rec||''}>
+                  <div className="text-xs text-gray-400">{MOIS_LABELS[i]}</div>
+                  <div className="text-sm font-bold">{j>0?(j%1===0?j.toFixed(0):j.toFixed(1)):'—'}</div>
                 </div>
-            }
+              );
+            })}
           </div>
+        </div>
+
+        {/* Historique */}
+        <div>
+          <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">
+            Historique ({hist.length} action{hist.length>1?'s':''})
+          </div>
+          {hist.length===0
+            ? <div className="text-sm text-gray-400 italic">Aucune action enregistrée.</div>
+            : <div className="space-y-2">
+                {hist.map((h,i)=>(
+                  <div key={i} className="flex gap-3 text-sm border-l-2 border-gray-100 pl-3">
+                    <div className="text-gray-400 shrink-0 w-14">{h.date||'—'}</div>
+                    <div>
+                      <span className="font-medium text-gray-700">{h.type_action}</span>
+                      {h.responsable&&<span className="ml-1 text-xs text-gray-400">({h.responsable})</span>}
+                      {h.details&&<div className="text-gray-500 text-xs mt-0.5">{h.details}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+          }
         </div>
       </div>
       {showAdd&&<AddHistMissionModal mission={mission} profile={profile} onClose={()=>setShowAdd(false)} onSaved={saved}/>}
-    </div>
+      {modal==='edit'&&<MissionFormModal mission={mission} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved}/>}
+      {modal==='confirmDel'&&<DeleteMissionModal mission={mission} onClose={()=>setModal(null)} onDeleted={()=>{onClose();onRefresh();}}/>}
+    </SidePanel>
   );
 }
 
@@ -1821,7 +1886,7 @@ function TabHistorique({ historique, contacts, taches, profile, allProfiles, onR
 
 // ── Onglet TDB Missions ───────────────────────────────────────────────────────
 function TabTDB({ missions, histMissions, profile, allProfiles, onRefresh }) {
-  const [selected,setSelected] = useState(null);
+  const [selected,setSelected] = useState(null); const [showAdd,setShowAdd]=useState(false);
   const [search,setSearch] = useState(''); const [filterStatut,setFilterStatut] = useState('');
   const [filterAgence,setFilterAgence] = useState(profile.role==='admin'?'':profile.agence);
   const [filterResp,setFilterResp] = useState(profile.nom);
@@ -1877,6 +1942,11 @@ function TabTDB({ missions, histMissions, profile, allProfiles, onRefresh }) {
 
   return (
     <div className="space-y-6">
+      {/* Header + Nouveau */}
+      <div className="flex items-center justify-between">
+        <div/>
+        <button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shadow-sm">+ Nouvelle mission</button>
+      </div>
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl border border-gray-100 p-4">
@@ -2014,6 +2084,7 @@ function TabTDB({ missions, histMissions, profile, allProfiles, onRefresh }) {
       </div>
 
       {selected&&<MissionDetail mission={selected} histMissions={histMissions} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
+      {showAdd&&<MissionFormModal profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
     </div>
   );
 }
