@@ -599,9 +599,11 @@ function MissionFormModal({ mission, profile, allProfiles, onClose, onSaved }) {
       num_commande:f.num_commande||null,date_debut_mission:f.date_debut_mission||null,date_fin_mission:f.date_fin_mission||null};
     MOIS_KEYS.forEach(k=>{row[`jours_${k}`]=parseFloat(jours[k])||0;});
     if(isEdit){
-      await sb.from('missions').update(row).eq('id',mission.id);
+      const {error}=await sb.from('missions').update(row).eq('id',mission.id);
+      if(error){alert('Erreur sauvegarde : '+error.message);setSaving(false);return;}
     } else {
-      await sb.from('missions').insert(row);
+      const {error}=await sb.from('missions').insert(row);
+      if(error){alert('Erreur création : '+error.message);setSaving(false);return;}
     }
     onSaved();
   };
