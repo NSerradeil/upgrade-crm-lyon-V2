@@ -1570,40 +1570,56 @@ function TabBesoins({ contacts, besoins, historique, taches, profile, allProfile
         ))}
       </div>
       <div className="text-xs text-gray-400 mb-3">{sorted.length} besoin{sorted.length>1?'s':''}</div>
-      <div className="space-y-3">{sorted.map(b=>{
-        const contact=contactMap[b.contact_id];
-        const candidat=contactMap[b.candidat_id];
-        const nbJ=b.statut==='Besoin Gagné'?joursOuvres(b.date_demarrage,b.date_fin):0;
-        const ca=nbJ*(b.tjm_vente||0);
-        const marge=ca-nbJ*(b.cjm_achat||0);
-        return (
-          <div key={b.id} onClick={()=>setSelected(b)} className="bg-white rounded-xl border border-gray-100 p-4 cursor-pointer hover:border-blue-200 transition-colors">
-            <div className="flex items-start gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className="font-semibold text-gray-900 truncate">{b.titre}</span>
-                  <BesoinBadge statut={b.statut}/>
-                </div>
-                <div className="flex flex-wrap gap-2 text-xs text-gray-500 mb-1">
-                  {contact&&<span>{contact.prenom} {contact.nom}</span>}
-                  {b.compte&&<span className="text-gray-400">· {b.compte}</span>}
-                  {candidat&&<span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">👤 {candidat.prenom} {candidat.nom}</span>}
-                </div>
-                {b.budget>0&&<div className="text-xs text-green-700 font-medium">{fmtCurrency(b.budget)}</div>}
-                {b.statut==='Besoin Gagné'&&ca>0&&(
-                  <div className="text-xs mt-1 flex gap-3">
-                    <span className="text-green-700 font-medium">CA {fmtCurrency(ca)}</span>
-                    <span className={marge>=0?'text-green-600':'text-red-600'}>Marge {fmtCurrency(marge)} ({ca>0?(marge/ca*100).toFixed(1):0}%)</span>
-                    <span className="text-gray-400">{nbJ}j</span>
-                  </div>
-                )}
-                {b.date_entretien&&<div className="text-xs text-gray-400 mt-1">📅 {new Date(b.date_entretien).toLocaleString('fr-FR')}</div>}
+      <div className="space-y-6">
+        {(filterStatut?[filterStatut]:BESOIN_STATUTS_ORDRE).map(statut=>{
+          const items=sorted.filter(b=>b.statut===statut);
+          if(items.length===0) return null;
+          const icon=STATUT_BTNS.find(x=>x.value===statut)?.icon||'';
+          return (
+            <div key={statut}>
+              <div className="flex items-center gap-2 mb-2">
+                {icon&&<span>{icon}</span>}
+                <span className="text-sm font-semibold text-gray-700">{statut}</span>
+                <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{items.length}</span>
               </div>
-              <div className="shrink-0 text-xs text-gray-400">{b.responsable}</div>
+              <div className="space-y-2">{items.map(b=>{
+                const contact=contactMap[b.contact_id];
+                const candidat=contactMap[b.candidat_id];
+                const nbJ=b.statut==='Besoin Gagné'?joursOuvres(b.date_demarrage,b.date_fin):0;
+                const ca=nbJ*(b.tjm_vente||0);
+                const marge=ca-nbJ*(b.cjm_achat||0);
+                return (
+                  <div key={b.id} onClick={()=>setSelected(b)} className="bg-white rounded-xl border border-gray-100 p-3 sm:p-4 cursor-pointer hover:border-blue-200 transition-colors">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span className="font-semibold text-gray-900 text-sm truncate">{b.titre}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-xs text-gray-500">
+                          {contact&&<span>{contact.prenom} {contact.nom}</span>}
+                          {b.compte&&<span className="text-gray-400">· {b.compte}</span>}
+                          {candidat&&<span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">👤 {candidat.prenom} {candidat.nom}</span>}
+                        </div>
+                        {b.budget>0&&b.statut!=='Besoin Gagné'&&<div className="text-xs text-green-700 font-medium mt-1">{fmtCurrency(b.budget)}</div>}
+                        {b.statut==='Besoin Gagné'&&ca>0&&(
+                          <div className="text-xs mt-1 flex gap-3">
+                            <span className="text-green-700 font-medium">CA {fmtCurrency(ca)}</span>
+                            <span className={marge>=0?'text-green-600':'text-red-600'}>Marge {fmtCurrency(marge)} ({ca>0?(marge/ca*100).toFixed(1):0}%)</span>
+                            <span className="text-gray-400">{nbJ}j</span>
+                          </div>
+                        )}
+                        {b.date_entretien&&<div className="text-xs text-gray-400 mt-1">📅 {new Date(b.date_entretien).toLocaleString('fr-FR')}</div>}
+                      </div>
+                      <div className="shrink-0 text-xs text-gray-400">{b.responsable}</div>
+                    </div>
+                  </div>
+                );
+              })}</div>
             </div>
-          </div>
-        );
-      })}</div>
+          );
+        })}
+        {sorted.length===0&&<div className="text-center py-16 text-gray-400"><div className="text-4xl mb-3">📋</div><div className="font-medium">Aucun besoin</div></div>}
+      </div>
       {selected&&<BesoinDetail besoin={selected} contacts={contacts} historique={historique} taches={taches} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{onRefresh();setSelected(null);}}/>}
       {showAdd&&<AddBesoinModal contacts={contacts} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
     </div>
