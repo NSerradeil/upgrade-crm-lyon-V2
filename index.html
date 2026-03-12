@@ -39,6 +39,41 @@ const TYPES_HIST_MISS  = ['Appel consultant','Mail','RDV consultant','CR mensuel
 const MOIS_LABELS      = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
 const MOIS_KEYS        = ['jan','fev','mar','avr','mai','jun','jul','aou','sep','oct','nov','dec'];
 
+// ── Besoins V2 — Constantes ──────────────────────────────────────────────────
+const BESOIN_STATUTS_ORDRE = ['Opportunité','Push opportuniste','Besoin ouvert','Profil proposé','Entretien programmé','Entretien passé','Besoin Gagné','Besoin Perdu'];
+const BESOIN_STATUTS_CREATION = ['Besoin ouvert','Opportunité','Profil proposé','Push opportuniste'];
+const BESOIN_MOTIFS_PERTE = [
+  {value:'annule',label:'Besoin annulé'},{value:'pas_de_reponse',label:'Pas de réponse'},
+  {value:'no_show',label:'No-show candidat'},{value:'pas_de_profils',label:'Pas de profils'},
+  {value:'mauvais_profil',label:'Mauvais profil'},{value:'reponse_technique',label:'Réponse technique'},
+  {value:'reponse_commerciale',label:'Réponse commerciale'},{value:'autre',label:'Autre'},
+];
+const BESOIN_HAS_CANDIDAT = new Set(['Push opportuniste','Profil proposé','Entretien programmé','Entretien passé','Besoin Gagné','Besoin Perdu']);
+const BESOIN_HAS_ENTRETIEN = new Set(['Entretien programmé','Entretien passé','Besoin Gagné','Besoin Perdu']);
+const BESOIN_HAS_CR = new Set(['Entretien passé','Besoin Gagné','Besoin Perdu']);
+
+// ── Jours ouvrés (lun-ven hors fériés FR) ───────────────────────────────────
+const FERIES_FR = (() => {
+  const s = new Set();
+  // Dates fixes 2025-2027
+  [2025,2026,2027].forEach(y => {
+    [`${y}-01-01`,`${y}-05-01`,`${y}-05-08`,`${y}-07-14`,`${y}-08-15`,`${y}-11-01`,`${y}-11-11`,`${y}-12-25`].forEach(d=>s.add(d));
+    // Pâques (algo Meeus) → lundi de Pâques + Ascension + lundi Pentecôte
+    const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),month=Math.floor((h+l-7*m+114)/31),day=((h+l-7*m+114)%31)+1;
+    const easter=new Date(y,month-1,day);
+    const addDays=(dt,n)=>{const r=new Date(dt);r.setDate(r.getDate()+n);return r.toISOString().slice(0,10);};
+    s.add(addDays(easter,1)); s.add(addDays(easter,39)); s.add(addDays(easter,50));
+  });
+  return s;
+})();
+function joursOuvres(debut, fin) {
+  if(!debut||!fin) return 0;
+  let count=0, d=new Date(debut);
+  const end=new Date(fin);
+  while(d<=end){ const dow=d.getDay(); const iso=d.toISOString().slice(0,10); if(dow!==0&&dow!==6&&!FERIES_FR.has(iso))count++; d.setDate(d.getDate()+1); }
+  return count;
+}
+
 // ── Normalisation des champs contact ─────────────────────────────────────────
 const normNom    = v => (v||'').toUpperCase();
 const normPrenom = v => (v||'').split(' ').map(p=>p.split('-').map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join('-')).join(' ');
@@ -131,6 +166,25 @@ function Modal({ title, onClose, children, footer }) {
         </div>
         <div className="space-y-3">{children}</div>
         {footer && <div className="flex gap-3 mt-5 justify-end">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+// ── SidePanel réutilisable ────────────────────────────────────────────────────
+function SidePanel({ title, badge, onClose, actions, children }) {
+  useEffect(()=>{const h=e=>{if(e.key==='Escape')onClose();};window.addEventListener('keydown',h);return()=>window.removeEventListener('keydown',h);},[onClose]);
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex justify-end" onClick={onClose}>
+      <div className="w-full max-w-lg bg-white h-full overflow-y-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-start justify-between z-10">
+          <div>
+            <div className="font-bold text-lg">{title}</div>
+            {badge&&<div className="mt-1">{badge}</div>}
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-2xl leading-none mt-1">×</button>
+        </div>
+        {actions&&<div className="px-6 pt-4 flex gap-2 flex-wrap">{actions}</div>}
+        <div className="p-6 space-y-6">{children}</div>
       </div>
     </div>
   );
@@ -429,75 +483,61 @@ function ContactDetail({ contact, historique, taches, profile, allProfiles, onCl
     await sb.from('contacts').delete().eq('id',contact.id);
     onRefresh(); onClose();
   };
+  const actions = isOwner && (
+    <>
+      <button onClick={()=>setModal('edit')} className="px-3 py-1.5 text-xs bg-blue-50 text-blue-700 rounded-lg font-medium hover:bg-blue-100">✏️ Modifier</button>
+      <button onClick={()=>setModal('hist')} className="px-3 py-1.5 text-xs bg-green-50 text-green-700 rounded-lg font-medium hover:bg-green-100">➕ Action</button>
+      <button onClick={()=>setModal('tache')} className="px-3 py-1.5 text-xs bg-orange-50 text-orange-700 rounded-lg font-medium hover:bg-orange-100">✅ Tâche</button>
+      {modal!=='confirmDel'
+        ? <button onClick={()=>setModal('confirmDel')} className="px-3 py-1.5 text-xs bg-red-50 text-red-700 rounded-lg font-medium hover:bg-red-100">🗑️</button>
+        : <div className="flex gap-2 items-center"><span className="text-xs text-red-700">Supprimer ?</span><button onClick={handleDelete} disabled={deleting} className="px-2 py-1 text-xs bg-red-600 text-white rounded">{deleting?'...':'Oui'}</button><button onClick={()=>setModal(null)} className="text-xs text-gray-500">Non</button></div>
+      }
+    </>
+  );
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex justify-end" onClick={onClose}>
-      <div className="w-full max-w-lg bg-white h-full overflow-y-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
-        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-start justify-between">
-          <div>
-            <div className="font-bold text-lg">{contact.prenom} {contact.nom}</div>
-            <div className="text-sm text-gray-500">{contact.groupe} · {contact.role}</div>
-            <div className="mt-1"><StatutBadge statut={contact.statut}/></div>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-2xl leading-none mt-1">×</button>
-        </div>
-        <div className="p-6 space-y-6">
-          {isOwner && (
-            <div className="flex gap-2 flex-wrap">
-              <button onClick={()=>setModal('edit')} className="px-3 py-1.5 text-xs bg-blue-50 text-blue-700 rounded-lg font-medium hover:bg-blue-100">✏️ Modifier</button>
-              <button onClick={()=>setModal('hist')} className="px-3 py-1.5 text-xs bg-green-50 text-green-700 rounded-lg font-medium hover:bg-green-100">➕ Ajouter action</button>
-              <button onClick={()=>setModal('tache')} className="px-3 py-1.5 text-xs bg-orange-50 text-orange-700 rounded-lg font-medium hover:bg-orange-100">✅ Ajouter tâche</button>
-              {modal!=='confirmDel'
-                ? <button onClick={()=>setModal('confirmDel')} className="px-3 py-1.5 text-xs bg-red-50 text-red-700 rounded-lg font-medium hover:bg-red-100">🗑️ Supprimer</button>
-                : <div className="flex gap-2 items-center">
-                    <span className="text-xs text-red-700 font-medium">Confirmer la suppression ?</span>
-                    <button onClick={handleDelete} disabled={deleting} className="px-3 py-1.5 text-xs bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 disabled:opacity-50">{deleting?'...':'Oui'}</button>
-                    <button onClick={()=>setModal(null)} className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700">Annuler</button>
-                  </div>
-              }
+    <SidePanel title={`${contact.prenom} ${contact.nom}`}
+      badge={<><div className="text-sm text-gray-500">{contact.groupe} · {contact.role}</div><div className="mt-1"><StatutBadge statut={contact.statut}/></div></>}
+      onClose={onClose} actions={actions}>
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div><span className="text-gray-400">Ville</span><br/>{contact.ville||'—'}</div>
+        <div><span className="text-gray-400">Responsable</span><br/>{contact.responsable||'—'}</div>
+        {contact.email&&<div className="col-span-2"><span className="text-gray-400">Email</span><br/><a href={`mailto:${contact.email}`} className="text-blue-600 hover:underline">{contact.email}</a></div>}
+        {contact.telephone&&<div><span className="text-gray-400">Tel</span><br/><a href={`tel:${contact.telephone}`} className="text-green-600 font-mono">{contact.telephone}</a></div>}
+        {contact.linkedin&&<div><span className="text-gray-400">LinkedIn</span><br/><a href={contact.linkedin} target="_blank" className="text-blue-500 hover:underline text-xs">→ Profil</a></div>}
+        {contact.date_relance&&<div className="col-span-2"><span className="text-gray-400">Relance</span><br/><span className={contact.date_relance<TODAY?'text-red-600 font-semibold':'text-gray-700'}>{contact.date_relance}</span></div>}
+      </div>
+      {contact.commentaires&&<div><div className="text-xs text-gray-400 font-semibold mb-1 uppercase tracking-wide">Commentaires</div><div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap">{contact.commentaires}</div></div>}
+      {tachesContact.length>0&&(
+        <div>
+          <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">Tâches actives</div>
+          <div className="space-y-2">{tachesContact.map(t=>(
+            <div key={t.id} className="flex items-start gap-2 bg-blue-50 rounded-lg p-3">
+              <span className="text-blue-400 mt-0.5">◆</span>
+              <div><div className="text-sm font-medium text-blue-900">{t.titre}</div>{t.due_date&&<div className="text-xs text-blue-600">Échéance : {t.due_date}</div>}</div>
             </div>
-          )}
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div><span className="text-gray-400">Ville</span><br/>{contact.ville||'—'}</div>
-            <div><span className="text-gray-400">Responsable</span><br/>{contact.responsable||'—'}</div>
-            {contact.email&&<div className="col-span-2"><span className="text-gray-400">Email</span><br/><a href={`mailto:${contact.email}`} className="text-blue-600 hover:underline">{contact.email}</a></div>}
-            {contact.telephone&&<div><span className="text-gray-400">Tel</span><br/><a href={`tel:${contact.telephone}`} className="text-green-600 font-mono">{contact.telephone}</a></div>}
-            {contact.linkedin&&<div><span className="text-gray-400">LinkedIn</span><br/><a href={contact.linkedin} target="_blank" className="text-blue-500 hover:underline text-xs">→ Profil</a></div>}
-            {contact.date_relance&&<div className="col-span-2"><span className="text-gray-400">Relance</span><br/><span className={contact.date_relance<TODAY?'text-red-600 font-semibold':'text-gray-700'}>{contact.date_relance}</span></div>}
-          </div>
-          {contact.commentaires&&<div><div className="text-xs text-gray-400 font-semibold mb-1 uppercase tracking-wide">Commentaires</div><div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap">{contact.commentaires}</div></div>}
-          {tachesContact.length>0&&(
-            <div>
-              <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">Tâches actives</div>
-              <div className="space-y-2">{tachesContact.map(t=>(
-                <div key={t.id} className="flex items-start gap-2 bg-blue-50 rounded-lg p-3">
-                  <span className="text-blue-400 mt-0.5">◆</span>
-                  <div><div className="text-sm font-medium text-blue-900">{t.titre}</div>{t.due_date&&<div className="text-xs text-blue-600">Échéance : {t.due_date}</div>}</div>
+          ))}</div>
+        </div>
+      )}
+      <div>
+        <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">Historique ({hist.length} actions)</div>
+        {hist.length===0
+          ? <div className="text-sm text-gray-400 italic">Aucune action enregistrée</div>
+          : <div className="space-y-2">{hist.map((h,i)=>(
+              <div key={i} className="flex gap-3 text-sm border-l-2 border-gray-100 pl-3">
+                <div className="text-gray-400 shrink-0 w-14">{h.date?.slice(0,10)||'—'}</div>
+                <div>
+                  <span className="font-medium text-gray-700">{h.type_action}</span>
+                  {h.responsable&&h.responsable!==contact.responsable&&<span className="ml-1 text-xs text-gray-400">({h.responsable})</span>}
+                  {h.details&&<div className="text-gray-500 text-xs mt-0.5">{h.details}</div>}
                 </div>
-              ))}</div>
-            </div>
-          )}
-          <div>
-            <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">Historique ({hist.length} actions)</div>
-            {hist.length===0
-              ? <div className="text-sm text-gray-400 italic">Aucune action enregistrée</div>
-              : <div className="space-y-2">{hist.map((h,i)=>(
-                  <div key={i} className="flex gap-3 text-sm border-l-2 border-gray-100 pl-3">
-                    <div className="text-gray-400 shrink-0 w-14">{h.date?.slice(0,10)||'—'}</div>
-                    <div>
-                      <span className="font-medium text-gray-700">{h.type_action}</span>
-                      {h.responsable&&h.responsable!==contact.responsable&&<span className="ml-1 text-xs text-gray-400">({h.responsable})</span>}
-                      {h.details&&<div className="text-gray-500 text-xs mt-0.5">{h.details}</div>}
-                    </div>
-                  </div>
-                ))}</div>
-            }
-          </div>
-        </div>
+              </div>
+            ))}</div>
+        }
       </div>
       {modal==='edit'  && <ContactEditModal   contact={contact} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved} />}
       {modal==='hist'  && <AddHistoriqueModal contact={contact} profile={profile} onClose={()=>setModal(null)} onSaved={saved}/>}
       {modal==='tache' && <AddTacheModal contacts={[contact]} besoins={[]} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved} defaultContactId={contact.id}/>}
-    </div>
+    </SidePanel>
   );
 }
 
@@ -1141,107 +1181,431 @@ function TabTaches({ taches, contacts, besoins, profile, allProfiles, onRefresh,
   );
 }
 
-// ── Onglet Pipeline ───────────────────────────────────────────────────────────
+// ── Besoins V2 — Composants ──────────────────────────────────────────────────
+
+// Budget : 3 modes de saisie
+function BudgetInput({ budget, tjm, jours, dateDebut, dateFin, onChange }) {
+  const [mode,setMode]=useState(dateDebut&&dateFin?'dates':tjm?'tjm':'direct');
+  const calcJours=useMemo(()=>joursOuvres(dateDebut,dateFin),[dateDebut,dateFin]);
+  useEffect(()=>{
+    if(mode==='tjm'&&tjm&&jours) onChange({budget:tjm*jours,budget_tjm:tjm,budget_jours:jours,budget_date_debut:null,budget_date_fin:null});
+    if(mode==='dates'&&tjm&&dateDebut&&dateFin){ const j=joursOuvres(dateDebut,dateFin); onChange({budget:tjm*j,budget_tjm:tjm,budget_jours:j,budget_date_debut:dateDebut,budget_date_fin:dateFin}); }
+  },[mode,tjm,jours,dateDebut,dateFin]);
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-1 text-xs">
+        {[{k:'direct',l:'Montant'},{k:'tjm',l:'TJM × Jours'},{k:'dates',l:'TJM × Dates'}].map(m=>(
+          <button key={m.k} type="button" onClick={()=>setMode(m.k)} className={`px-2 py-1 rounded ${mode===m.k?'bg-blue-600 text-white':'bg-gray-100 text-gray-600'}`}>{m.l}</button>
+        ))}
+      </div>
+      {mode==='direct'&&(
+        <input type="number" value={budget||''} onChange={e=>onChange({budget:parseFloat(e.target.value)||0,budget_tjm:null,budget_jours:null,budget_date_debut:null,budget_date_fin:null})} placeholder="10000" className={inputCls}/>
+      )}
+      {mode==='tjm'&&(
+        <div className="grid grid-cols-2 gap-2">
+          <input type="number" value={tjm||''} onChange={e=>onChange({budget_tjm:parseFloat(e.target.value)||0})} placeholder="TJM (€)" className={inputCls}/>
+          <input type="number" value={jours||''} onChange={e=>onChange({budget_jours:parseInt(e.target.value)||0})} placeholder="Nb jours" className={inputCls}/>
+        </div>
+      )}
+      {mode==='dates'&&(
+        <div className="space-y-2">
+          <input type="number" value={tjm||''} onChange={e=>onChange({budget_tjm:parseFloat(e.target.value)||0})} placeholder="TJM (€)" className={inputCls}/>
+          <div className="grid grid-cols-2 gap-2">
+            <input type="date" value={dateDebut||''} onChange={e=>onChange({budget_date_debut:e.target.value})} className={inputCls}/>
+            <input type="date" value={dateFin||''} onChange={e=>onChange({budget_date_fin:e.target.value})} className={inputCls}/>
+          </div>
+          {calcJours>0&&<div className="text-xs text-gray-500">{calcJours} jours ouvrés → {fmtCurrency((tjm||0)*calcJours)}</div>}
+        </div>
+      )}
+      {budget>0&&<div className="text-xs font-medium text-green-700">Budget : {fmtCurrency(budget)}</div>}
+    </div>
+  );
+}
+
+// Sélecteur de candidat (cherche parmi contacts candidat/consultant/freelance/prestataire)
+function CandidatSelector({ contacts, value, onChange }) {
+  const [q,setQ]=useState('');
+  const candidats=useMemo(()=>contacts.filter(c=>['Candidat','Consultant CDI','Freelance','Prestataire'].includes(c.statut)),[contacts]);
+  const selected=candidats.find(c=>c.id===value);
+  const filtered=useMemo(()=>{if(!q)return candidats.slice(0,20);const s=q.toLowerCase();return candidats.filter(c=>[c.prenom,c.nom,c.groupe].some(v=>(v||'').toLowerCase().includes(s))).slice(0,20);},[candidats,q]);
+  if(selected) return (
+    <div className="flex items-center gap-2">
+      <span className="text-sm bg-blue-50 text-blue-700 px-2 py-1 rounded-lg">{selected.prenom} {selected.nom} <StatutBadge statut={selected.statut}/></span>
+      <button type="button" onClick={()=>onChange(null)} className="text-gray-400 hover:text-red-500 text-sm">×</button>
+    </div>
+  );
+  return (
+    <div className="relative">
+      <input type="text" value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher un candidat..." className={inputCls}/>
+      {q&&filtered.length>0&&(
+        <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+          {filtered.map(c=>(
+            <div key={c.id} onClick={()=>{onChange(c.id);setQ('');}} className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm flex items-center gap-2">
+              <span>{c.prenom} {c.nom}</span><StatutBadge statut={c.statut}/>{c.groupe&&<span className="text-xs text-gray-400">{c.groupe}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Stepper visuel de statut
+function BesoinStatusStepper({ value, onChange }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {BESOIN_STATUTS_ORDRE.map(s=>(
+        <button key={s} type="button" onClick={()=>onChange(s)}
+          className={`px-2 py-1 rounded-lg text-xs font-medium border transition-colors ${value===s?'bg-blue-600 text-white border-blue-600':'bg-white text-gray-500 border-gray-200 hover:border-blue-300'}`}>
+          {s}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Modal création besoin
+function AddBesoinModal({ contacts, profile, allProfiles, onClose, onSaved }) {
+  const isAdmin=profile.role==='admin';
+  const [f,setF]=useState({titre:'',statut:'Besoin ouvert',type:'regie',lien:'',compte:'',contact_id:null,description:'',budget:10000,budget_tjm:null,budget_jours:null,budget_date_debut:null,budget_date_fin:null,candidat_id:null,responsable:profile.nom});
+  const [saving,setSaving]=useState(false);const [err,setErr]=useState('');
+  const save=async()=>{
+    if(!f.titre.trim()){setErr('Le titre est obligatoire.');return;}
+    setSaving(true);
+    const {data:inserted,error}=await sb.from('besoins').insert({
+      titre:f.titre.trim(),statut:f.statut,type:f.type,lien:f.lien||null,compte:f.compte||null,
+      contact_id:f.contact_id||null,description:f.description||null,budget:f.budget||10000,
+      budget_tjm:f.budget_tjm,budget_jours:f.budget_jours,budget_date_debut:f.budget_date_debut,budget_date_fin:f.budget_date_fin,
+      candidat_id:f.candidat_id||null,responsable:f.responsable,agence:profile.agence||'Lyon'
+    }).select('id').single();
+    if(error){setErr(error.message);setSaving(false);return;}
+    // Auto-log push opportuniste
+    if(f.statut==='Push opportuniste'&&f.contact_id&&f.candidat_id){
+      const cand=contacts.find(c=>c.id===f.candidat_id);
+      if(cand) await sb.from('historique_actions').insert({id_prospect:f.contact_id,date:TODAY,type_action:'Push opportuniste',details:`Push opportuniste — ${cand.prenom} ${cand.nom}`,responsable:f.responsable,besoin_id:inserted.id});
+    }
+    onSaved();
+  };
+  const myContacts=contacts;
+  return (
+    <Modal title="Nouveau besoin" onClose={onClose}
+      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-gray-600">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">{saving?'...':'Créer'}</button></>}>
+      <Field label="Titre *"><input type="text" value={f.titre} onChange={e=>setF(v=>({...v,titre:e.target.value}))} placeholder="Ex : Développeur Java Senior" className={inputCls}/></Field>
+      <Field label="Statut initial">
+        <select value={f.statut} onChange={e=>setF(v=>({...v,statut:e.target.value}))} className={inputCls}>
+          {BESOIN_STATUTS_CREATION.map(s=><option key={s} value={s}>{s}</option>)}
+        </select>
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Compte (société)"><input type="text" value={f.compte} onChange={e=>setF(v=>({...v,compte:e.target.value}))} className={inputCls}/></Field>
+        <Field label="Lien externe"><input type="url" value={f.lien} onChange={e=>setF(v=>({...v,lien:e.target.value}))} placeholder="https://..." className={inputCls}/></Field>
+      </div>
+      <Field label="Contact lié">
+        <ContactPicker contacts={myContacts} besoins={[]} value={f.contact_id} onChange={cid=>setF(v=>({...v,contact_id:cid}))}/>
+      </Field>
+      {BESOIN_HAS_CANDIDAT.has(f.statut)&&(
+        <Field label="Candidat"><CandidatSelector contacts={contacts} value={f.candidat_id} onChange={cid=>setF(v=>({...v,candidat_id:cid}))}/></Field>
+      )}
+      <Field label="Description"><textarea rows={2} value={f.description} onChange={e=>setF(v=>({...v,description:e.target.value}))} className={inputCls+' resize-none'}/></Field>
+      <Field label="Budget">
+        <BudgetInput budget={f.budget} tjm={f.budget_tjm} jours={f.budget_jours} dateDebut={f.budget_date_debut} dateFin={f.budget_date_fin}
+          onChange={upd=>setF(v=>({...v,...upd}))}/>
+      </Field>
+      {isAdmin&&<Field label="Responsable"><select value={f.responsable} onChange={e=>setF(v=>({...v,responsable:e.target.value}))} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>}
+      {err&&<div className="text-xs text-red-600 bg-red-50 rounded px-3 py-2">{err}</div>}
+    </Modal>
+  );
+}
+
+// Panneau détail besoin (SidePanel)
+function BesoinDetail({ besoin, contacts, historique, taches, profile, allProfiles, onClose, onRefresh }) {
+  const isAdmin=profile.role==='admin';
+  const isOwner=isAdmin||besoin.responsable===profile.nom;
+  const [editing,setEditing]=useState(false);
+  const [f,setF]=useState({...besoin});
+  const [saving,setSaving]=useState(false);
+  const [modal,setModal]=useState(null);
+  const [deleting,setDeleting]=useState(false);
+  const contact=contacts.find(c=>c.id===besoin.contact_id);
+  const candidat=contacts.find(c=>c.id===besoin.candidat_id);
+  const besoinHist=historique.filter(h=>h.besoin_id===besoin.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const besoinTaches=taches.filter(t=>t.besoin_id===besoin.id&&t.statut!=='fait'&&t.statut!=='annule');
+  // Indicateurs Besoin Gagné
+  const nbJours=joursOuvres(f.date_demarrage,f.date_fin);
+  const caProj=(f.tjm_vente||0)*nbJours;
+  const coutProj=(f.cjm_achat||0)*nbJours;
+  const margeProj=caProj-coutProj;
+  const tauxMarge=caProj>0?(margeProj/caProj*100):0;
+
+  const saveEdit=async()=>{
+    setSaving(true);
+    const upd={statut:f.statut,titre:f.titre,lien:f.lien||null,compte:f.compte||null,contact_id:f.contact_id||null,
+      description:f.description||null,budget:f.budget||0,budget_tjm:f.budget_tjm,budget_jours:f.budget_jours,
+      budget_date_debut:f.budget_date_debut,budget_date_fin:f.budget_date_fin,candidat_id:f.candidat_id||null,
+      date_entretien:f.date_entretien||null,compte_rendu:f.compte_rendu||null,
+      date_demarrage:f.date_demarrage||null,date_fin:f.date_fin||null,tjm_vente:f.tjm_vente||null,cjm_achat:f.cjm_achat||null,
+      motif_perte:f.motif_perte||null,motif_perte_precision:f.motif_perte_precision||null,
+      responsable:f.responsable,updated_at:new Date().toISOString()};
+    const {error}=await sb.from('besoins').update(upd).eq('id',besoin.id);
+    if(!error){
+      // Auto-log push opportuniste
+      if(f.statut==='Push opportuniste'&&f.contact_id&&f.candidat_id&&(f.candidat_id!==besoin.candidat_id||f.statut!==besoin.statut)){
+        const cand=contacts.find(c=>c.id===f.candidat_id);
+        if(cand) await sb.from('historique_actions').insert({id_prospect:f.contact_id,date:TODAY,type_action:'Push opportuniste',details:`Push opportuniste — ${cand.prenom} ${cand.nom}`,responsable:f.responsable,besoin_id:besoin.id});
+      }
+      setEditing(false);onRefresh();
+    }
+    setSaving(false);
+  };
+  const handleDelete=async()=>{setDeleting(true);await sb.from('besoins').delete().eq('id',besoin.id);onRefresh();onClose();};
+  const logAction=async(action)=>{
+    await sb.from('historique_actions').insert({id_prospect:besoin.contact_id,date:action.date,type_action:action.type_action,details:action.details||null,responsable:action.responsable,besoin_id:besoin.id});
+    onRefresh();setModal(null);
+  };
+
+  const actions=isOwner&&(
+    <>
+      <button onClick={()=>setEditing(!editing)} className="px-3 py-1.5 text-xs bg-blue-50 text-blue-700 rounded-lg font-medium hover:bg-blue-100">{editing?'Annuler':'✏️ Modifier'}</button>
+      <button onClick={()=>setModal('hist')} className="px-3 py-1.5 text-xs bg-green-50 text-green-700 rounded-lg font-medium hover:bg-green-100">➕ Action</button>
+      <button onClick={()=>setModal('tache')} className="px-3 py-1.5 text-xs bg-orange-50 text-orange-700 rounded-lg font-medium hover:bg-orange-100">✅ Tâche</button>
+      {modal!=='confirmDel'
+        ?<button onClick={()=>setModal('confirmDel')} className="px-3 py-1.5 text-xs bg-red-50 text-red-700 rounded-lg font-medium hover:bg-red-100">🗑️</button>
+        :<div className="flex gap-2 items-center"><span className="text-xs text-red-700">Supprimer ?</span><button onClick={handleDelete} disabled={deleting} className="px-2 py-1 text-xs bg-red-600 text-white rounded">{deleting?'...':'Oui'}</button><button onClick={()=>setModal(null)} className="text-xs text-gray-500">Non</button></div>
+      }
+    </>
+  );
+
+  return (
+    <SidePanel title={editing?<input type="text" value={f.titre} onChange={e=>setF(v=>({...v,titre:e.target.value}))} className="font-bold text-lg border-b border-blue-300 focus:outline-none w-full"/>:besoin.titre}
+      badge={<BesoinBadge statut={f.statut}/>} onClose={onClose} actions={actions}>
+
+      {/* Stepper statut */}
+      {editing&&<BesoinStatusStepper value={f.statut} onChange={s=>setF(v=>({...v,statut:s}))}/>}
+
+      {/* Infos générales */}
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div><span className="text-gray-400">Responsable</span><br/>{editing&&isAdmin?<select value={f.responsable} onChange={e=>setF(v=>({...v,responsable:e.target.value}))} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select>:<span>{besoin.responsable}</span>}</div>
+        <div><span className="text-gray-400">Compte</span><br/>{editing?<input type="text" value={f.compte||''} onChange={e=>setF(v=>({...v,compte:e.target.value}))} className={inputCls}/>:<span>{besoin.compte||'—'}</span>}</div>
+        {contact&&<div className="col-span-2"><span className="text-gray-400">Contact</span><br/>{contact.prenom} {contact.nom} — {contact.groupe}</div>}
+        {besoin.lien&&!editing&&<div className="col-span-2"><span className="text-gray-400">Lien</span><br/><a href={besoin.lien} target="_blank" className="text-blue-600 hover:underline text-xs">{besoin.lien}</a></div>}
+        {editing&&<div className="col-span-2"><Field label="Lien"><input type="url" value={f.lien||''} onChange={e=>setF(v=>({...v,lien:e.target.value}))} className={inputCls}/></Field></div>}
+      </div>
+
+      {/* Description */}
+      {editing?<Field label="Description"><textarea rows={2} value={f.description||''} onChange={e=>setF(v=>({...v,description:e.target.value}))} className={inputCls+' resize-none'}/></Field>
+        :besoin.description&&<div><div className="text-xs text-gray-400 font-semibold mb-1 uppercase tracking-wide">Description</div><div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap">{besoin.description}</div></div>}
+
+      {/* Contact lié (edit) */}
+      {editing&&<Field label="Contact lié"><ContactPicker contacts={contacts} besoins={[]} value={f.contact_id} onChange={cid=>setF(v=>({...v,contact_id:cid}))}/></Field>}
+
+      {/* Budget */}
+      {editing?<Field label="Budget"><BudgetInput budget={f.budget} tjm={f.budget_tjm} jours={f.budget_jours} dateDebut={f.budget_date_debut} dateFin={f.budget_date_fin} onChange={upd=>setF(v=>({...v,...upd}))}/></Field>
+        :besoin.budget>0&&<div className="text-sm"><span className="text-gray-400">Budget : </span><span className="font-medium text-green-700">{fmtCurrency(besoin.budget)}</span></div>}
+
+      {/* Candidat */}
+      {BESOIN_HAS_CANDIDAT.has(f.statut)&&(editing
+        ?<Field label="Candidat"><CandidatSelector contacts={contacts} value={f.candidat_id} onChange={cid=>setF(v=>({...v,candidat_id:cid}))}/></Field>
+        :candidat&&<div className="text-sm"><span className="text-gray-400">Candidat : </span>{candidat.prenom} {candidat.nom} <StatutBadge statut={candidat.statut}/></div>
+      )}
+
+      {/* Entretien */}
+      {BESOIN_HAS_ENTRETIEN.has(f.statut)&&(editing
+        ?<Field label="Date entretien"><input type="datetime-local" value={f.date_entretien?.slice(0,16)||''} onChange={e=>setF(v=>({...v,date_entretien:e.target.value}))} className={inputCls}/></Field>
+        :besoin.date_entretien&&<div className="text-sm"><span className="text-gray-400">Entretien : </span>{new Date(besoin.date_entretien).toLocaleString('fr-FR')}</div>
+      )}
+
+      {/* Compte-rendu */}
+      {BESOIN_HAS_CR.has(f.statut)&&(editing
+        ?<Field label="Compte-rendu"><textarea rows={3} value={f.compte_rendu||''} onChange={e=>setF(v=>({...v,compte_rendu:e.target.value}))} className={inputCls+' resize-none'}/></Field>
+        :besoin.compte_rendu&&<div><div className="text-xs text-gray-400 font-semibold mb-1 uppercase tracking-wide">Compte-rendu</div><div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap">{besoin.compte_rendu}</div></div>
+      )}
+
+      {/* Besoin Gagné : champs mission */}
+      {f.statut==='Besoin Gagné'&&(editing?(
+        <div className="space-y-3 bg-green-50 rounded-lg p-3">
+          <div className="text-xs font-semibold text-green-800 uppercase">Besoin Gagné — Mission</div>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Date démarrage"><input type="date" value={f.date_demarrage||''} onChange={e=>setF(v=>({...v,date_demarrage:e.target.value}))} className={inputCls}/></Field>
+            <Field label="Date fin"><input type="date" value={f.date_fin||''} onChange={e=>setF(v=>({...v,date_fin:e.target.value}))} className={inputCls}/></Field>
+            <Field label="TJM vente"><input type="number" value={f.tjm_vente||''} onChange={e=>setF(v=>({...v,tjm_vente:parseFloat(e.target.value)||0}))} className={inputCls}/></Field>
+            <Field label="CJM achat"><input type="number" value={f.cjm_achat||''} onChange={e=>setF(v=>({...v,cjm_achat:parseFloat(e.target.value)||0}))} className={inputCls}/></Field>
+          </div>
+          {nbJours>0&&<div className="text-xs text-green-700">{nbJours} jours ouvrés · CA {fmtCurrency(caProj)} · Marge {fmtCurrency(margeProj)} ({tauxMarge.toFixed(1)}%)</div>}
+        </div>
+      ):(besoin.tjm_vente&&(
+        <div className="bg-green-50 rounded-lg p-3">
+          <div className="text-xs font-semibold text-green-800 uppercase mb-2">Mission</div>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div><span className="text-gray-500">Période</span><br/>{besoin.date_demarrage} → {besoin.date_fin} ({nbJours}j)</div>
+            <div><span className="text-gray-500">TJM / CJM</span><br/>{besoin.tjm_vente}€ / {besoin.cjm_achat}€</div>
+            <div><span className="text-gray-500">CA projeté</span><br/><span className="font-semibold text-green-700">{fmtCurrency(caProj)}</span></div>
+            <div><span className="text-gray-500">Marge</span><br/><span className="font-semibold">{fmtCurrency(margeProj)} ({tauxMarge.toFixed(1)}%)</span></div>
+          </div>
+        </div>
+      )))}
+
+      {/* Besoin Perdu : motif */}
+      {f.statut==='Besoin Perdu'&&(editing?(
+        <div className="space-y-2 bg-red-50 rounded-lg p-3">
+          <Field label="Motif de perte">
+            <select value={f.motif_perte||''} onChange={e=>setF(v=>({...v,motif_perte:e.target.value}))} className={inputCls}>
+              <option value="">Choisir...</option>
+              {BESOIN_MOTIFS_PERTE.map(m=><option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+          </Field>
+          {f.motif_perte==='autre'&&<Field label="Précision"><input type="text" value={f.motif_perte_precision||''} onChange={e=>setF(v=>({...v,motif_perte_precision:e.target.value}))} className={inputCls}/></Field>}
+        </div>
+      ):(besoin.motif_perte&&(
+        <div className="bg-red-50 rounded-lg p-3 text-sm">
+          <span className="text-gray-500">Motif : </span>{BESOIN_MOTIFS_PERTE.find(m=>m.value===besoin.motif_perte)?.label||besoin.motif_perte}
+          {besoin.motif_perte_precision&&<span className="text-gray-500"> — {besoin.motif_perte_precision}</span>}
+        </div>
+      )))}
+
+      {/* Bouton sauvegarder */}
+      {editing&&<button onClick={saveEdit} disabled={saving} className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">{saving?'Enregistrement...':'Sauvegarder'}</button>}
+
+      {/* Tâches liées */}
+      {besoinTaches.length>0&&(
+        <div>
+          <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">Tâches actives</div>
+          <div className="space-y-2">{besoinTaches.map(t=>(
+            <div key={t.id} className="flex items-start gap-2 bg-blue-50 rounded-lg p-3">
+              <span className="text-blue-400 mt-0.5">◆</span>
+              <div><div className="text-sm font-medium text-blue-900">{t.titre}</div>{t.due_date&&<div className="text-xs text-blue-600">Échéance : {t.due_date}</div>}</div>
+            </div>
+          ))}</div>
+        </div>
+      )}
+
+      {/* Historique lié */}
+      <div>
+        <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">Historique ({besoinHist.length})</div>
+        {besoinHist.length===0
+          ?<div className="text-sm text-gray-400 italic">Aucune action</div>
+          :<div className="space-y-2">{besoinHist.map((h,i)=>(
+            <div key={i} className="flex gap-3 text-sm border-l-2 border-gray-100 pl-3">
+              <div className="text-gray-400 shrink-0 w-14">{h.date?.slice(0,10)||'—'}</div>
+              <div><span className="font-medium text-gray-700">{h.type_action}</span>{h.details&&<div className="text-gray-500 text-xs mt-0.5">{h.details}</div>}</div>
+            </div>
+          ))}</div>
+        }
+      </div>
+
+      {/* Modals actions/tâches */}
+      {modal==='hist'&&contact&&<AddHistoriqueModal contact={contact} profile={profile} onClose={()=>setModal(null)} onSaved={()=>{onRefresh();setModal(null);}}/>}
+      {modal==='tache'&&<AddTacheModal contacts={contact?[contact]:contacts} besoins={[]} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={()=>{onRefresh();setModal(null);}} defaultContactId={besoin.contact_id}/>}
+    </SidePanel>
+  );
+}
+
+// ── Onglet Pipeline V2 ──────────────────────────────────────────────────────
 function TabBesoins({ contacts, besoins, historique, taches, profile, allProfiles, onRefresh }) {
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
   const [filterResp,setFilterResp]=useState(profile.nom);
+  const [filterAgence,setFilterAgence]=useState('');
+  const [selected,setSelected]=useState(null);
+  const [showAdd,setShowAdd]=useState(false);
   const isAdmin=profile.role==='admin';
-  const changeResp=async(contactId,newResp)=>{ await sb.from('contacts').update({responsable:newResp,updated_at:new Date().toISOString()}).eq('id',contactId); if(onRefresh)onRefresh(); };
   const contactMap=useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
-  const histMap=useMemo(()=>{const m={};historique.forEach(h=>{if(!h.id_prospect)return;if(!m[h.id_prospect]||(h.date||'')>(m[h.id_prospect].date||''))m[h.id_prospect]=h;});return m;},[historique]);
-  const SKIP=new Set(['-','non','nan','none','']);
-  const pipeline=useMemo(()=>{
-    const rows=[];
-    besoins.forEach(({contact_id,data})=>{
-      const cid=parseInt(contact_id);const contact=contactMap[cid];if(!contact)return;
-      const derniere=histMap[cid];
-      const tachesActives=taches.filter(t=>t.contact_id===cid&&t.statut!=='fait'&&t.statut!=='annule');
-      const base={contact,derniere,tachesActives};
-      if(data.besoins_multiples){data.besoins_multiples.forEach(b=>rows.push({...base,besoin:b}));}
-      else if(!SKIP.has((data.label||'').trim().toLowerCase())){rows.push({...base,besoin:data});}
-    });
-    return rows;
-  },[besoins,contactMap,histMap,taches]);
-  const ORDRE=['Besoin Gagné','Entretien passé','Entretien programmé','Profil proposé','Besoin ouvert','Opportunité','Push opportuniste','Besoin Perdu'];
-  const statutsPipeline=useMemo(()=>[...new Set(pipeline.map(r=>r.besoin.statut).filter(Boolean))].sort((a,b)=>ORDRE.indexOf(a)-ORDRE.indexOf(b)),[pipeline]);
-  const responsablesPipeline=useMemo(()=>[...new Set(pipeline.map(r=>r.contact.responsable).filter(Boolean))].sort(),[pipeline]);
+
   const sorted=useMemo(()=>{
     const q=search.toLowerCase();
-    return [...pipeline]
-      .filter(({contact,besoin})=>{
-        if(filterStatut&&besoin.statut!==filterStatut) return false;
-        if(filterResp&&contact.responsable!==filterResp) return false;
-        if(q&&![contact.prenom,contact.nom,contact.groupe,besoin.label,besoin.candidat].some(v=>(v||'').toLowerCase().includes(q))) return false;
+    return [...besoins]
+      .filter(b=>{
+        if(filterStatut&&b.statut!==filterStatut) return false;
+        if(filterResp&&b.responsable!==filterResp) return false;
+        if(filterAgence&&b.agence!==filterAgence) return false;
+        if(q){
+          const c=contactMap[b.contact_id];
+          const cand=contactMap[b.candidat_id];
+          if(![b.titre,b.compte,b.responsable,c?.prenom,c?.nom,c?.groupe,cand?.prenom,cand?.nom].some(v=>(v||'').toLowerCase().includes(q))) return false;
+        }
         return true;
       })
-      .sort((a,b)=>ORDRE.indexOf(a.besoin.statut)-ORDRE.indexOf(b.besoin.statut));
-  },[pipeline,search,filterStatut,filterResp]);
-  const hasFilter=search||filterStatut||(isAdmin&&filterResp);
-  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterResp(isAdmin?'':profile.nom);};
+      .sort((a,b)=>BESOIN_STATUTS_ORDRE.indexOf(a.statut)-BESOIN_STATUTS_ORDRE.indexOf(b.statut));
+  },[besoins,search,filterStatut,filterResp,filterAgence,contactMap]);
+
+  const responsables=useMemo(()=>[...new Set(besoins.map(b=>b.responsable).filter(Boolean))].sort(),[besoins]);
+  const agences=useMemo(()=>[...new Set(besoins.map(b=>b.agence).filter(Boolean))].sort(),[besoins]);
+  const hasFilter=search||filterStatut||(isAdmin&&filterResp)||filterAgence;
+  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterResp(isAdmin?'':profile.nom);setFilterAgence('');};
+
   const STATUT_BTNS=[
-    {label:'Tous',      value:'',                    icon:''},
-    {label:'Besoin ouvert', value:'Besoin ouvert',   icon:'🟢'},
-    {label:'Opportunité',   value:'Opportunité',     icon:'🔍'},
-    {label:'Profil proposé',value:'Profil proposé',  icon:''},
-    {label:'Entretien prog.',value:'Entretien programmé',icon:''},
-    {label:'Entretien passé',value:'Entretien passé',icon:''},
-    {label:'Push',      value:'Push opportuniste',   icon:'🟡'},
-    {label:'Gagné',     value:'Besoin Gagné',         icon:'🏆'},
-    {label:'Perdu',     value:'Besoin Perdu',         icon:'❌'},
+    {label:'Tous',value:'',icon:''},
+    {label:'Opportunité',value:'Opportunité',icon:'🔍'},
+    {label:'Push',value:'Push opportuniste',icon:'🟡'},
+    {label:'Besoin ouvert',value:'Besoin ouvert',icon:'🟢'},
+    {label:'Profil proposé',value:'Profil proposé',icon:'📄'},
+    {label:'Entretien prog.',value:'Entretien programmé',icon:'📅'},
+    {label:'Entretien passé',value:'Entretien passé',icon:'✓'},
+    {label:'Gagné',value:'Besoin Gagné',icon:'🏆'},
+    {label:'Perdu',value:'Besoin Perdu',icon:'❌'},
   ];
+
   return (
     <div>
-      <div className="flex gap-3 mb-3 flex-wrap">
-        <input type="text" placeholder="Rechercher (nom, société, poste, candidat...)" value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-48 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
-        {isAdmin&&responsablesPipeline.length>1&&(
+      <div className="flex gap-2 sm:gap-3 mb-3 flex-wrap items-center">
+        <input type="text" placeholder="Rechercher..." value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-[140px] sm:min-w-48 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"/>
+        {isAdmin&&responsables.length>1&&(
           <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
-            <option value="">Tous les responsables</option>{responsablesPipeline.map(r=><option key={r} value={r}>{r}</option>)}
+            <option value="">Tous</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}
           </select>
         )}
-        {hasFilter&&<button onClick={resetAll} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">✕ Reset</button>}
+        {isAdmin&&agences.length>1&&(
+          <select value={filterAgence} onChange={e=>setFilterAgence(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
+            <option value="">Toutes agences</option>{agences.map(a=><option key={a} value={a}>{a}</option>)}
+          </select>
+        )}
+        {hasFilter&&<button onClick={resetAll} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">✕</button>}
+        <button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">+ Nouveau besoin</button>
       </div>
       <div className="flex gap-1.5 flex-wrap mb-4">
         {STATUT_BTNS.map(btn=>(
           <button key={btn.value} onClick={()=>setFilterStatut(btn.value)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap
-              ${filterStatut===btn.value
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-600'}`}>
+              ${filterStatut===btn.value?'bg-blue-600 text-white border-blue-600':'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-600'}`}>
             {btn.icon&&<span className="mr-1">{btn.icon}</span>}{btn.label}
           </button>
         ))}
       </div>
-      <div className="text-xs text-gray-400 mb-3">{sorted.length} besoin{sorted.length>1?'s':''} en pipeline</div>
-      <div className="space-y-3">{sorted.map(({contact,besoin,derniere,tachesActives},i)=>(
-        <div key={i} className="bg-white rounded-xl border border-gray-100 p-4">
-          <div className="flex items-start gap-4">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 flex-wrap mb-1">
-                <span className="font-semibold text-gray-900">{contact.prenom} {contact.nom}</span>
-                <span className="text-gray-400 text-sm">{contact.groupe}</span>
-                <BesoinBadge statut={besoin.statut}/>
+      <div className="text-xs text-gray-400 mb-3">{sorted.length} besoin{sorted.length>1?'s':''}</div>
+      <div className="space-y-3">{sorted.map(b=>{
+        const contact=contactMap[b.contact_id];
+        const candidat=contactMap[b.candidat_id];
+        const nbJ=b.statut==='Besoin Gagné'?joursOuvres(b.date_demarrage,b.date_fin):0;
+        const ca=nbJ*(b.tjm_vente||0);
+        const marge=ca-nbJ*(b.cjm_achat||0);
+        return (
+          <div key={b.id} onClick={()=>setSelected(b)} className="bg-white rounded-xl border border-gray-100 p-4 cursor-pointer hover:border-blue-200 transition-colors">
+            <div className="flex items-start gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <span className="font-semibold text-gray-900 truncate">{b.titre}</span>
+                  <BesoinBadge statut={b.statut}/>
+                </div>
+                <div className="flex flex-wrap gap-2 text-xs text-gray-500 mb-1">
+                  {contact&&<span>{contact.prenom} {contact.nom}</span>}
+                  {b.compte&&<span className="text-gray-400">· {b.compte}</span>}
+                  {candidat&&<span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">👤 {candidat.prenom} {candidat.nom}</span>}
+                </div>
+                {b.budget>0&&<div className="text-xs text-green-700 font-medium">{fmtCurrency(b.budget)}</div>}
+                {b.statut==='Besoin Gagné'&&ca>0&&(
+                  <div className="text-xs mt-1 flex gap-3">
+                    <span className="text-green-700 font-medium">CA {fmtCurrency(ca)}</span>
+                    <span className={marge>=0?'text-green-600':'text-red-600'}>Marge {fmtCurrency(marge)} ({ca>0?(marge/ca*100).toFixed(1):0}%)</span>
+                    <span className="text-gray-400">{nbJ}j</span>
+                  </div>
+                )}
+                {b.date_entretien&&<div className="text-xs text-gray-400 mt-1">📅 {new Date(b.date_entretien).toLocaleString('fr-FR')}</div>}
               </div>
-              <div className="text-sm text-blue-700 font-medium mb-2">{besoin.label||contact.besoins||'—'}</div>
-              <div className="flex flex-wrap gap-3 text-xs text-gray-500">
-                {besoin.candidat&&<span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">👤 {besoin.candidat}</span>}
-                {besoin.candidat_ko&&<span className="bg-red-50 text-red-600 px-2 py-0.5 rounded-full">✗ {besoin.candidat_ko} — {besoin.cause_ko||'KO'}</span>}
-                {derniere&&<span>Dernière action : {derniere.date?.slice(0,10)} · {derniere.type_action}</span>}
-              </div>
-              {tachesActives.length>0&&<div className="mt-2 flex flex-wrap gap-1">{tachesActives.map(t=><span key={t.id} className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 px-2 py-0.5 rounded-full">⏰ {t.titre} {t.due_date?`(${t.due_date})`:''}</span>)}</div>}
-              {besoin.notes&&<div className="mt-2 text-xs text-gray-400 italic border-l-2 border-gray-100 pl-2">{besoin.notes}</div>}
-            </div>
-            <div className="shrink-0 flex flex-col gap-2 items-end">
-              {besoin.trello&&<a href={besoin.trello} target="_blank" className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium">Trello →</a>}
-              {isAdmin&&allProfiles&&allProfiles.length>0
-                ? <select value={contact.responsable||''} onChange={e=>changeResp(contact.id,e.target.value)} className="text-xs border rounded-lg px-2 py-1 focus:outline-none text-gray-600 bg-gray-50 hover:bg-white" title="Changer le responsable">
-                    {respOptions(allProfiles,contact.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}
-                  </select>
-                : <span className="text-xs text-gray-400">{contact.responsable}</span>
-              }
+              <div className="shrink-0 text-xs text-gray-400">{b.responsable}</div>
             </div>
           </div>
-        </div>
-      ))}</div>
+        );
+      })}</div>
+      {selected&&<BesoinDetail besoin={selected} contacts={contacts} historique={historique} taches={taches} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{onRefresh();setSelected(null);}}/>}
+      {showAdd&&<AddBesoinModal contacts={contacts} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
     </div>
   );
 }
@@ -1575,7 +1939,7 @@ function App() {
         sb.from('contacts').select('*').order('id'),
         sb.from('historique_actions').select('*').order('date',{ascending:false}).limit(2000),
         sb.from('taches').select('*').order('due_date',{ascending:true,nullsFirst:false}),
-        sb.from('besoins_statuts').select('*'),
+        sb.from('besoins').select('*').order('created_at',{ascending:false}),
         sb.from('missions').select('*').order('consultant'),
         sb.from('historique_missions').select('*').order('date',{ascending:false}),
       ]);
