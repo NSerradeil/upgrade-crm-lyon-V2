@@ -628,7 +628,7 @@ function MissionFormModal({ mission, profile, allProfiles, onClose, onSaved }) {
         <div className="grid grid-cols-3 gap-3">
           <Field label="Statut"><select value={f.statut} onChange={s('statut')} className={inputCls}>{MISSION_STATUTS.map(x=><option key={x} value={x}>{x}</option>)}</select></Field>
           <Field label="Contrat"><select value={f.type_contrat||''} onChange={s('type_contrat')} className={inputCls}><option value="">—</option>{MISSION_CONTRATS.map(x=><option key={x} value={x}>{x}</option>)}</select></Field>
-          {isAdmin?<Field label="Responsable"><select value={f.responsable} onChange={s('responsable')} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>
+          {isAdmin?<Field label="Responsable"><select value={f.responsable} onChange={e=>{const nom=e.target.value;const p=allProfiles.find(x=>x.nom===nom);setF(v=>({...v,responsable:nom,agence:p?p.agence:v.agence}));}} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>
             :<Field label="Responsable"><span className="text-sm text-gray-700">{f.responsable}</span></Field>}
         </div>
         {isAdmin&&<Field label="Agence"><select value={f.agence} onChange={s('agence')} className={inputCls}>{[...new Set(allProfiles.map(p=>p.agence).filter(Boolean))].sort().map(a=><option key={a} value={a}>{a}</option>)}</select></Field>}
