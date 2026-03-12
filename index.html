@@ -579,8 +579,8 @@ function AddHistMissionModal({ mission, profile, onClose, onSaved }) {
 const MISSION_STATUTS=['En cours','New','Intercontrat','Terminée'];
 const MISSION_CONTRATS=['CDI','Freelance','Prestataire','CDD','Alternance'];
 
-function MissionFormModal({ mission, profile, allProfiles, onClose, onSaved }) {
-  const isEdit=!!mission;
+function MissionFormModal({ mission, profile, allProfiles, onClose, onSaved, prefillBesoinId }) {
+  const isEdit=!!mission&&!!mission.id;
   const isAdmin=profile.role==='admin';
   const init=mission||{consultant:'',client:'',projet:'',tjm:'',cjm:'',statut:'En cours',type_contrat:'CDI',responsable:profile.nom,agence:profile.agence||'Lyon',num_commande:'',date_debut_mission:'',date_fin_mission:''};
   const [f,setF]=useState({...init});
@@ -597,6 +597,7 @@ function MissionFormModal({ mission, profile, allProfiles, onClose, onSaved }) {
       tjm:parseFloat(f.tjm)||0,cjm:parseFloat(f.cjm)||0,statut:f.statut,type_contrat:f.type_contrat||null,
       responsable:f.responsable,agence:f.agence||profile.agence||'Lyon',
       num_commande:f.num_commande||null,date_debut_mission:f.date_debut_mission||null,date_fin_mission:f.date_fin_mission||null};
+    if(prefillBesoinId) row.besoin_id=prefillBesoinId;
     MOIS_KEYS.forEach(k=>{row[`jours_${k}`]=parseFloat(jours[k])||0;});
     if(isEdit){
       const {error}=await sb.from('missions').update(row).eq('id',mission.id);
@@ -1440,6 +1441,16 @@ function BesoinDetail({ besoin, contacts, historique, taches, profile, allProfil
         const cand=contacts.find(c=>c.id===f.candidat_id);
         if(cand) await sb.from('historique_actions').insert({id_prospect:f.contact_id,date:TODAY,type_action:'Push opportuniste',details:`Push opportuniste — ${cand.prenom} ${cand.nom}`,responsable:f.responsable,besoin_id:besoin.id});
       }
+      // Besoin Gagné → proposer création mission
+      if(f.statut==='Besoin Gagné'&&besoin.statut!=='Besoin Gagné'){
+        // Vérifier qu'aucune mission n'est déjà liée
+        const {data:existing}=await sb.from('missions').select('id').eq('besoin_id',besoin.id).limit(1);
+        if(!existing||existing.length===0){
+          setModal('proposeMission');
+          setEditing(false);setSaving(false);
+          return;
+        }
+      }
       setEditing(false);onRefresh();
     }
     setSaving(false);
@@ -1582,6 +1593,42 @@ function BesoinDetail({ besoin, contacts, historique, taches, profile, allProfil
       {/* Modals actions/tâches */}
       {modal==='hist'&&contact&&<AddHistoriqueModal contact={contact} profile={profile} onClose={()=>setModal(null)} onSaved={()=>{onRefresh();setModal(null);}}/>}
       {modal==='tache'&&<AddTacheModal contacts={contact?[contact]:contacts} besoins={[]} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={()=>{onRefresh();setModal(null);}} defaultContactId={besoin.contact_id}/>}
+      {/* Besoin Gagné → proposer mission */}
+      {modal==='proposeMission'&&(
+        <Modal title="🏆 Besoin gagné !" onClose={()=>{setModal(null);onRefresh();}}>
+          <div className="text-center py-4 space-y-4">
+            <div className="text-4xl">🎉</div>
+            <p className="text-gray-700">Ce besoin est gagné. Veux-tu créer une mission associée ?</p>
+            <div className="flex gap-3 justify-center">
+              <button onClick={()=>{setModal(null);onRefresh();}} className="px-4 py-2 text-sm text-gray-600 border rounded-lg hover:bg-gray-50">Plus tard</button>
+              <button onClick={()=>setModal('createMission')} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">Créer la mission</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {modal==='createMission'&&(
+        <MissionFormModal
+          mission={{
+            consultant:candidat?`${candidat.prenom} ${candidat.nom}`:'',
+            client:besoin.compte||contact?.groupe||'',
+            projet:besoin.titre,
+            tjm:besoin.tjm_vente||'',
+            cjm:besoin.cjm_achat||'',
+            statut:'New',
+            type_contrat:'',
+            responsable:besoin.responsable,
+            agence:allProfiles.find(p=>p.nom===besoin.responsable)?.agence||profile.agence||'Lyon',
+            num_commande:'',
+            date_debut_mission:besoin.date_demarrage||'',
+            date_fin_mission:besoin.date_fin||'',
+            besoin_id:besoin.id
+          }}
+          profile={profile} allProfiles={allProfiles}
+          onClose={()=>{setModal(null);onRefresh();}}
+          onSaved={()=>{setModal(null);onRefresh();}}
+          prefillBesoinId={besoin.id}
+        />
+      )}
     </SidePanel>
   );
 }
