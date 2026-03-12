@@ -17,15 +17,17 @@
     .mobile-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
     .mobile-tabs::-webkit-scrollbar{display:none;}
   }
-  .kanban-board{display:flex;gap:12px;overflow-x:auto;padding-bottom:12px;-webkit-overflow-scrolling:touch;}
-  .kanban-board::-webkit-scrollbar{height:6px;}
-  .kanban-board::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px;}
-  .kanban-col{min-width:260px;max-width:300px;flex-shrink:0;background:#f8fafc;border-radius:12px;padding:8px;border:1px solid #e2e8f0;}
+  .kanban-board{display:flex;gap:8px;padding-bottom:8px;}
+  .kanban-col{flex:1 1 0;min-width:0;background:#f8fafc;border-radius:12px;padding:6px;border:1px solid #e2e8f0;overflow:hidden;}
   .kanban-col.drag-over{background:#eff6ff;border-color:#93c5fd;}
-  .kanban-card{background:white;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:grab;transition:box-shadow .15s,transform .15s;}
+  .kanban-col .kanban-items{max-height:calc(100vh - 280px);overflow-y:auto;scrollbar-width:thin;}
+  .kanban-col .kanban-items::-webkit-scrollbar{width:4px;}
+  .kanban-col .kanban-items::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:2px;}
+  .kanban-card{background:white;border:1px solid #e5e7eb;border-radius:8px;padding:8px;margin-bottom:5px;cursor:grab;transition:box-shadow .15s,transform .15s;}
   .kanban-card:active{cursor:grabbing;}
   .kanban-card.dragging{opacity:0.5;transform:rotate(2deg);}
   .kanban-card:hover{box-shadow:0 2px 8px rgba(0,0,0,0.08);}
+  @media(max-width:1024px){.kanban-board{overflow-x:auto;-webkit-overflow-scrolling:touch;}.kanban-col{min-width:200px;flex-shrink:0;}}
 </style>
 </head>
 <body>
@@ -1526,22 +1528,28 @@ function KanbanBesoins({ besoins, contacts, onSelect, onStatutChange }) {
     setDragId(null);
   };
 
+  const STATUT_SHORT={'Opportunité':'Opport.','Push opportuniste':'Push','Besoin ouvert':'Ouvert','Profil proposé':'Proposé','Entretien programmé':'Entr. prog.','Entretien passé':'Entr. passé','Besoin Gagné':'Gagné','Besoin Perdu':'Perdu'};
   const STATUT_ICONS={'Opportunité':'🔍','Push opportuniste':'🟡','Besoin ouvert':'🟢','Profil proposé':'📄','Entretien programmé':'📅','Entretien passé':'✓','Besoin Gagné':'🏆','Besoin Perdu':'❌'};
+  // Colonnes visibles : celles qui ont des items + toujours Gagné/Perdu pour pouvoir y déposer
+  const visibleStatuts=useMemo(()=>{
+    const withItems=new Set(besoins.map(b=>b.statut));
+    return BESOIN_STATUTS_ORDRE.filter(s=>withItems.has(s)||s==='Besoin Gagné'||s==='Besoin Perdu');
+  },[besoins]);
 
   return (
     <div className="kanban-board">
-      {BESOIN_STATUTS_ORDRE.map(statut=>{
+      {visibleStatuts.map(statut=>{
         const items=besoins.filter(b=>b.statut===statut);
         return (
           <div key={statut}
             className={`kanban-col${overCol===statut?' drag-over':''}`}
             onDragOver={e=>onDragOver(e,statut)} onDragLeave={e=>onDragLeave(e,statut)} onDrop={e=>onDrop(e,statut)}>
-            <div className="flex items-center gap-1.5 mb-2 px-1">
-              <span className="text-sm">{STATUT_ICONS[statut]||''}</span>
-              <span className="text-xs font-semibold text-gray-700 truncate">{statut}</span>
-              <span className="text-xs bg-white text-gray-500 px-1.5 py-0.5 rounded-full border ml-auto">{items.length}</span>
+            <div className="flex items-center gap-1 mb-2 px-1">
+              <span className="text-xs">{STATUT_ICONS[statut]||''}</span>
+              <span className="text-xs font-semibold text-gray-700 truncate">{STATUT_SHORT[statut]||statut}</span>
+              <span className="text-xs bg-white text-gray-500 px-1.5 rounded-full border ml-auto">{items.length}</span>
             </div>
-            <div style={{minHeight:60}}>
+            <div className="kanban-items" style={{minHeight:40}}>
               {items.map(b=>{
                 const contact=contactMap[b.contact_id];
                 const candidat=contactMap[b.candidat_id];
@@ -1551,14 +1559,10 @@ function KanbanBesoins({ besoins, contacts, onSelect, onStatutChange }) {
                   <div key={b.id} draggable onDragStart={e=>onDragStart(e,b)} onDragEnd={onDragEnd}
                     onClick={()=>onSelect(b)}
                     className={`kanban-card${dragId===b.id?' dragging':''}`}>
-                    <div className="text-sm font-medium text-gray-900 truncate mb-1">{b.titre}</div>
+                    <div className="text-xs font-medium text-gray-900 truncate">{b.titre}</div>
                     {contact&&<div className="text-xs text-gray-500 truncate">{contact.prenom} {contact.nom}</div>}
-                    {b.compte&&<div className="text-xs text-gray-400 truncate">{b.compte}</div>}
-                    {candidat&&<div className="text-xs text-blue-600 truncate mt-0.5">👤 {candidat.prenom} {candidat.nom}</div>}
-                    {b.budget>0&&b.statut!=='Besoin Gagné'&&<div className="text-xs text-green-700 font-medium mt-1">{fmtCurrency(b.budget)}</div>}
-                    {b.statut==='Besoin Gagné'&&ca>0&&<div className="text-xs text-green-700 font-medium mt-1">CA {fmtCurrency(ca)}</div>}
-                    {b.date_entretien&&<div className="text-xs text-gray-400 mt-1">📅 {new Date(b.date_entretien).toLocaleDateString('fr-FR')}</div>}
-                    <div className="text-xs text-gray-400 mt-1 text-right">{b.responsable}</div>
+                    {candidat&&<div className="text-xs text-blue-600 truncate">👤 {candidat.prenom} {candidat.nom}</div>}
+                    {b.statut==='Besoin Gagné'&&ca>0&&<div className="text-xs text-green-700 font-medium">{fmtCurrency(ca)}</div>}
                   </div>
                 );
               })}
