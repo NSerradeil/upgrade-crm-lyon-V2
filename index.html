@@ -1823,12 +1823,25 @@ function TabHistorique({ historique, contacts, taches, profile, allProfiles, onR
 function TabTDB({ missions, histMissions, profile, allProfiles, onRefresh }) {
   const [selected,setSelected] = useState(null);
   const [search,setSearch] = useState(''); const [filterStatut,setFilterStatut] = useState('');
-  const [filterAgence,setFilterAgence] = useState('');
+  const [filterAgence,setFilterAgence] = useState(profile.role==='admin'?'':profile.agence);
   const [filterResp,setFilterResp] = useState(profile.nom);
   const isAdmin = profile.role==='admin';
   const curMonthIdx = new Date().getMonth();
 
-  const agences=useMemo(()=>[...new Set(missions.map(m=>m.agence).filter(Boolean))].sort(),[missions]);
+  // Agences depuis allProfiles (pas hardcodé)
+  const agences=useMemo(()=>[...new Set(allProfiles.map(p=>p.agence).filter(Boolean))].sort(),[allProfiles]);
+  const commerciauxParAgence=useMemo(()=>{
+    const map={};
+    allProfiles.forEach(p=>{if(p.agence&&p.nom){if(!map[p.agence])map[p.agence]=[];map[p.agence].push(p.nom);}});
+    Object.values(map).forEach(arr=>arr.sort());
+    return map;
+  },[allProfiles]);
+  const responsablesVisibles=useMemo(()=>{
+    if(isAdmin&&!filterAgence) return [...new Set(allProfiles.map(p=>p.nom).filter(Boolean))].sort();
+    const ag=filterAgence||profile.agence;
+    return commerciauxParAgence[ag]||[];
+  },[isAdmin,filterAgence,profile.agence,allProfiles,commerciauxParAgence]);
+
   const missionsFiltrees=useMemo(()=>{
     const q=search.toLowerCase();
     return missions.filter(m=>{
@@ -1839,8 +1852,8 @@ function TabTDB({ missions, histMissions, profile, allProfiles, onRefresh }) {
       return true;
     });
   },[missions,search,filterStatut,filterAgence,filterResp]);
-  const hasFilter=search||filterStatut||filterAgence||(isAdmin&&filterResp);
-  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterAgence('');setFilterResp(isAdmin?'':profile.nom);};
+  const hasFilter=search||filterStatut||filterResp!==profile.nom||(isAdmin?filterAgence!=='':filterAgence!==profile.agence);
+  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterResp(profile.nom);setFilterAgence(isAdmin?'':profile.agence);};
 
   const enMission    = missionsFiltrees.filter(m=>m.statut==='En cours'||m.statut==='New');
   const intercontrat = missionsFiltrees.filter(m=>m.statut==='Intercontrat');
@@ -1919,17 +1932,18 @@ function TabTDB({ missions, histMissions, profile, allProfiles, onRefresh }) {
             <option value="Terminée">Terminée</option>
           </select>
           {isAdmin&&agences.length>1&&(
-            <select value={filterAgence} onChange={e=>setFilterAgence(e.target.value)} className="px-3 py-1.5 border rounded-lg text-sm focus:outline-none">
+            <select value={filterAgence} onChange={e=>{setFilterAgence(e.target.value);setFilterResp(e.target.value?'':profile.nom);}} className="px-3 py-1.5 border rounded-lg text-sm focus:outline-none">
               <option value="">Toutes agences</option>{agences.map(a=><option key={a} value={a}>{a}</option>)}
             </select>
           )}
-          {isAdmin&&(
-            <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-1.5 border rounded-lg text-sm focus:outline-none">
-              <option value="">Tous responsables</option>{allProfiles.map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}
-            </select>
+          {!isAdmin&&(
+            <span className="px-3 py-1.5 bg-gray-50 border rounded-lg text-sm text-gray-500">{profile.agence}</span>
           )}
+          <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-1.5 border rounded-lg text-sm focus:outline-none">
+            <option value="">Tous{!isAdmin?` (${profile.agence})`:filterAgence?` (${filterAgence})`:''}</option>
+            {responsablesVisibles.map(r=><option key={r} value={r}>{r}{r===profile.nom?' (moi)':''}</option>)}
+          </select>
           {hasFilter&&<button onClick={resetAll} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">✕ Reset</button>}
-          {!isAdmin&&<span className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded-full">Vos missions uniquement</span>}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
