@@ -213,12 +213,14 @@ function respOptions(allProfiles, current) {
 // ── Modals Contacts ───────────────────────────────────────────────────────────
 function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
   const isAdmin=profile.role==='admin';
-  const [f,setF] = useState({ telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', responsable:contact.responsable||'' });
+  const [f,setF] = useState({ telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', responsable:contact.responsable||'', linkedin:contact.linkedin||'', ats:contact.ats||'' });
   const [saving,setSaving]=useState(false); const [err,setErr]=useState('');
   const s = k => e => setF(v=>({...v,[k]:e.target.value}));
   const save = async () => {
     setSaving(true);
-    const { error } = await sb.from('contacts').update({ telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, groupe:f.groupe||null, responsable:f.responsable||contact.responsable, updated_at:new Date().toISOString() }).eq('id',contact.id);
+    const upd={ telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, groupe:f.groupe||null, responsable:f.responsable||contact.responsable, linkedin:f.linkedin||null, updated_at:new Date().toISOString() };
+    if(['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)) upd.ats=f.ats||null;
+    const { error } = await sb.from('contacts').update(upd).eq('id',contact.id);
     if (error) { setErr(error.message); setSaving(false); }
     else {
       const changes = [];
@@ -240,10 +242,12 @@ function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
       <Field label="Ville"><input type="text" value={f.ville} onChange={e=>setF(v=>({...v,ville:normVille(e.target.value)}))} className={inputCls}/></Field>
       <Field label="Téléphone"><input type="tel" value={f.telephone} onChange={s('telephone')} className={inputCls}/></Field>
       <Field label="Email"><input type="email" value={f.email} onChange={e=>setF(v=>({...v,email:normEmail(e.target.value)}))} className={inputCls}/></Field>
+      <Field label="LinkedIn"><input type="url" value={f.linkedin} onChange={s('linkedin')} className={inputCls} placeholder="https://linkedin.com/in/..."/></Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Statut"><select value={f.statut} onChange={s('statut')} className={inputCls}>{STATUTS_CONTACT.map(x=><option key={x} value={x}>{x}</option>)}</select></Field>
         {isAdmin&&<Field label="Responsable"><select value={f.responsable} onChange={s('responsable')} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>}
       </div>
+      {['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)&&<Field label="ATS (lien candidat)"><input type="url" value={f.ats} onChange={s('ats')} className={inputCls} placeholder="https://ats.upgrade.fr/..."/></Field>}
       <Field label="Commentaires"><textarea rows={3} value={f.commentaires} onChange={s('commentaires')} className={inputCls+' resize-none'}/></Field>
       {err && <div className="text-xs text-red-600 bg-red-50 rounded px-3 py-2">{err}</div>}
     </Modal>
@@ -438,14 +442,16 @@ function AddTacheModal({ contacts, besoins, profile, allProfiles, onClose, onSav
   );
 }
 function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
-  const [f,setF] = useState({ prenom:'', nom:'', groupe:'', ville:'', role:'', telephone:'', email:'', statut:'Prospect', responsable:profile.nom, commentaires:'' });
+  const [f,setF] = useState({ prenom:'', nom:'', groupe:'', ville:'', role:'', telephone:'', email:'', linkedin:'', ats:'', statut:'Prospect', responsable:profile.nom, commentaires:'' });
   const [saving,setSaving]=useState(false); const [err,setErr]=useState('');
   const s = k => e => setF(v=>({...v,[k]:e.target.value}));
   const sNorm = (k,fn) => e => setF(v=>({...v,[k]:fn(e.target.value)}));
   const save = async () => {
     if (!f.nom.trim()) { setErr('Le nom est obligatoire.'); return; }
     setSaving(true);
-    const { data:inserted, error } = await sb.from('contacts').insert({ prenom:f.prenom||null, nom:f.nom.trim(), groupe:f.groupe||null, ville:f.ville||null, role:f.role||null, telephone:f.telephone||null, email:f.email||null, statut:f.statut, responsable:f.responsable, commentaires:f.commentaires||null, nb_relance:0, updated_at:new Date().toISOString(), agence:profile.agence||'Lyon' }).select('id').single();
+    const ins={ prenom:f.prenom||null, nom:f.nom.trim(), groupe:f.groupe||null, ville:f.ville||null, role:f.role||null, telephone:f.telephone||null, email:f.email||null, linkedin:f.linkedin||null, statut:f.statut, responsable:f.responsable, commentaires:f.commentaires||null, nb_relance:0, updated_at:new Date().toISOString(), agence:profile.agence||'Lyon' };
+    if(['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)) ins.ats=f.ats||null;
+    const { data:inserted, error } = await sb.from('contacts').insert(ins).select('id').single();
     if (error) { setErr(error.message); setSaving(false); }
     else {
       await sb.from('historique_actions').insert({ id_prospect:inserted.id, date:TODAY, type_action:'Note interne', details:`Contact créé (statut : ${f.statut})`, responsable:f.responsable });
@@ -465,6 +471,7 @@ function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
       <Field label="Ville"><input type="text" value={f.ville} onChange={sNorm('ville',normVille)} className={inputCls}/></Field>
       <Field label="Téléphone"><input type="tel" value={f.telephone} onChange={s('telephone')} className={inputCls}/></Field>
       <Field label="Email"><input type="email" value={f.email} onChange={sNorm('email',normEmail)} className={inputCls}/></Field>
+      <Field label="LinkedIn"><input type="url" value={f.linkedin} onChange={s('linkedin')} className={inputCls} placeholder="https://linkedin.com/in/..."/></Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Statut"><select value={f.statut} onChange={s('statut')} className={inputCls}>{STATUTS_CONTACT.map(x=><option key={x} value={x}>{x}</option>)}</select></Field>
         <Field label="Responsable">
@@ -473,6 +480,7 @@ function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
           </select>
         </Field>
       </div>
+      {['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)&&<Field label="ATS (lien candidat)"><input type="url" value={f.ats} onChange={s('ats')} className={inputCls} placeholder="https://ats.upgrade.fr/..."/></Field>}
       <Field label="Commentaires"><textarea rows={2} value={f.commentaires} onChange={s('commentaires')} className={inputCls+' resize-none'}/></Field>
       {err && <div className="text-xs text-red-600 bg-red-50 rounded px-3 py-2">{err}</div>}
     </Modal>
@@ -513,7 +521,8 @@ function ContactDetail({ contact, historique, taches, profile, allProfiles, onCl
         <div><span className="text-gray-400">Responsable</span><br/>{contact.responsable||'—'}</div>
         {contact.email&&<div className="col-span-2"><span className="text-gray-400">Email</span><br/><a href={`mailto:${contact.email}`} className="text-blue-600 hover:underline">{contact.email}</a></div>}
         {contact.telephone&&<div><span className="text-gray-400">Tel</span><br/><a href={`tel:${contact.telephone}`} className="text-green-600 font-mono">{contact.telephone}</a></div>}
-        {contact.linkedin&&<div><span className="text-gray-400">LinkedIn</span><br/><a href={contact.linkedin} target="_blank" className="text-blue-500 hover:underline text-xs">→ Profil</a></div>}
+        {contact.linkedin&&<div><span className="text-gray-400">LinkedIn</span><br/><a href={contact.linkedin} target="_blank" className="text-blue-500 hover:underline text-xs">→ Profil LinkedIn</a></div>}
+        {contact.ats&&<div><span className="text-gray-400">ATS</span><br/><a href={contact.ats} target="_blank" className="text-purple-500 hover:underline text-xs">→ Fiche ATS</a></div>}
         {contact.date_relance&&<div className="col-span-2"><span className="text-gray-400">Relance</span><br/><span className={contact.date_relance<TODAY?'text-red-600 font-semibold':'text-gray-700'}>{contact.date_relance}</span></div>}
       </div>
       {contact.commentaires&&<div><div className="text-xs text-gray-400 font-semibold mb-1 uppercase tracking-wide">Commentaires</div><div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap">{contact.commentaires}</div></div>}
