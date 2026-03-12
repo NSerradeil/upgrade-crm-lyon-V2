@@ -381,12 +381,10 @@ function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
   const save = async () => {
     if (!f.nom.trim()) { setErr('Le nom est obligatoire.'); return; }
     setSaving(true);
-    const { data:maxRow } = await sb.from('contacts').select('id').order('id',{ascending:false}).limit(1);
-    const nextId = (maxRow?.[0]?.id||0)+1;
-    const { error } = await sb.from('contacts').insert({ id:nextId, prenom:f.prenom||null, nom:f.nom.trim(), groupe:f.groupe||null, ville:f.ville||null, role:f.role||null, telephone:f.telephone||null, email:f.email||null, statut:f.statut, responsable:f.responsable, commentaires:f.commentaires||null, nb_relance:0, updated_at:new Date().toISOString(), agence:profile.agence||'Lyon' });
+    const { data:inserted, error } = await sb.from('contacts').insert({ prenom:f.prenom||null, nom:f.nom.trim(), groupe:f.groupe||null, ville:f.ville||null, role:f.role||null, telephone:f.telephone||null, email:f.email||null, statut:f.statut, responsable:f.responsable, commentaires:f.commentaires||null, nb_relance:0, updated_at:new Date().toISOString(), agence:profile.agence||'Lyon' }).select('id').single();
     if (error) { setErr(error.message); setSaving(false); }
     else {
-      await sb.from('historique_actions').insert({ id_prospect:nextId, date:TODAY, type_action:'Note interne', details:`Contact créé (statut : ${f.statut})`, responsable:f.responsable });
+      await sb.from('historique_actions').insert({ id_prospect:inserted.id, date:TODAY, type_action:'Note interne', details:`Contact créé (statut : ${f.statut})`, responsable:f.responsable });
       onSaved();
     }
   };
