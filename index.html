@@ -999,8 +999,8 @@ function TacheDetailPanel({ task, contact, besoinLabel, profile, onClose, onEdit
   const statusColor = task.statut==='fait'?'bg-green-100 text-green-700':task.overdue?'bg-red-100 text-red-700':'bg-blue-100 text-blue-700';
   const statusLabel = task.statut==='fait'?'Fait':task.overdue?'En retard':task.statut==='en_cours'?'En cours':'À faire';
   const actions = canEdit ? (<div className="flex gap-2 flex-wrap">
-    <button onClick={onEdit} className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium">✏️ Modifier</button>
-    <button onClick={onComplete} className="px-4 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium">✅ Marquer fait</button>
+    <button onClick={onEdit} className="px-3 py-1.5 text-xs bg-blue-50 text-blue-700 rounded-lg font-medium hover:bg-blue-100">✏️ Modifier</button>
+    <button onClick={onComplete} className="px-3 py-1.5 text-xs bg-green-50 text-green-700 rounded-lg font-medium hover:bg-green-100">✅ Marquer fait</button>
     <button onClick={onDelete} className="px-3 py-1.5 text-xs bg-red-50 text-red-700 rounded-lg font-medium hover:bg-red-100">🗑️</button>
   </div>) : null;
   return (
