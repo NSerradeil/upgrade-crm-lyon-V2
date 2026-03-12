@@ -995,22 +995,24 @@ function CalendarTaches({ taches, contactMap, profile, isAdmin, onComplete }) {
   );
 }
 
-function TacheDetailModal({ task, contact, besoinLabel, profile, onClose, onEdit, onComplete, onDelete, canEdit }) {
+function TacheDetailPanel({ task, contact, besoinLabel, profile, onClose, onEdit, onComplete, onDelete, canEdit }) {
+  const statusColor = task.statut==='fait'?'bg-green-100 text-green-700':task.overdue?'bg-red-100 text-red-700':'bg-blue-100 text-blue-700';
+  const statusLabel = task.statut==='fait'?'Fait':task.overdue?'En retard':task.statut==='en_cours'?'En cours':'À faire';
+  const actions = canEdit ? (<div className="flex gap-2 flex-wrap">
+    <button onClick={onEdit} className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium">✏️ Modifier</button>
+    <button onClick={onComplete} className="px-4 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium">✅ Marquer fait</button>
+    <button onClick={onDelete} className="px-4 py-2 text-sm bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-medium">✕ Supprimer</button>
+  </div>) : null;
   return (
-    <Modal title={task.titre} onClose={onClose}
-      footer={<div className="flex gap-2 flex-wrap">
-        {canEdit&&<button onClick={onEdit} className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium">✏️ Modifier</button>}
-        {canEdit&&<button onClick={onComplete} className="px-4 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium">✅ Marquer fait</button>}
-        {canEdit&&<button onClick={onDelete} className="px-4 py-2 text-sm bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-medium">✕ Supprimer</button>}
-      </div>}>
-      <div className="space-y-3">
+    <SidePanel title={task.titre} badge={<span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor}`}>{statusLabel}</span>} onClose={onClose} actions={actions}>
+      <div className="space-y-4">
         {task.due_date&&<div className="flex items-center gap-2 text-sm"><span className="text-gray-400 w-28 shrink-0">Échéance</span><span className={task.overdue?'text-red-600 font-medium':task.due_date===TODAY?'text-orange-600 font-medium':'text-gray-700'}>{task.due_date}{task.overdue?' — En retard':task.due_date===TODAY?' — Aujourd\'hui':''}</span></div>}
         <div className="flex items-center gap-2 text-sm"><span className="text-gray-400 w-28 shrink-0">Responsable</span><span className="text-gray-700">{task.responsable}</span></div>
         {contact&&<div className="flex items-center gap-2 text-sm"><span className="text-gray-400 w-28 shrink-0">Contact</span><span className="text-gray-700">👤 {contact.prenom} {contact.nom}{contact.groupe?` · ${contact.groupe}`:''}</span></div>}
         {besoinLabel&&<div className="flex items-center gap-2 text-sm"><span className="text-gray-400 w-28 shrink-0">Besoin</span><span className="text-blue-700 font-medium">🎯 {besoinLabel}</span></div>}
-        {task.notes&&<div className="pt-2 border-t border-gray-100"><div className="text-xs text-gray-400 mb-1 uppercase tracking-wide font-medium">Notes</div><div className="text-sm text-gray-700 whitespace-pre-wrap">{task.notes}</div></div>}
+        {task.notes&&<div className="pt-3 border-t border-gray-100"><div className="text-xs text-gray-400 mb-1 uppercase tracking-wide font-medium">Notes</div><div className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-lg p-3">{task.notes}</div></div>}
       </div>
-    </Modal>
+    </SidePanel>
   );
 }
 
@@ -1183,7 +1185,7 @@ function TabTaches({ taches, contacts, besoins, profile, allProfiles, onRefresh,
         <CalendarTaches taches={actives} contactMap={contactMap} profile={profile} isAdmin={isAdmin} onComplete={setCompletingModal}/>
       )}
       {showAdd&&<AddTacheModal contacts={contacts} besoins={besoins||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
-      {detailTask&&(()=>{const t=detailTask;const contact=t.contact_id?contactMap[t.contact_id]:null;const besoinLabel=t.besoin_id?besoinMap[t.besoin_id]:null;const canEdit=isAdmin||t.responsable===profile.nom;return<TacheDetailModal task={t} contact={contact} besoinLabel={besoinLabel} profile={profile} canEdit={canEdit} onClose={()=>setDetailTask(null)} onEdit={()=>handleEdit(t)} onComplete={()=>handleComplete(t)} onDelete={()=>handleDelete(t)}/>;})()}
+      {detailTask&&(()=>{const t=detailTask;const contact=t.contact_id?contactMap[t.contact_id]:null;const besoinLabel=t.besoin_id?besoinMap[t.besoin_id]:null;const canEdit=isAdmin||t.responsable===profile.nom;return<TacheDetailPanel task={t} contact={contact} besoinLabel={besoinLabel} profile={profile} canEdit={canEdit} onClose={()=>setDetailTask(null)} onEdit={()=>handleEdit(t)} onComplete={()=>handleComplete(t)} onDelete={()=>handleDelete(t)}/>;})()}
       {completingModal&&<CompleteTaskModal task={completingModal} contact={contactMap[completingModal.contact_id]||null} profile={profile} onClose={()=>setCompletingModal(null)} onSaved={()=>{setCompletingModal(null);onRefresh();}}/>}
       {editingTask&&<EditTacheModal task={editingTask} contacts={contacts} besoins={besoins||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingTask(null)} onSaved={()=>{setEditingTask(null);onRefresh();}}/>}
       {deletingTask&&<DeleteTacheModal task={deletingTask} onClose={()=>setDeletingTask(null)} onDeleted={()=>{setDeletingTask(null);onRefresh();}}/>}
