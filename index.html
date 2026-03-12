@@ -2050,7 +2050,8 @@ function ChangePasswordModal({ onClose }) {
 function App() {
   const [user,setUser]=useState(undefined); const [profile,setProfile]=useState(null);
   const [data,setData]=useState(null); const [loading,setLoading]=useState(false);
-  const [error,setError]=useState(null); const [tab,setTab]=useState('prospects');
+  const [error,setError]=useState(null); const [tab,setTab]=useState(()=>localStorage.getItem('crm_tab')||'prospects');
+  useEffect(()=>{localStorage.setItem('crm_tab',tab);},[tab]);
   const [lastRefresh,setLastRefresh]=useState(null);
   const [viewAs,setViewAs]=useState(null); const [allProfiles,setAllProfiles]=useState([]);
   const [tachesNavKey,setTachesNavKey]=useState(0); const [tachesNavEcheance,setTachesNavEcheance]=useState('');
