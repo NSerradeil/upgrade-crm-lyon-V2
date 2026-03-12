@@ -582,7 +582,7 @@ const MISSION_CONTRATS=['CDI','Freelance','Prestataire','CDD','Alternance'];
 function MissionFormModal({ mission, profile, allProfiles, onClose, onSaved, prefillBesoinId }) {
   const isEdit=!!mission&&!!mission.id;
   const isAdmin=profile.role==='admin';
-  const init=mission||{consultant:'',client:'',projet:'',tjm:'',cjm:'',statut:'En cours',type_contrat:'CDI',responsable:profile.nom,agence:profile.agence||'Lyon',num_commande:'',date_debut_mission:'',date_fin_mission:''};
+  const init=mission||{consultant:'',client:'',projet:'',tjm:'',cjm:'',statut:'En cours',type_contrat:'CDI',responsable:profile.nom,agence:profile.agence||'Lyon',num_commande:'',date_debut_mission:'',date_fin_mission:'',referent:''};
   const [f,setF]=useState({...init});
   const [jours,setJours]=useState(()=>{
     const j={};MOIS_KEYS.forEach(k=>{j[k]=mission?mission[`jours_${k}`]||'':'';});return j;
@@ -596,7 +596,7 @@ function MissionFormModal({ mission, profile, allProfiles, onClose, onSaved, pre
     const row={consultant:f.consultant.trim(),client:f.client||null,projet:f.projet||null,
       tjm:parseFloat(f.tjm)||0,cjm:parseFloat(f.cjm)||0,statut:f.statut,type_contrat:f.type_contrat||null,
       responsable:f.responsable,agence:f.agence||profile.agence||'Lyon',
-      num_commande:f.num_commande||null,date_debut_mission:f.date_debut_mission||null,date_fin_mission:f.date_fin_mission||null};
+      num_commande:f.num_commande||null,date_debut_mission:f.date_debut_mission||null,date_fin_mission:f.date_fin_mission||null,referent:f.referent||null};
     if(prefillBesoinId) row.besoin_id=prefillBesoinId;
     MOIS_KEYS.forEach(k=>{row[`jours_${k}`]=parseFloat(jours[k])||0;});
     if(isEdit){
@@ -616,7 +616,10 @@ function MissionFormModal({ mission, profile, allProfiles, onClose, onSaved, pre
           <Field label="Consultant *"><input value={f.consultant} onChange={s('consultant')} className={inputCls} placeholder="Nom du consultant"/></Field>
           <Field label="Client"><input value={f.client||''} onChange={s('client')} className={inputCls} placeholder="Entreprise cliente"/></Field>
         </div>
-        <Field label="Projet"><input value={f.projet||''} onChange={s('projet')} className={inputCls} placeholder="Intitulé du projet"/></Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Projet"><input value={f.projet||''} onChange={s('projet')} className={inputCls} placeholder="Intitulé du projet"/></Field>
+          <Field label="Référent client"><input value={f.referent||''} onChange={s('referent')} className={inputCls} placeholder="Nom du référent"/></Field>
+        </div>
         <div className="grid grid-cols-3 gap-3">
           <Field label="N° commande"><input value={f.num_commande||''} onChange={s('num_commande')} className={inputCls} placeholder="5090-4210617888"/></Field>
           <Field label="Début mission"><input type="date" value={f.date_debut_mission||''} onChange={s('date_debut_mission')} className={inputCls}/></Field>
@@ -672,13 +675,26 @@ function DeleteMissionModal({ mission, onClose, onDeleted }) {
 }
 
 // ── Panel : Détail mission ────────────────────────────────────────────────────
-function MissionDetail({ mission, histMissions, profile, allProfiles, onClose, onRefresh }) {
+function MissionDetail({ mission, histMissions, contacts, profile, allProfiles, onClose, onRefresh }) {
   const [showAdd,setShowAdd] = useState(false);
   const [modal,setModal]=useState(null);
+  const [viewContact,setViewContact]=useState(null);
   const isAdmin=profile.role==='admin';
   const canEdit = isAdmin || mission.responsable===profile.nom;
   const hist = (histMissions||[]).filter(h=>h.mission_id===mission.id)
     .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  // Matcher consultant et référent aux contacts
+  const allContacts=contacts||[];
+  const matchContact=(name)=>{
+    if(!name) return null;
+    const n=name.trim().toUpperCase().replace(/\s+/g,' ');
+    return allContacts.find(c=>{
+      const full=`${(c.prenom||'')} ${(c.nom||'')}`.trim().toUpperCase().replace(/\s+/g,' ');
+      return full===n || c.nom?.toUpperCase()===n;
+    })||null;
+  };
+  const consultantContact=matchContact(mission.consultant);
+  const referentContact=matchContact(mission.referent);
 
   const joursTotal = MOIS_KEYS.reduce((s,k)=>s+(parseFloat(mission[`jours_${k}`])||0),0);
   const caTotal    = joursTotal*(parseFloat(mission.tjm)||0);
@@ -694,7 +710,7 @@ function MissionDetail({ mission, histMissions, profile, allProfiles, onClose, o
   </div>) : null;
 
   return (
-    <SidePanel title={mission.consultant} badge={<div className="flex gap-2 flex-wrap"><MissionStatutBadge statut={mission.statut}/>{mission.agence&&<span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">{mission.agence}</span>}{mission.type_contrat&&<span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{mission.type_contrat}</span>}</div>} onClose={onClose} actions={actions}>
+    <SidePanel title={consultantContact?<span className="cursor-pointer text-blue-700 hover:underline" onClick={()=>setViewContact(consultantContact)}>{mission.consultant}</span>:mission.consultant} badge={<div className="flex gap-2 flex-wrap"><MissionStatutBadge statut={mission.statut}/>{mission.agence&&<span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">{mission.agence}</span>}{mission.type_contrat&&<span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{mission.type_contrat}</span>}</div>} onClose={onClose} actions={actions}>
       <div className="space-y-6">
         <div className="text-sm text-gray-500">{mission.client}{mission.projet?` · ${mission.projet.substring(0,60)}`:''}</div>
 
@@ -719,6 +735,7 @@ function MissionDetail({ mission, histMissions, profile, allProfiles, onClose, o
           <div><span className="text-gray-400 text-xs">TJM vente</span><br/><span className="font-mono font-semibold text-gray-800">{mission.tjm>0?`${mission.tjm}€`:'—'}</span></div>
           <div><span className="text-gray-400 text-xs">TJM achat</span><br/><span className="font-mono text-gray-600">{mission.cjm>0?`${mission.cjm}€`:'—'}</span></div>
           <div><span className="text-gray-400 text-xs">Responsable</span><br/><span className="text-gray-700">{mission.responsable||'—'}</span></div>
+          <div><span className="text-gray-400 text-xs">Référent client</span><br/>{mission.referent?(referentContact?<span className="text-blue-700 cursor-pointer hover:underline" onClick={()=>setViewContact(referentContact)}>{mission.referent}</span>:<span className="text-gray-700">{mission.referent}</span>):<span className="text-gray-300">—</span>}</div>
           <div><span className="text-gray-400 text-xs">Marge</span><br/><span className="text-purple-700 font-medium">{fmtCurrency(margeTotal)} ({tauxMarge.toFixed(1)}%)</span></div>
           {mission.num_commande&&<div><span className="text-gray-400 text-xs">N° commande</span><br/><span className="text-gray-700 font-mono text-xs">{mission.num_commande}</span></div>}
           {(mission.date_debut_mission||mission.date_fin_mission)&&<div><span className="text-gray-400 text-xs">Période mission</span><br/><span className="text-gray-700">{mission.date_debut_mission||'?'} → {mission.date_fin_mission||'?'}</span></div>}
@@ -767,6 +784,7 @@ function MissionDetail({ mission, histMissions, profile, allProfiles, onClose, o
       {showAdd&&<AddHistMissionModal mission={mission} profile={profile} onClose={()=>setShowAdd(false)} onSaved={saved}/>}
       {modal==='edit'&&<MissionFormModal mission={mission} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved}/>}
       {modal==='confirmDel'&&<DeleteMissionModal mission={mission} onClose={()=>setModal(null)} onDeleted={()=>{onClose();onRefresh();}}/>}
+      {viewContact&&<ContactDetail contact={viewContact} historique={[]} taches={[]} profile={profile} allProfiles={allProfiles} onClose={()=>setViewContact(null)} onRefresh={()=>{setViewContact(null);onRefresh();}}/>}
     </SidePanel>
   );
 }
@@ -1942,7 +1960,7 @@ function TabHistorique({ historique, contacts, taches, profile, allProfiles, onR
 }
 
 // ── Onglet TDB Missions ───────────────────────────────────────────────────────
-function TabTDB({ missions, histMissions, profile, allProfiles, onRefresh }) {
+function TabTDB({ missions, histMissions, contacts, profile, allProfiles, onRefresh }) {
   const [selected,setSelected] = useState(null); const [showAdd,setShowAdd]=useState(false);
   const [search,setSearch] = useState(''); const [filterStatut,setFilterStatut] = useState('');
   const [filterAgence,setFilterAgence] = useState(profile.role==='admin'?'':profile.agence);
@@ -2140,7 +2158,7 @@ function TabTDB({ missions, histMissions, profile, allProfiles, onRefresh }) {
         </div>
       </div>
 
-      {selected&&<MissionDetail mission={selected} histMissions={histMissions} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
+      {selected&&<MissionDetail mission={selected} histMissions={histMissions} contacts={contacts||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
       {showAdd&&<MissionFormModal profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
     </div>
   );
@@ -2304,7 +2322,7 @@ function App() {
         {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance}/>}
         {tab==='besoins'  &&<TabBesoins  contacts={vContacts} besoins={vBesoins} historique={vHistorique} taches={vTaches} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
         {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} taches={vTaches} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
-        {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
+        {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} contacts={vContacts} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
       </div>
     </div>
   );
