@@ -2292,7 +2292,7 @@ function besoinValeurBrute(b){
   if(b.budget_tjm&&b.budget_jours) return b.budget_tjm*b.budget_jours;
   return 0;
 }
-function TabPipe({ besoins, contacts, historique, profile, allProfiles, onRefresh }) {
+function TabPipe({ besoins, contacts, historique, taches, missions, profile, allProfiles, onRefresh }) {
   const isAdmin=profile.role==='admin';
   const [filterAgence,setFilterAgence]=useState('');
   const [filterResp,setFilterResp]=useState(isAdmin?'':profile.nom);
@@ -2554,7 +2554,7 @@ function TabPipe({ besoins, contacts, historique, profile, allProfiles, onRefres
       </div>
 
       {/* BesoinDetail panel */}
-      {selected&&<BesoinDetail besoin={selected} contacts={contacts} besoins={besoins} missions={[]} historique={historique} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
+      {selected&&<BesoinDetail besoin={selected} contacts={contacts} besoins={besoins} taches={taches} missions={missions} historique={historique} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
     </div>
   );
 }
@@ -3032,7 +3032,7 @@ function App() {
         {tab==='prospects'&&<TabProspects contacts={vContacts} historique={vHistorique} taches={vTaches} missions={vMissions} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
         {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} besoins={vBesoins} missions={vMissions} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance}/>}
         {tab==='besoins'  &&<TabBesoins  contacts={vContacts} besoins={vBesoins} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
-        {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
+        {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
         {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} taches={vTaches} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
         {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
       </div>
