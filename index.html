@@ -495,6 +495,57 @@ function MissionPicker({ missions, value, onChange }) {
   );
 }
 
+function BesoinPicker({ besoins, value, onChange, contactId }) {
+  const [query,setQuery] = useState('');
+  const [open,setOpen] = useState(false);
+  const bMap = useMemo(()=>Object.fromEntries((besoins||[]).map(b=>[String(b.id),b])),[besoins]);
+  const selected = value ? bMap[value] : null;
+  const filtered = useMemo(()=>{
+    let pool = besoins||[];
+    if(contactId) pool = pool.filter(b=>String(b.contact_id)===String(contactId));
+    const q=query.trim().toLowerCase();
+    if(q.length<2) return pool.slice(0,7);
+    return pool.filter(b=>[b.titre,b.compte,b.statut].some(v=>(v||'').toLowerCase().includes(q))).slice(0,7);
+  },[query,besoins,contactId]);
+  const pick = (bid)=>{ onChange(String(bid)); setQuery(''); setOpen(false); };
+  const clear = ()=>{ onChange(''); setQuery(''); };
+  if(selected) return (
+    <div className="flex items-center gap-2 px-3 py-2 border border-blue-200 rounded-lg bg-blue-50">
+      <div className="flex-1 min-w-0">
+        <span className="text-sm font-medium text-blue-900">🎯 {selected.titre}</span>
+        <span className="ml-2 text-xs text-blue-500">{selected.statut}</span>
+      </div>
+      <button type="button" onClick={clear} className="text-blue-300 hover:text-red-500 text-xl leading-none font-light shrink-0">×</button>
+    </div>
+  );
+  return (
+    <div className="relative">
+      <input type="text" value={query}
+        onChange={e=>{setQuery(e.target.value);setOpen(true);}}
+        onFocus={()=>setOpen(true)}
+        onBlur={()=>setTimeout(()=>setOpen(false),200)}
+        placeholder="Rechercher un besoin (titre, compte, statut)…"
+        className={inputCls}/>
+      {open&&(
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden max-h-60 overflow-y-auto">
+          {filtered.length===0
+            ? <div className="px-4 py-3 text-sm text-gray-400 text-center">Aucun résultat</div>
+            : filtered.map((b,i)=>(
+                <button key={i} type="button" onMouseDown={()=>pick(b.id)}
+                  className="w-full text-left px-3 py-2.5 hover:bg-blue-50 flex items-center gap-3 border-b border-gray-50 last:border-0 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-900 truncate">🎯 {b.titre}</div>
+                    <div className="text-xs text-gray-400 truncate">{b.compte||''}{b.compte?' · ':''}{b.statut}</div>
+                  </div>
+                  <BesoinBadge statut={b.statut}/>
+                </button>
+              ))
+          }
+        </div>
+      )}
+    </div>
+  );
+}
 function AddTacheModal({ contacts, besoins, missions, profile, allProfiles, onClose, onSaved, defaultContactId, defaultMissionId, defaultBesoinId }) {
   const isAdmin = profile.role==='admin';
   const [f,setF] = useState({ type:'', titre:'', due_date:'', contact_id:defaultContactId?String(defaultContactId):'', notes:'', responsable:profile.nom, mission_id:defaultMissionId||'', besoin_id:defaultBesoinId||'' });
@@ -552,11 +603,8 @@ function AddTacheModal({ contacts, besoins, missions, profile, allProfiles, onCl
       </Field>
       <Field label="Besoin lié">
         {defaultBesoinId
-          ? <div className="px-3 py-2 border border-blue-200 rounded-lg bg-blue-50 text-sm text-blue-900">🎯 {(besoins||[]).find(b=>b.id===defaultBesoinId)?.titre||defaultBesoinId}</div>
-          : <select value={f.besoin_id} onChange={e=>setF(v=>({...v,besoin_id:e.target.value}))} className={inputCls}>
-              <option value="">Aucun besoin</option>
-              {(besoins||[]).filter(b=>!f.contact_id||String(b.contact_id)===f.contact_id).map(b=><option key={b.id} value={b.id}>{b.titre} — {b.statut}</option>)}
-            </select>
+          ? <BesoinPicker besoins={besoins||[]} value={f.besoin_id} onChange={()=>{}} contactId={f.contact_id}/>
+          : <BesoinPicker besoins={besoins||[]} value={f.besoin_id} onChange={bid=>setF(v=>({...v,besoin_id:bid}))} contactId={f.contact_id}/>
         }
       </Field>
       <Field label="Notes"><textarea rows={2} value={f.notes} onChange={e=>setF(v=>({...v,notes:e.target.value}))} className={inputCls+' resize-none'}/></Field>
@@ -1204,10 +1252,7 @@ function EditTacheModal({ task, contacts, besoins, missions, profile, allProfile
         <MissionPicker missions={missions||[]} value={f.mission_id} onChange={mid=>setF(v=>({...v,mission_id:mid}))}/>
       </Field>
       <Field label="Besoin lié">
-        <select value={f.besoin_id} onChange={e=>setF(v=>({...v,besoin_id:e.target.value}))} className={inputCls}>
-          <option value="">Aucun besoin</option>
-          {(besoins||[]).filter(b=>!f.contact_id||String(b.contact_id)===f.contact_id).map(b=><option key={b.id} value={b.id}>{b.titre} — {b.statut}</option>)}
-        </select>
+        <BesoinPicker besoins={besoins||[]} value={f.besoin_id} onChange={bid=>setF(v=>({...v,besoin_id:bid}))} contactId={f.contact_id}/>
       </Field>
       <Field label="Notes"><textarea rows={2} value={f.notes} onChange={e=>setF(v=>({...v,notes:e.target.value}))} className={inputCls+' resize-none'}/></Field>
     </Modal>
