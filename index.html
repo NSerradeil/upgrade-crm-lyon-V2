@@ -413,7 +413,7 @@ function AddTacheModal({ contacts, besoins, profile, allProfiles, onClose, onSav
   const isAdmin = profile.role==='admin';
   const [f,setF] = useState({ type:'', titre:'', due_date:'', contact_id:defaultContactId?String(defaultContactId):'', notes:'', responsable:profile.nom });
   const [saving,setSaving]=useState(false);
-  const myContacts = useMemo(()=>contacts.filter(c=>isAdmin||c.responsable===profile.nom).sort((a,b)=>(a.nom||'').localeCompare(b.nom||'')),[contacts,profile,isAdmin]);
+  const myContacts = useMemo(()=>contacts.filter(c=>isAdmin||(c.responsable||'').trim()===(profile.nom||'').trim()).sort((a,b)=>(a.nom||'').localeCompare(b.nom||'')),[contacts,profile,isAdmin]);
   const contactMap = useMemo(()=>Object.fromEntries(myContacts.map(c=>[String(c.id),c])),[myContacts]);
   const selContact = f.contact_id ? contactMap[f.contact_id] : null;
   const types = useMemo(()=>tacheTypesFor(selContact),[selContact]);
@@ -520,7 +520,7 @@ function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
 function ContactDetail({ contact, historique, taches, profile, allProfiles, onClose, onRefresh }) {
   const [modal,setModal] = useState(null);
   const [deleting,setDeleting] = useState(false);
-  const isOwner = profile.role==='admin' || contact.responsable===profile.nom;
+  const isOwner = profile.role==='admin' || (contact.responsable||'').trim()===(profile.nom||'').trim();
   const hist = historique.filter(h=>h.id_prospect===contact.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const tachesContact = taches.filter(t=>t.contact_id===contact.id&&t.statut!=='fait'&&t.statut!=='annule');
   const saved = () => { setModal(null); onRefresh(); };
@@ -720,7 +720,7 @@ function MissionDetail({ mission, histMissions, contacts, profile, allProfiles, 
   const [modal,setModal]=useState(null);
   const [viewContact,setViewContact]=useState(null);
   const isAdmin=profile.role==='admin';
-  const canEdit = isAdmin || mission.responsable===profile.nom;
+  const canEdit = isAdmin || (mission.responsable||'').trim()===(profile.nom||'').trim();
   const hist = (histMissions||[]).filter(h=>h.mission_id===mission.id)
     .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   // Matcher consultant et référent aux contacts
@@ -1126,7 +1126,7 @@ function CalendarTaches({ taches, contactMap, profile, isAdmin, onComplete }) {
               <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday?'bg-blue-600 text-white':'text-gray-500'}`}>{day}</div>
               <div className="space-y-0.5">
                 {dayTasks.slice(0,3).map(t=>{
-                  const canEdit=isAdmin||t.responsable===profile.nom;
+                  const canEdit=isAdmin||(t.responsable||'').trim()===(profile.nom||'').trim();
                   const isEntretien=(t.titre||'').toLowerCase().startsWith('entretien');
                   const cls=t.overdue?'bg-red-100 text-red-700 hover:bg-red-200':isEntretien?'bg-purple-100 text-purple-700 hover:bg-purple-200':'bg-blue-50 text-blue-700 hover:bg-blue-100';
                   return (
@@ -1233,7 +1233,7 @@ function TacheSection({ label, taches, contactMap, besoinMap, profile, isAdmin, 
         {taches.map(t=>{
           const contact = t.contact_id ? contactMap[t.contact_id] : null;
           const besoinLabel = t.besoin_id ? besoinMap[t.besoin_id] : null;
-          const canEdit = isAdmin || t.responsable===profile.nom;
+          const canEdit = isAdmin || (t.responsable||'').trim()===(profile.nom||'').trim();
           return <TacheCard key={t.id} t={t} contact={contact} besoinLabel={besoinLabel} canEdit={canEdit}
             onDetail={onDetail} onComplete={onComplete} onDelete={onDelete} onEdit={onEdit}/>;
         })}
@@ -1337,7 +1337,7 @@ function TabTaches({ taches, contacts, besoins, profile, allProfiles, onRefresh,
         <CalendarTaches taches={actives} contactMap={contactMap} profile={profile} isAdmin={isAdmin} onComplete={setCompletingModal}/>
       )}
       {showAdd&&<AddTacheModal contacts={contacts} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
-      {detailTask&&(()=>{const t=detailTask;const contact=t.contact_id?contactMap[t.contact_id]:null;const besoinLabel=t.besoin_id?besoinMap[t.besoin_id]:null;const canEdit=isAdmin||t.responsable===profile.nom;return<TacheDetailPanel task={t} contact={contact} besoinLabel={besoinLabel} profile={profile} canEdit={canEdit} onClose={()=>setDetailTask(null)} onEdit={()=>handleEdit(t)} onComplete={()=>handleComplete(t)} onDelete={()=>handleDelete(t)}/>;})()}
+      {detailTask&&(()=>{const t=detailTask;const contact=t.contact_id?contactMap[t.contact_id]:null;const besoinLabel=t.besoin_id?besoinMap[t.besoin_id]:null;const canEdit=isAdmin||(t.responsable||'').trim()===(profile.nom||'').trim();return<TacheDetailPanel task={t} contact={contact} besoinLabel={besoinLabel} profile={profile} canEdit={canEdit} onClose={()=>setDetailTask(null)} onEdit={()=>handleEdit(t)} onComplete={()=>handleComplete(t)} onDelete={()=>handleDelete(t)}/>;})()}
       {completingModal&&<CompleteTaskModal task={completingModal} contact={contactMap[completingModal.contact_id]||null} profile={profile} onClose={()=>setCompletingModal(null)} onSaved={()=>{setCompletingModal(null);onRefresh();}}/>}
       {editingTask&&<EditTacheModal task={editingTask} contacts={contacts} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingTask(null)} onSaved={()=>{setEditingTask(null);onRefresh();}}/>}
       {deletingTask&&<DeleteTacheModal task={deletingTask} onClose={()=>setDeletingTask(null)} onDeleted={()=>{setDeletingTask(null);onRefresh();}}/>}
@@ -1516,7 +1516,7 @@ function AddBesoinModal({ contacts, profile, allProfiles, onClose, onSaved }) {
 // Panneau détail besoin (SidePanel)
 function BesoinDetail({ besoin, contacts, historique, taches, profile, allProfiles, onClose, onRefresh }) {
   const isAdmin=profile.role==='admin';
-  const isOwner=isAdmin||besoin.responsable===profile.nom;
+  const isOwner=isAdmin||(besoin.responsable||'').trim()===(profile.nom||'').trim();
   const [editing,setEditing]=useState(false);
   const [f,setF]=useState({...besoin});
   const [saving,setSaving]=useState(false);
