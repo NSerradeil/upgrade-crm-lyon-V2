@@ -8,9 +8,61 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        blue: {
+          50:  '#f3edfc',
+          100: '#e6d8fa',
+          200: '#d2c8ff',
+          300: '#c19ef3',
+          400: '#a06eee',
+          500: '#9350ea',
+          600: '#823de8',
+          700: '#6b2bc7',
+          800: '#5a24a8',
+          900: '#4a1d8a',
+        },
+        green: {
+          50:  '#ecfdf0',
+          100: '#ceedcc',
+          200: '#a8e0a4',
+          300: '#85d380',
+          400: '#4dbd47',
+          500: '#1aad12',
+          600: '#0ba600',
+          700: '#098a00',
+          800: '#166534',
+          900: '#14532d',
+        },
+        red: {
+          50:  '#fef2f2',
+          100: '#fbd9dc',
+          200: '#f5a1a6',
+          300: '#f0787e',
+          400: '#ea434e',
+          500: '#ea434e',
+          600: '#dc2626',
+          700: '#b91c1c',
+          800: '#991b1b',
+          900: '#7f1d1d',
+        }
+      },
+      fontFamily: {
+        sans: ['Outfit', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+      }
+    }
+  }
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; overflow-x: hidden; }
+  body { font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f4f4f5; overflow-x: hidden; }
   .spin { animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   @media(max-width:767px){
@@ -18,20 +70,20 @@
     .mobile-tabs::-webkit-scrollbar{display:none;}
   }
   .kanban-board{display:flex;gap:6px;width:100%;max-width:100%;overflow:hidden;flex-wrap:nowrap;}
-  .kanban-col{flex:1 1 0;min-width:0;width:0;background:#f8fafc;border-radius:10px;padding:5px;border:1px solid #e2e8f0;overflow:hidden;}
-  .kanban-col.drag-over{background:#eff6ff;border-color:#93c5fd;}
+  .kanban-col{flex:1 1 0;min-width:0;width:0;background:#f4f4f5;border-radius:8px;padding:5px;border:1px solid #e4e4e6;overflow:hidden;}
+  .kanban-col.drag-over{background:#f3edfc;border-color:#c19ef3;}
   .kanban-col .kanban-items{max-height:calc(100vh - 280px);overflow-y:auto;scrollbar-width:thin;}
   .kanban-col .kanban-items::-webkit-scrollbar{width:3px;}
-  .kanban-col .kanban-items::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:2px;}
-  .kanban-card{background:white;border:1px solid #e5e7eb;border-radius:8px;padding:6px 8px;margin-bottom:4px;cursor:grab;transition:box-shadow .15s,transform .15s;overflow:hidden;}
+  .kanban-col .kanban-items::-webkit-scrollbar-thumb{background:#d2d2d5;border-radius:2px;}
+  .kanban-card{background:white;border:1px solid #e4e4e6;border-radius:8px;padding:6px 8px;margin-bottom:4px;cursor:grab;transition:box-shadow .15s,transform .15s;overflow:hidden;}
   .kanban-card:active{cursor:grabbing;}
   .kanban-card.dragging{opacity:0.5;transform:rotate(2deg);}
   .kanban-card:hover{box-shadow:0 2px 8px rgba(0,0,0,0.08);}
   @keyframes slideUp{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
   .toast-in{animation:slideUp .25s ease-out;}
-  .avatar-menu{position:absolute;right:0;top:100%;margin-top:4px;min-width:220px;background:white;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:60;overflow:hidden;}
-  .avatar-menu button,.avatar-menu a{display:flex;align-items:center;gap:8px;width:100%;padding:10px 16px;font-size:13px;color:#374151;text-align:left;transition:background .1s;}
-  .avatar-menu button:hover,.avatar-menu a:hover{background:#f3f4f6;}
+  .avatar-menu{position:absolute;right:0;top:100%;margin-top:4px;min-width:220px;background:white;border:1px solid #e4e4e6;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.10);z-index:60;overflow:hidden;}
+  .avatar-menu button,.avatar-menu a{display:flex;align-items:center;gap:8px;width:100%;padding:10px 16px;font-size:13px;color:#1d202d;text-align:left;transition:background .1s;}
+  .avatar-menu button:hover,.avatar-menu a:hover{background:#f4f4f5;}
 </style>
 </head>
 <body>
@@ -99,7 +151,7 @@ function ToastContainer(){
   },[]);
   if(!items.length)return null;
   return(<div className="fixed bottom-4 right-4 z-[100] space-y-2">{items.map(t=>(
-    <div key={t.id} className={`toast-in px-4 py-3 rounded-xl shadow-lg text-sm font-medium ${t.type==='error'?'bg-red-600 text-white':'bg-gray-800 text-white'}`}>
+    <div key={t.id} className={`toast-in px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${t.type==='error'?'bg-red-600 text-white':'bg-gray-800 text-white'}`}>
       {t.type==='error'?'✕ ':'✓ '}{t.msg}
     </div>
   ))}</div>);
@@ -158,7 +210,7 @@ function LoginScreen() {
   };
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 w-full max-w-sm">
+      <div className="bg-white rounded-lg shadow-xl border border-gray-100 p-8 w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="text-3xl mb-2">📊</div>
           <h1 className="text-xl font-bold text-gray-900">CRM Upgrade</h1>
@@ -190,7 +242,7 @@ function LoginScreen() {
 function Modal({ title, onClose, children, footer }) {
   return (
     <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center px-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+      <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
           <h2 className="font-bold text-gray-900">{title}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-2xl leading-none">×</button>
@@ -372,7 +424,7 @@ function CompteSearchField({ contacts, value, onChange, placeholder }) {
         placeholder={placeholder||'Rechercher une société…'}
         className={inputCls}/>
       {open&&filtered.length>0&&(
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto">
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden max-h-48 overflow-y-auto">
           {filtered.map(c=>(
             <button key={c} type="button" onMouseDown={()=>{onChange(c);setQuery('');setOpen(false);}}
               className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm text-gray-900 border-b border-gray-50 last:border-0">{c}</button>
@@ -380,7 +432,7 @@ function CompteSearchField({ contacts, value, onChange, placeholder }) {
         </div>
       )}
       {open&&filtered.length===0&&query.trim().length>=1&&(
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg px-3 py-2 text-sm text-gray-400">Aucune société trouvée</div>
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-sm text-gray-400">Aucune société trouvée</div>
       )}
     </div>
   );
@@ -424,7 +476,7 @@ function ContactPicker({ contacts, value, onChange, filterCompte }) {
         placeholder="Rechercher par nom, société…"
         className={inputCls}/>
       {open&&query.trim().length>=2&&(
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden max-h-60 overflow-y-auto">
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden max-h-60 overflow-y-auto">
           {results.length===0
             ? <div className="px-4 py-3 text-sm text-gray-400 text-center">Aucun résultat</div>
             : results.map((item,i)=>(
@@ -475,7 +527,7 @@ function MissionPicker({ missions, value, onChange }) {
         placeholder="Rechercher une mission (consultant, client)…"
         className={inputCls}/>
       {open&&query.trim().length>=2&&(
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden max-h-60 overflow-y-auto">
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden max-h-60 overflow-y-auto">
           {results.length===0
             ? <div className="px-4 py-3 text-sm text-gray-400 text-center">Aucun résultat</div>
             : results.map((m,i)=>(
@@ -859,15 +911,15 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
 
         {/* KPI mini */}
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-gray-50 rounded-xl p-3 text-center">
+          <div className="bg-gray-50 rounded-lg p-3 text-center">
             <div className="text-xs text-gray-400 mb-0.5">Jours YTD</div>
             <div className="text-xl font-bold text-gray-800">{joursTotal%1===0?joursTotal.toFixed(0):joursTotal.toFixed(1)}</div>
           </div>
-          <div className="bg-gray-50 rounded-xl p-3 text-center">
+          <div className="bg-gray-50 rounded-lg p-3 text-center">
             <div className="text-xs text-gray-400 mb-0.5">CA YTD</div>
             <div className="text-xl font-bold text-green-700">{fmtCurrency(caTotal)}</div>
           </div>
-          <div className="bg-gray-50 rounded-xl p-3 text-center">
+          <div className="bg-gray-50 rounded-lg p-3 text-center">
             <div className="text-xs text-gray-400 mb-0.5">Taux marge</div>
             <div className={`text-xl font-bold ${tauxMarge>=30?'text-green-700':tauxMarge>=20?'text-orange-600':'text-red-600'}`}>{tauxMarge.toFixed(1)}%</div>
           </div>
@@ -1038,7 +1090,7 @@ function TabProspects({ contacts, historique, taches, missions, besoins, profile
       {/* Vue cartes mobile */}
       <div className="md:hidden space-y-2">
         {filtered.map(c=>(
-          <div key={c.id} onClick={()=>setSelected(c)} tabIndex="0" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();setSelected(c);}}} className="bg-white rounded-xl border border-gray-100 p-3 cursor-pointer active:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-300 transition-colors">
+          <div key={c.id} onClick={()=>setSelected(c)} tabIndex="0" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();setSelected(c);}}} className="bg-white rounded-lg border border-gray-100 p-3 cursor-pointer active:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-300 transition-colors">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <div className="font-semibold text-gray-900 text-sm">{c.prenom} {c.nom}</div>
@@ -1055,7 +1107,7 @@ function TabProspects({ contacts, historique, taches, missions, besoins, profile
         ))}
       </div>
       {/* Vue tableau desktop */}
-      <div className="hidden md:block bg-white rounded-xl border border-gray-100 overflow-hidden">
+      <div className="hidden md:block bg-white rounded-lg border border-gray-100 overflow-hidden">
         <table className="w-full text-sm">
           <thead><tr className="bg-gray-50 text-gray-500 text-xs uppercase">
             <th className={thCls} onClick={()=>toggleSort('nom')}>Contact<SortIcon col="nom"/></th>
@@ -1152,7 +1204,7 @@ function CompleteTaskModal({ task, contact, profile, onClose, onSaved }) {
         </label>
       </div>
       {createRelance&&(
-        <div className="space-y-3 bg-blue-50 rounded-xl p-4 border border-blue-100">
+        <div className="space-y-3 bg-blue-50 rounded-lg p-4 border border-blue-100">
           <div>
             <div className="text-xs font-medium text-gray-500 mb-2">Échéance</div>
             <div className="flex gap-2 flex-wrap">
@@ -1244,7 +1296,7 @@ function CalendarTaches({ taches, contactMap, profile, isAdmin, onComplete }) {
         </div>
         <button onClick={nextMonth} className="p-2 hover:bg-gray-100 rounded-lg text-gray-600 font-medium">Suiv. →</button>
       </div>
-      <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-xl overflow-hidden border border-gray-200">
+      <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-lg overflow-hidden border border-gray-200">
         {JOURS_COURT.map(j=>(
           <div key={j} className="bg-gray-50 text-center text-xs font-semibold text-gray-500 py-2">{j}</div>
         ))}
@@ -1388,7 +1440,7 @@ function DeleteTacheModal({ task, onClose, onDeleted }) {
 function TacheCard({ t, contact, besoinLabel, missionLabel, canEdit, onDetail, onComplete, onDelete, onEdit }) {
   return (
     <div onClick={()=>onDetail(t)} tabIndex="0" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();onDetail(t);}}}
-      className={`rounded-xl border p-3 cursor-pointer hover:shadow-sm focus:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300 transition-shadow flex flex-col gap-2 ${t.overdue?'bg-red-50 border-red-200':'bg-white border-gray-100'}`}>
+      className={`rounded-lg border p-3 cursor-pointer hover:shadow-sm focus:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300 transition-shadow flex flex-col gap-2 ${t.overdue?'bg-red-50 border-red-200':'bg-white border-gray-100'}`}>
       {/* Titre + actions */}
       <div className="flex items-start justify-between gap-2">
         <div className="font-medium text-gray-900 text-sm leading-snug flex-1">{t.titre}</div>
@@ -2135,7 +2187,7 @@ function TabBesoins({ contacts, besoins, historique, taches, missions, profile, 
                     const ca=nbJ*(b.tjm_vente||0);
                     const marge=ca-nbJ*(b.cjm_achat||0);
                     return (
-                      <div key={b.id} onClick={()=>setSelected(b)} tabIndex="0" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();setSelected(b);}}} className="bg-white rounded-xl border border-gray-100 p-3 sm:p-4 cursor-pointer hover:border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-300 transition-colors">
+                      <div key={b.id} onClick={()=>setSelected(b)} tabIndex="0" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();setSelected(b);}}} className="bg-white rounded-lg border border-gray-100 p-3 sm:p-4 cursor-pointer hover:border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-300 transition-colors">
                         <div className="flex items-start gap-3">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -2242,7 +2294,7 @@ function TabHistorique({ historique, contacts, taches, profile, allProfiles, onR
       </div>
       <div className="text-xs text-gray-400 mb-3">{filtered.length} action{filtered.length>1?'s':''}</div>
 
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
+      <div className="bg-white rounded-lg border border-gray-100 overflow-hidden divide-y divide-gray-50">
         {filtered.length===0&&<div className="px-4 py-10 text-center text-sm text-gray-400 italic">Aucune action trouvée</div>}
         {filtered.slice(0,visibleCount).map((h,i)=>{
           const contact=h.id_prospect?contactMap[h.id_prospect]:null;
@@ -2418,22 +2470,22 @@ function TabPipe({ besoins, contacts, historique, profile, allProfiles, onRefres
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-gray-100 p-4">
+        <div className="bg-white rounded-lg border border-gray-100 p-4">
           <div className="text-xs text-gray-400 font-medium mb-1 uppercase tracking-wide">Pipe brut</div>
           <div className="text-3xl font-bold text-blue-700">{fmtCurrency(pipeBrut)}</div>
           <div className="text-xs text-gray-500 mt-1">{filtered.length} besoin{filtered.length>1?'s':''} actif{filtered.length>1?'s':''}</div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-4">
+        <div className="bg-white rounded-lg border border-gray-100 p-4">
           <div className="text-xs text-gray-400 font-medium mb-1 uppercase tracking-wide">Pipe pondéré</div>
           <div className="text-3xl font-bold text-green-700">{fmtCurrency(pipePondere)}</div>
           <div className="text-xs text-gray-500 mt-1">Valeur × probabilité</div>
         </div>
-        <button onClick={()=>{setRiskFilter(!riskFilter);setDonutFilter('');}} className={`bg-white rounded-xl border p-4 text-left transition-colors ${riskFilter?'border-orange-400 bg-orange-50':'border-gray-100 hover:border-orange-200'}`}>
+        <button onClick={()=>{setRiskFilter(!riskFilter);setDonutFilter('');}} className={`bg-white rounded-lg border p-4 text-left transition-colors ${riskFilter?'border-orange-400 bg-orange-50':'border-gray-100 hover:border-orange-200'}`}>
           <div className="text-xs text-gray-400 font-medium mb-1 uppercase tracking-wide">À risque</div>
           <div className={`text-3xl font-bold ${aRisqueCount>0?'text-orange-600':'text-gray-300'}`}>{fmtCurrency(aRisqueVal)}</div>
           <div className="text-xs text-gray-500 mt-1">{aRisqueCount} besoin{aRisqueCount>1?'s':''} sans action &gt;10j</div>
         </button>
-        <div className="bg-white rounded-xl border border-gray-100 p-4">
+        <div className="bg-white rounded-lg border border-gray-100 p-4">
           <div className="text-xs text-gray-400 font-medium mb-1 uppercase tracking-wide">Gagné YTD</div>
           <div className="text-3xl font-bold text-emerald-700">{fmtCurrency(gagneYTD)}</div>
           <div className="text-xs text-gray-500 mt-1">Besoins gagnés</div>
@@ -2443,7 +2495,7 @@ function TabPipe({ besoins, contacts, historique, profile, allProfiles, onRefres
       {/* Graphiques */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Funnel */}
-        <div className="bg-white rounded-xl border border-gray-100 p-5">
+        <div className="bg-white rounded-lg border border-gray-100 p-5">
           <div className="text-sm font-semibold text-gray-700 mb-4">Funnel par statut</div>
           <div className="space-y-3">
             {funnel.map(f=>(
@@ -2469,7 +2521,7 @@ function TabPipe({ besoins, contacts, historique, profile, allProfiles, onRefres
         </div>
 
         {/* Ventilation (barres verticales) */}
-        <div className="bg-white rounded-xl border border-gray-100 p-5">
+        <div className="bg-white rounded-lg border border-gray-100 p-5">
           <div className="text-sm font-semibold text-gray-700 mb-1">Pipe pondéré — {ventilation==='agence'?'par agence':'par responsable'}</div>
           <div className="text-xs text-gray-400 mb-4">Total : {fmtCurrency(pipePondere)}</div>
           {ventilData.length>0?(
@@ -2491,7 +2543,7 @@ function TabPipe({ besoins, contacts, historique, profile, allProfiles, onRefres
       </div>
 
       {/* Tableau détail */}
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-3">
           <span className="text-sm font-semibold text-gray-700">Détail des besoins actifs — {sorted.length} résultat{sorted.length>1?'s':''}</span>
         </div>
@@ -2624,22 +2676,22 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
       </div>
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-gray-100 p-4">
+        <div className="bg-white rounded-lg border border-gray-100 p-4">
           <div className="text-xs text-gray-400 font-medium mb-1 uppercase tracking-wide">En mission</div>
           <div className="text-3xl font-bold text-blue-700">{enMission.length}</div>
           <div className="text-xs text-gray-500 mt-1">consultant{enMission.length>1?'s':''} actif{enMission.length>1?'s':''}</div>
         </div>
-        <div className={`bg-white rounded-xl border p-4 ${intercontrat.length>0?'border-orange-200 bg-orange-50':'border-gray-100'}`}>
+        <div className={`bg-white rounded-lg border p-4 ${intercontrat.length>0?'border-orange-200 bg-orange-50':'border-gray-100'}`}>
           <div className="text-xs text-gray-400 font-medium mb-1 uppercase tracking-wide">Intercontrat</div>
           <div className={`text-3xl font-bold ${intercontrat.length>0?'text-orange-600':'text-gray-300'}`}>{intercontrat.length}</div>
           <div className="text-xs text-gray-500 mt-1 truncate">{intercontrat.length>0?intercontrat.map(m=>m.consultant.split(/\s+/)[0]).join(', '):'Aucun'}</div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-4">
+        <div className="bg-white rounded-lg border border-gray-100 p-4">
           <div className="text-xs text-gray-400 font-medium mb-1 uppercase tracking-wide">CA YTD</div>
           <div className="text-2xl font-bold text-green-700">{fmtCurrency(caYTD)}</div>
           <div className="text-xs text-gray-500 mt-1">{hasFilter?'sélection filtrée':'missions visibles'}</div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-4">
+        <div className="bg-white rounded-lg border border-gray-100 p-4">
           <div className="text-xs text-gray-400 font-medium mb-1 uppercase tracking-wide">Marge YTD</div>
           <div className="text-2xl font-bold text-purple-700">{fmtCurrency(margeYTD)}</div>
           <div className="text-xs text-gray-500 mt-1">{tauxMarge.toFixed(1)}% taux de marge</div>
@@ -2647,7 +2699,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
       </div>
 
       {/* CA mensuel */}
-      <div className="bg-white rounded-xl border border-gray-100 p-5">
+      <div className="bg-white rounded-lg border border-gray-100 p-5">
         <div className="text-sm font-semibold text-gray-700 mb-1">CA mensuel {new Date().getFullYear()}</div>
         <div className="text-xs text-gray-400 mb-4">{isAdmin?'Total Lyon':'Mes missions'} · YTD : {fmtCurrency(caYTD)}</div>
         <div className="flex items-end gap-1.5 h-28">
@@ -2665,7 +2717,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
       </div>
 
       {/* Table missions — cliquer sur une ligne ouvre le détail */}
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-3 flex-wrap">
           <span className="text-sm font-semibold text-gray-700 mr-auto">Missions — {missionsTri.length}/{missions.length} consultant{missions.length>1?'s':''}</span>
           <input type="text" placeholder="Consultant, client..." value={search} onChange={e=>setSearch(e.target.value)} className="px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 w-44"/>
@@ -2697,7 +2749,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
             const caT=joursT*(parseFloat(m.tjm)||0);
             const margeT=joursT*((parseFloat(m.tjm)||0)-(parseFloat(m.cjm)||0));
             return (
-              <div key={m.id} onClick={()=>setSelected(m)} tabIndex="0" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();setSelected(m);}}} className="bg-white rounded-xl border border-gray-100 p-3 cursor-pointer active:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-300 transition-colors">
+              <div key={m.id} onClick={()=>setSelected(m)} tabIndex="0" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();setSelected(m);}}} className="bg-white rounded-lg border border-gray-100 p-3 cursor-pointer active:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-300 transition-colors">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="font-semibold text-gray-900 text-sm">{m.consultant}</div>
@@ -2932,7 +2984,7 @@ function App() {
   if(user===undefined) return <Loader label="Vérification de la session..."/>;
   if(!user) return <LoginScreen/>;
   if(!data||!profile) return <Loader label="Chargement depuis Supabase..."/>;
-  if(error) return <div className="flex items-center justify-center min-h-screen"><div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md text-center"><div className="text-3xl mb-3">❌</div><div className="font-semibold text-red-800">Erreur Supabase</div><div className="text-sm text-red-600 mt-2 font-mono">{error}</div><button onClick={fetchAll} className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg text-sm">Réessayer</button></div></div>;
+  if(error) return <div className="flex items-center justify-center min-h-screen"><div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md text-center"><div className="text-3xl mb-3">❌</div><div className="font-semibold text-red-800">Erreur Supabase</div><div className="text-sm text-red-600 mt-2 font-mono">{error}</div><button onClick={fetchAll} className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg text-sm">Réessayer</button></div></div>;
 
   const {contacts,historique,taches,besoins,missions,histMissions}=data;
   const isAdmin=profile.role==='admin';
