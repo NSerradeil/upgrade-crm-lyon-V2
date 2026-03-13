@@ -2857,7 +2857,7 @@ function ChangePasswordModal({ onClose }) {
 function App() {
   const [user,setUser]=useState(undefined); const [profile,setProfile]=useState(null);
   const [data,setData]=useState(null); const [loading,setLoading]=useState(false);
-  const [error,setError]=useState(null); const [tab,setTab]=useState(()=>localStorage.getItem('crm_tab')||'prospects');
+  const [error,setError]=useState(null); const [tab,setTab]=useState(()=>localStorage.getItem('crm_tab')||'taches');
   useEffect(()=>{localStorage.setItem('crm_tab',tab);},[tab]);
   const [lastRefresh,setLastRefresh]=useState(null);
   const [viewAs,setViewAs]=useState(null); const [allProfiles,setAllProfiles]=useState([]);
@@ -2918,8 +2918,8 @@ function App() {
   useEffect(()=>{
     const h=e=>{
       if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT'||e.target.isContentEditable)return;
-      if(e.key==='1'){e.preventDefault();setTab('prospects');}
-      if(e.key==='2'){e.preventDefault();setTab('taches');}
+      if(e.key==='1'){e.preventDefault();setTab('taches');}
+      if(e.key==='2'){e.preventDefault();setTab('prospects');}
       if(e.key==='3'){e.preventDefault();setTab('besoins');}
       if(e.key==='4'){e.preventDefault();setTab('pipe');}
       if(e.key==='5'){e.preventDefault();setTab('tdb');}
@@ -2962,8 +2962,8 @@ function App() {
   const tachesRetard=tachesActives.filter(t=>t.due_date&&t.due_date<TODAY);
   const besoinsPipeActifs=vBesoins.filter(b=>b.statut!=='Besoin Perdu');
   const TABS=[
-    {id:'prospects',  label:`📋 Contacts (${vContacts.length})`},
     {id:'taches',     label:`✅ Tâches (${tachesActives.length})${tachesRetard.length>0?' 🔴':''}`},
+    {id:'prospects',  label:`📋 Contacts (${vContacts.length})`},
     {id:'besoins',    label:`🎯 Besoins (${vBesoins.length})`},
     {id:'pipe',       label:`📊 Pipe (${besoinsPipeActifs.length})`},
     {id:'tdb',        label:`💼 Missions (${vMissions.length})`},
