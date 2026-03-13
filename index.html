@@ -247,7 +247,7 @@ function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
         <Field label="Statut"><select value={f.statut} onChange={s('statut')} className={inputCls}>{STATUTS_CONTACT.map(x=><option key={x} value={x}>{x}</option>)}</select></Field>
         {isAdmin&&<Field label="Responsable"><select value={f.responsable} onChange={s('responsable')} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>}
       </div>
-      {['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)&&<Field label="ATS (lien candidat)"><input type="url" value={f.ats} onChange={s('ats')} className={inputCls} placeholder="https://ats.upgrade.fr/..."/></Field>}
+      {['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)&&<Field label="ATS (lien candidat)"><input type="url" value={f.ats} onChange={s('ats')} className={inputCls} placeholder="Lien Recruitee"/></Field>}
       <Field label="Commentaires"><textarea rows={3} value={f.commentaires} onChange={s('commentaires')} className={inputCls+' resize-none'}/></Field>
       {err && <div className="text-xs text-red-600 bg-red-50 rounded px-3 py-2">{err}</div>}
     </Modal>
@@ -480,7 +480,7 @@ function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
           </select>
         </Field>
       </div>
-      {['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)&&<Field label="ATS (lien candidat)"><input type="url" value={f.ats} onChange={s('ats')} className={inputCls} placeholder="https://ats.upgrade.fr/..."/></Field>}
+      {['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)&&<Field label="ATS (lien candidat)"><input type="url" value={f.ats} onChange={s('ats')} className={inputCls} placeholder="Lien Recruitee"/></Field>}
       <Field label="Commentaires"><textarea rows={2} value={f.commentaires} onChange={s('commentaires')} className={inputCls+' resize-none'}/></Field>
       {err && <div className="text-xs text-red-600 bg-red-50 rounded px-3 py-2">{err}</div>}
     </Modal>
