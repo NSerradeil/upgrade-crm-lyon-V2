@@ -1278,9 +1278,9 @@ function TabTaches({ taches, contacts, besoins, profile, allProfiles, onRefresh,
 
   const overdue=enRetard.length;
   const today_t=aujourdhui.length;
-  // Tâches cette semaine (hors aujourd'hui et retard) pour le badge
+  // Tâches cette semaine (incluant aujourd'hui) pour le badge
   const thisWeek_t=useMemo(()=>taches
-    .filter(t=>t.statut!=='fait'&&t.statut!=='annule'&&t.due_date&&t.due_date>TODAY&&t.due_date<=endOfWeek&&(filterResp?t.responsable===filterResp:true))
+    .filter(t=>t.statut!=='fait'&&t.statut!=='annule'&&t.due_date&&t.due_date>=TODAY&&t.due_date<=endOfWeek&&(filterResp?t.responsable===filterResp:true))
     .length
   ,[taches,filterResp,endOfWeek]);
   // Pour les commerciaux : filterResp est toujours leur nom, non réinitialisable à vide
