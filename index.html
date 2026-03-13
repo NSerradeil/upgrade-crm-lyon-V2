@@ -2554,7 +2554,7 @@ function TabPipe({ besoins, contacts, historique, taches, missions, profile, all
       </div>
 
       {/* BesoinDetail panel */}
-      {selected&&<BesoinDetail besoin={selected} contacts={contacts} besoins={besoins} taches={taches} missions={missions} historique={historique} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
+      {selected&&<BesoinDetail besoin={besoins.find(b=>b.id===selected.id)||selected} contacts={contacts} besoins={besoins} taches={taches} missions={missions} historique={historique} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
     </div>
   );
 }
