@@ -303,6 +303,41 @@ function AddHistoriqueModal({ contact, profile, onClose, onSaved }) {
     </Modal>
   );
 }
+// ── Modal : Ajouter action sur un besoin ──────────────────────────────────────
+function AddBesoinActionModal({ besoin, contact, profile, onClose, onSaved }) {
+  const types = contact ? typesForContact(contact) : TYPES_ACTION;
+  const [f,setF] = useState({ date:TODAY, type_action:'Tel', details:'', responsable:profile.nom });
+  const [saving,setSaving]=useState(false);
+  const save = async () => {
+    setSaving(true);
+    const ins = { date:f.date, type_action:f.type_action, details:f.details||null, responsable:f.responsable, besoin_id:besoin.id };
+    if(contact) ins.id_prospect = contact.id;
+    const { error } = await sb.from('historique_actions').insert(ins);
+    if (!error) { toast('Action enregistrée'); onSaved(); } else setSaving(false);
+  };
+  const title = contact ? `➕ Action — ${contact.prenom} ${contact.nom}` : `➕ Action — ${besoin.titre}`;
+  return (
+    <Modal title={title} onClose={onClose}
+      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">{saving?'Enregistrement...':'+ Ajouter'}</button></>}>
+      {!contact&&<div className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-100 rounded-lg px-3 py-2 font-medium">⚠️ Aucun contact lié à ce besoin — l'action sera visible uniquement dans l'historique du besoin.</div>}
+      {contact&&isEntretienStatut(contact?.statut)&&(
+        <div className="text-xs bg-purple-50 text-purple-700 border border-purple-100 rounded-lg px-3 py-2 font-medium">
+          📅 {contact.statut} — le type <strong>Entretien</strong> est disponible
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Date"><input type="date" value={f.date} max={TODAY} onChange={e=>setF(v=>({...v,date:e.target.value}))} className={inputCls}/></Field>
+        <Field label="Type">
+          <select value={f.type_action} onChange={e=>setF(v=>({...v,type_action:e.target.value}))} className={inputCls}>
+            {types.map(x=><option key={x} value={x}>{x}</option>)}
+          </select>
+        </Field>
+      </div>
+      <Field label="Détails"><textarea rows={3} value={f.details} onChange={e=>setF(v=>({...v,details:e.target.value}))} placeholder="Notes sur l'échange..." className={inputCls+' resize-none'}/></Field>
+    </Modal>
+  );
+}
+
 const TACHE_TYPES_CANDIDAT  = ['Appel','Entretien','Envoi CV','Suivi','Relance','Autre'];
 const TACHE_TYPES_PROSPECT  = ['Appel','RDV','Email','Proposition commerciale','Relance','Autre'];
 const TACHE_TYPES_LIBRE     = ['Appel','RDV','Email','Entretien','Relance','Autre'];
@@ -1875,7 +1910,7 @@ function BesoinDetail({ besoin, contacts, historique, taches, missions, besoins,
       </div>
 
       {/* Modals actions/tâches */}
-      {modal==='hist'&&contact&&<AddHistoriqueModal contact={contact} profile={profile} onClose={()=>setModal(null)} onSaved={()=>{onRefresh();setModal(null);}}/>}
+      {modal==='hist'&&<AddBesoinActionModal besoin={besoin} contact={contact} profile={profile} onClose={()=>setModal(null)} onSaved={()=>{onRefresh();setModal(null);}}/>}
       {modal==='tache'&&<AddTacheModal contacts={contact?[contact]:contacts} besoins={besoins||[]} missions={missions||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={()=>{onRefresh();setModal(null);}} defaultContactId={besoin.contact_id} defaultBesoinId={besoin.id}/>}
       {/* Besoin Gagné → proposer mission */}
       {modal==='proposeMission'&&(
