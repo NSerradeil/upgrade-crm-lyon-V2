@@ -2743,15 +2743,9 @@ function EditableJoursGrid({ mission, onUpdate }) {
     <div>
       <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">Jours facturés 2026</div>
       <div className="grid grid-cols-6 gap-1">
-        {MOIS_KEYS.map((k,i)=>{
-          const j=parseFloat(mission[`jours_${k}`])||0;
-          const rec=mission[`statut_${k}`]||null;
-          const statutObj=LIVRAISON_STATUTS.find(s=>s.value===rec)||LIVRAISON_STATUTS[0];
-          const color=rec==='Réceptionné'?'text-green-700 bg-green-50':rec==='Livré'?'text-blue-700 bg-blue-50':j>0?'text-gray-700 bg-gray-50':'text-gray-300 bg-gray-50';
-          return (
-            <EditableJoursGridCell key={k} mission={mission} moisKey={k} moisIdx={i} onUpdate={onUpdate}/>
-          );
-        })}
+        {MOIS_KEYS.map((k,i)=>(
+          <EditableJoursGridCell key={k} mission={mission} moisKey={k} moisIdx={i} onUpdate={onUpdate}/>
+        ))}
       </div>
       <div className="flex gap-3 mt-2 text-xs text-gray-400">
         <span><span className="inline-block w-2 h-2 rounded-full bg-gray-400 mr-1"/>Réalisé</span>
