@@ -45,6 +45,43 @@ const SUPABASE_KEY = "sb_publishable_BaNIdlZ09xavRRhG0G-ScQ_mW4hVueJ";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const TODAY = new Date().toISOString().slice(0, 10);
 
+// ── Helpers datetime ─────────────────────────────────────────────────────────
+// Extrait la partie date (YYYY-MM-DD) d'un datetime ISO ou date simple
+function extractDate(dt) { return dt ? String(dt).slice(0,10) : ''; }
+// Extrait l'heure (HH:MM) d'un datetime ISO ; retourne '' si date simple ou minuit
+function extractTime(dt) {
+  if(!dt) return '';
+  const s=String(dt);
+  if(s.length<=10) return ''; // date simple, pas d'heure
+  const m=s.match(/T(\d{2}:\d{2})/);
+  if(!m) return '';
+  return m[1]==='00:00'?'':m[1]; // minuit = pas d'heure explicite
+}
+// Combine date YYYY-MM-DD + time HH:MM → ISO string ; si pas de time, renvoie la date seule
+function combineDT(date, time) {
+  if(!date) return null;
+  if(!time) return date;
+  return `${date}T${time}:00`;
+}
+// Affiche une date/datetime de manière lisible, avec heure si != defaultTime
+function fmtDT(dt, defaultTime) {
+  if(!dt) return '—';
+  const d=extractDate(dt);
+  const t=extractTime(dt);
+  const [y,m,dd]=(d||'').split('-');
+  const dateFmt=dd&&m&&y?`${dd}/${m}/${y}`:(d||'—');
+  if(!t || t===defaultTime) return dateFmt;
+  return `${dateFmt} · ${t}`;
+}
+// Vérifie si un datetime a une heure non-default
+function hasCustomTime(dt, defaultTime) {
+  const t=extractTime(dt);
+  return t && t!==defaultTime;
+}
+const DEFAULT_TASK_TIME='09:00';
+const DEFAULT_MISSION_START_TIME='09:00';
+const DEFAULT_MISSION_END_TIME='18:00';
+
 const STATUTS_CONTACT  = ['Prospect','Candidat','Client','Consultant CDI','Freelance','Prestataire','À définir'];
 const TYPES_ACTION     = ['Tel','Mail envoyé','Mail reçu','RDV','LinkedIn','Note interne','Autre'];
 const STATUTS_ENTRETIEN = ['candidat','freelance','prestataire'];
@@ -548,7 +585,7 @@ function BesoinPicker({ besoins, value, onChange, contactId }) {
 }
 function AddTacheModal({ contacts, besoins, missions, profile, allProfiles, onClose, onSaved, defaultContactId, defaultMissionId, defaultBesoinId }) {
   const isAdmin = profile.role==='admin';
-  const [f,setF] = useState({ type:'', titre:'', due_date:'', contact_id:defaultContactId?String(defaultContactId):'', notes:'', responsable:profile.nom, mission_id:defaultMissionId||'', besoin_id:defaultBesoinId||'' });
+  const [f,setF] = useState({ type:'', titre:'', due_date:'', due_time:DEFAULT_TASK_TIME, contact_id:defaultContactId?String(defaultContactId):'', notes:'', responsable:profile.nom, mission_id:defaultMissionId||'', besoin_id:defaultBesoinId||'' });
   const [saving,setSaving]=useState(false);
   const myContacts = useMemo(()=>contacts.filter(c=>isAdmin||c.responsable===profile.nom).sort((a,b)=>(a.nom||'').localeCompare(b.nom||'')),[contacts,profile,isAdmin]);
   const contactMap = useMemo(()=>Object.fromEntries(myContacts.map(c=>[String(c.id),c])),[myContacts]);
@@ -569,7 +606,7 @@ function AddTacheModal({ contacts, besoins, missions, profile, allProfiles, onCl
 
   const save = async () => {
     if (!f.titre.trim()) return; setSaving(true);
-    const { error } = await sb.from('taches').insert({ id:`tw_${Date.now()}`, titre:f.titre.trim(), statut:f.due_date?'en_cours':'a_faire', due_date:f.due_date||null, contact_id:f.contact_id?parseInt(f.contact_id):null, mission_id:f.mission_id||null, besoin_id:f.besoin_id||null, notes:f.notes||null, responsable:f.responsable });
+    const { error } = await sb.from('taches').insert({ id:`tw_${Date.now()}`, titre:f.titre.trim(), statut:f.due_date?'en_cours':'a_faire', due_date:combineDT(f.due_date,f.due_time)||null, contact_id:f.contact_id?parseInt(f.contact_id):null, mission_id:f.mission_id||null, besoin_id:f.besoin_id||null, notes:f.notes||null, responsable:f.responsable });
     if (!error) {toast('Tâche créée');onSaved();} else setSaving(false);
   };
 
@@ -594,7 +631,12 @@ function AddTacheModal({ contacts, besoins, missions, profile, allProfiles, onCl
         </div>
       </Field>
       <Field label="Titre *"><input type="text" value={f.titre} onChange={e=>setF(v=>({...v,titre:e.target.value}))} placeholder="Sélectionne un type ou saisis directement" className={inputCls}/></Field>
-      <Field label="Échéance"><input type="date" value={f.due_date} min={TODAY} onChange={e=>setF(v=>({...v,due_date:e.target.value}))} className={inputCls}/></Field>
+      <Field label="Échéance">
+        <div className="flex gap-2">
+          <input type="date" value={f.due_date} min={TODAY} onChange={e=>setF(v=>({...v,due_date:e.target.value}))} className={inputCls+' flex-1'}/>
+          {f.due_date && <input type="time" value={f.due_time} onChange={e=>setF(v=>({...v,due_time:e.target.value}))} className={inputCls+' w-28'}/>}
+        </div>
+      </Field>
       <Field label="Mission liée">
         {defaultMissionId
           ? <MissionPicker missions={missions||[]} value={f.mission_id} onChange={()=>{}}/>
@@ -709,7 +751,7 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
           <div className="space-y-2">{tachesContact.map(t=>(
             <div key={t.id} className="flex items-start gap-2 bg-blue-50 rounded-lg p-3">
               <span className="text-blue-400 mt-0.5">◆</span>
-              <div><div className="text-sm font-medium text-blue-900">{t.titre}</div>{t.due_date&&<div className="text-xs text-blue-600">Échéance : {t.due_date}</div>}</div>
+              <div><div className="text-sm font-medium text-blue-900">{t.titre}</div>{t.due_date&&<div className="text-xs text-blue-600">Échéance : {fmtDT(t.due_date,DEFAULT_TASK_TIME)}</div>}</div>
             </div>
           ))}</div>
         </div>
@@ -769,7 +811,7 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, onClose, on
   const isEdit=!!mission&&!!mission.id;
   const isAdmin=profile.role==='admin';
   const init=mission||{consultant:'',client:'',projet:'',tjm:'',cjm:'',statut:'En cours',type_contrat:'CDI',responsable:profile.nom,agence:profile.agence||'Lyon',num_commande:'',date_debut_mission:'',date_fin_mission:'',referent:'',contact_consultant_id:null,contact_referent_id:null};
-  const [f,setF]=useState({...init});
+  const [f,setF]=useState({...init, date_debut_mission:extractDate(init.date_debut_mission), date_fin_mission:extractDate(init.date_fin_mission), debut_time:extractTime(init.date_debut_mission)||DEFAULT_MISSION_START_TIME, fin_time:extractTime(init.date_fin_mission)||DEFAULT_MISSION_END_TIME});
   const [jours,setJours]=useState(()=>{
     const j={};MOIS_KEYS.forEach(k=>{j[k]=mission?mission[`jours_${k}`]||'':'';});return j;
   });
@@ -782,7 +824,7 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, onClose, on
     const row={consultant:f.consultant.trim(),client:f.client||null,projet:f.projet||null,
       tjm:parseFloat(f.tjm)||0,cjm:parseFloat(f.cjm)||0,statut:f.statut,type_contrat:f.type_contrat||null,
       responsable:f.responsable,agence:f.agence||profile.agence||'Lyon',
-      num_commande:f.num_commande||null,date_debut_mission:f.date_debut_mission||null,date_fin_mission:f.date_fin_mission||null,
+      num_commande:f.num_commande||null,date_debut_mission:combineDT(f.date_debut_mission,f.debut_time)||null,date_fin_mission:combineDT(f.date_fin_mission,f.fin_time)||null,
       referent:f.referent||null};
     if(f.contact_consultant_id) row.contact_consultant_id=f.contact_consultant_id;
     if(f.contact_referent_id) row.contact_referent_id=f.contact_referent_id;
@@ -811,8 +853,18 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, onClose, on
         </div>
         <div className="grid grid-cols-3 gap-3">
           <Field label="N° commande"><input value={f.num_commande||''} onChange={s('num_commande')} className={inputCls} placeholder="5090-4210617888"/></Field>
-          <Field label="Début mission"><input type="date" value={f.date_debut_mission||''} onChange={s('date_debut_mission')} className={inputCls}/></Field>
-          <Field label="Fin mission"><input type="date" value={f.date_fin_mission||''} onChange={s('date_fin_mission')} className={inputCls}/></Field>
+          <Field label="Début mission">
+            <div className="flex gap-1">
+              <input type="date" value={f.date_debut_mission||''} onChange={s('date_debut_mission')} className={inputCls+' flex-1'}/>
+              {f.date_debut_mission && <input type="time" value={f.debut_time} onChange={e=>setF(v=>({...v,debut_time:e.target.value}))} className={inputCls+' w-24 text-xs'}/>}
+            </div>
+          </Field>
+          <Field label="Fin mission">
+            <div className="flex gap-1">
+              <input type="date" value={f.date_fin_mission||''} onChange={s('date_fin_mission')} className={inputCls+' flex-1'}/>
+              {f.date_fin_mission && <input type="time" value={f.fin_time} onChange={e=>setF(v=>({...v,fin_time:e.target.value}))} className={inputCls+' w-24 text-xs'}/>}
+            </div>
+          </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="TJM vente (€)"><input type="number" value={f.tjm} onChange={s('tjm')} className={inputCls}/></Field>
@@ -930,7 +982,7 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
           <div><span className="text-gray-400 text-xs">Référent client</span><br/>{mission.referent?(referentContact?<span className="text-blue-700 cursor-pointer hover:underline" onClick={()=>setViewContact(referentContact)}>{mission.referent}</span>:<span className="text-gray-700">{mission.referent}</span>):<span className="text-gray-300">—</span>}</div>
           <div><span className="text-gray-400 text-xs">Marge</span><br/><span className="text-purple-700 font-medium">{fmtCurrency(margeTotal)} ({tauxMarge.toFixed(1)}%)</span></div>
           {mission.num_commande&&<div><span className="text-gray-400 text-xs">N° commande</span><br/><span className="text-gray-700 font-mono text-xs">{mission.num_commande}</span></div>}
-          {(mission.date_debut_mission||mission.date_fin_mission)&&<div><span className="text-gray-400 text-xs">Période mission</span><br/><span className="text-gray-700">{mission.date_debut_mission||'?'} → {mission.date_fin_mission||'?'}</span></div>}
+          {(mission.date_debut_mission||mission.date_fin_mission)&&<div><span className="text-gray-400 text-xs">Période mission</span><br/><span className="text-gray-700">{fmtDT(mission.date_debut_mission,DEFAULT_MISSION_START_TIME)||'?'} → {fmtDT(mission.date_fin_mission,DEFAULT_MISSION_END_TIME)||'?'}</span></div>}
         </div>
 
         {/* Jours par mois — éditable */}
@@ -961,7 +1013,7 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
             <div className="space-y-2">{missionTaches.map(t=>(
               <div key={t.id} className="flex items-start gap-2 bg-orange-50 rounded-lg p-3">
                 <span className="text-orange-400 mt-0.5">◆</span>
-                <div><div className="text-sm font-medium text-orange-900">{t.titre}</div>{t.due_date&&<div className="text-xs text-orange-600">Échéance : {t.due_date}</div>}</div>
+                <div><div className="text-sm font-medium text-orange-900">{t.titre}</div>{t.due_date&&<div className="text-xs text-orange-600">Échéance : {fmtDT(t.due_date,DEFAULT_TASK_TIME)}</div>}</div>
               </div>
             ))}</div>
           </div>
@@ -1142,6 +1194,7 @@ function CompleteTaskModal({ task, contact, profile, onClose, onSaved }) {
   const [preset,setPreset]=useState('');
   const [customDate,setCustomDate]=useState('');
   const [relanceNote,setRelanceNote]=useState('');
+  const [relanceTime,setRelanceTime]=useState(DEFAULT_TASK_TIME);
   const [saving,setSaving]=useState(false);
 
   const addDays=n=>{ const d=new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
@@ -1171,7 +1224,7 @@ function CompleteTaskModal({ task, contact, profile, onClose, onSaved }) {
         id:`tw_${Date.now()}`,
         titre:`Relance — ${task.titre}`,
         statut:'a_faire',
-        due_date:relanceDate,
+        due_date:combineDT(relanceDate,relanceTime),
         contact_id:task.contact_id||null,
         mission_id:task.mission_id||null,
         besoin_id:task.besoin_id||null,
@@ -1217,8 +1270,11 @@ function CompleteTaskModal({ task, contact, profile, onClose, onSaved }) {
               ))}
             </div>
             {preset==='custom'&&(
-              <input type="date" value={customDate} min={addDays(1)}
-                onChange={e=>setCustomDate(e.target.value)} className={inputCls+' mt-2'}/>
+              <div className="flex gap-2 mt-2">
+                <input type="date" value={customDate} min={addDays(1)}
+                  onChange={e=>setCustomDate(e.target.value)} className={inputCls+' flex-1'}/>
+                <input type="time" value={relanceTime} onChange={e=>setRelanceTime(e.target.value)} className={inputCls+' w-28'}/>
+              </div>
             )}
           </div>
           <Field label="Note pour la relance (optionnel)">
@@ -1234,20 +1290,25 @@ function CompleteTaskModal({ task, contact, profile, onClose, onSaved }) {
 
 // ── Modal : Édition tâche ─────────────────────────────────────────────────────
 function EditTacheModal({ task, contacts, besoins, missions, profile, allProfiles, onClose, onSaved }) {
-  const [f,setF]=useState({ titre:task.titre||'', due_date:task.due_date||'', statut:task.statut||'a_faire', notes:task.notes||'', responsable:task.responsable||profile.nom, contact_id:task.contact_id?String(task.contact_id):'', mission_id:task.mission_id||'', besoin_id:task.besoin_id||'' });
+  const [f,setF]=useState({ titre:task.titre||'', due_date:extractDate(task.due_date), due_time:extractTime(task.due_date)||DEFAULT_TASK_TIME, statut:task.statut||'a_faire', notes:task.notes||'', responsable:task.responsable||profile.nom, contact_id:task.contact_id?String(task.contact_id):'', mission_id:task.mission_id||'', besoin_id:task.besoin_id||'' });
   const [saving,setSaving]=useState(false);
   const isAdmin=profile.role==='admin';
   const save=async()=>{
     if(!f.titre.trim())return;
     setSaving(true);
-    const{error}=await sb.from('taches').update({ titre:f.titre.trim(), due_date:f.due_date||null, statut:f.due_date?'en_cours':'a_faire', notes:f.notes||null, responsable:f.responsable, contact_id:f.contact_id?parseInt(f.contact_id):null, mission_id:f.mission_id||null, besoin_id:f.besoin_id||null }).eq('id',task.id);
+    const{error}=await sb.from('taches').update({ titre:f.titre.trim(), due_date:combineDT(f.due_date,f.due_time)||null, statut:f.due_date?'en_cours':'a_faire', notes:f.notes||null, responsable:f.responsable, contact_id:f.contact_id?parseInt(f.contact_id):null, mission_id:f.mission_id||null, besoin_id:f.besoin_id||null }).eq('id',task.id);
     if(!error)onSaved();else setSaving(false);
   };
   return (
     <Modal title="✏️ Modifier la tâche" onClose={onClose}
       footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Annuler</button><button onClick={save} disabled={saving||!f.titre.trim()} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">{saving?'Enregistrement...':'Enregistrer'}</button></>}>
       <Field label="Titre *"><input type="text" value={f.titre} autoFocus onChange={e=>setF(v=>({...v,titre:e.target.value}))} className={inputCls}/></Field>
-      <Field label="Échéance"><input type="date" value={f.due_date} min={TODAY} onChange={e=>setF(v=>({...v,due_date:e.target.value}))} className={inputCls}/></Field>
+      <Field label="Échéance">
+        <div className="flex gap-2">
+          <input type="date" value={f.due_date} min={TODAY} onChange={e=>setF(v=>({...v,due_date:e.target.value}))} className={inputCls+' flex-1'}/>
+          {f.due_date && <input type="time" value={f.due_time} onChange={e=>setF(v=>({...v,due_time:e.target.value}))} className={inputCls+' w-28'}/>}
+        </div>
+      </Field>
       {isAdmin&&<Field label="Responsable"><select value={f.responsable} onChange={e=>setF(v=>({...v,responsable:e.target.value}))} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>}
       <Field label="Contact lié">
         <ContactPicker contacts={contacts} value={f.contact_id} onChange={cid=>setF(v=>({...v,contact_id:cid}))}/>
@@ -1274,7 +1335,7 @@ function CalendarTaches({ taches, contactMap, profile, isAdmin, onComplete }) {
   const nextMonth=()=>{ if(calMonth===11){setCalYear(y=>y+1);setCalMonth(0);}else setCalMonth(m=>m+1); };
   const tasksByDate=useMemo(()=>{
     const map={};
-    taches.forEach(t=>{ if(t.due_date){ if(!map[t.due_date])map[t.due_date]=[]; map[t.due_date].push(t); } });
+    taches.forEach(t=>{ const d=extractDate(t.due_date); if(d){ if(!map[d])map[d]=[]; map[d].push(t); } });
     return map;
   },[taches]);
   const firstDow=(new Date(calYear,calMonth,1).getDay()+6)%7; // 0=Lun
@@ -1374,7 +1435,7 @@ function TacheDetailPanel({ task, contact, besoinLabel, mission, besoin, histori
   return (
     <SidePanel title={task.titre} badge={<span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor}`}>{statusLabel}</span>} onClose={onClose} actions={actions}>
       <div className="space-y-4">
-        {task.due_date&&<div className="flex items-center gap-2 text-sm"><span className="text-gray-400 w-28 shrink-0">Échéance</span><span className={task.overdue?'text-red-600 font-medium':task.due_date===TODAY?'text-orange-600 font-medium':'text-gray-700'}>{task.due_date}{task.overdue?' — En retard':task.due_date===TODAY?' — Aujourd\'hui':''}</span></div>}
+        {task.due_date&&<div className="flex items-center gap-2 text-sm"><span className="text-gray-400 w-28 shrink-0">Échéance</span><span className={task.overdue?'text-red-600 font-medium':extractDate(task.due_date)===TODAY?'text-orange-600 font-medium':'text-gray-700'}>{fmtDT(task.due_date,DEFAULT_TASK_TIME)}{task.overdue?' — En retard':extractDate(task.due_date)===TODAY?' — Aujourd\'hui':''}</span></div>}
         <div className="flex items-center gap-2 text-sm"><span className="text-gray-400 w-28 shrink-0">Responsable</span><span className="text-gray-700">{task.responsable}</span></div>
         {task.notes&&<div className="pt-3 border-t border-gray-100"><div className="text-xs text-gray-400 mb-1 uppercase tracking-wide font-medium">Notes</div><div className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-lg p-3">{task.notes}</div></div>}
       </div>
@@ -1459,7 +1520,7 @@ function TacheCard({ t, contact, besoinLabel, missionLabel, canEdit, onDetail, o
       {/* Footer : date + responsable */}
       <div className="flex items-center justify-between mt-auto pt-1">
         {t.due_date
-          ? <span className={`text-xs font-medium ${t.overdue?'text-red-600':t.due_date===TODAY?'text-orange-600':'text-gray-400'}`}>{t.due_date}</span>
+          ? <span className={`text-xs font-medium ${t.overdue?'text-red-600':t._date===TODAY?'text-orange-600':'text-gray-400'}`}>{fmtDT(t.due_date,DEFAULT_TASK_TIME)}</span>
           : <span/>}
         <span className="text-xs text-gray-400 truncate ml-2">{t.responsable}</span>
       </div>
@@ -1517,26 +1578,26 @@ function TabTaches({ taches, contacts, besoins, missions, historique, profile, a
   // Badge counts : filtrés par responsable uniquement (toujours visibles)
   const allActives=useMemo(()=>taches
     .filter(t=>t.statut!=='fait'&&t.statut!=='annule')
-    .map(t=>({...t,overdue:!!(t.due_date&&t.due_date<TODAY)}))
+    .map(t=>({...t,_date:extractDate(t.due_date),overdue:!!(t.due_date&&extractDate(t.due_date)<TODAY)}))
     .filter(t=>!filterResp||t.responsable===filterResp)
   ,[taches,filterResp]);
   const overdue=useMemo(()=>allActives.filter(t=>t.overdue).length,[allActives]);
-  const today_t=useMemo(()=>allActives.filter(t=>!t.overdue&&t.due_date===TODAY).length,[allActives]);
-  const thisWeek_t=useMemo(()=>allActives.filter(t=>t.due_date&&t.due_date>=TODAY&&t.due_date<=endOfWeek).length,[allActives,endOfWeek]);
+  const today_t=useMemo(()=>allActives.filter(t=>!t.overdue&&t._date===TODAY).length,[allActives]);
+  const thisWeek_t=useMemo(()=>allActives.filter(t=>t._date&&t._date>=TODAY&&t._date<=endOfWeek).length,[allActives,endOfWeek]);
 
   // Liste affichée : filtrée par écheance + recherche
   const actives=useMemo(()=>allActives.filter(t=>{
     if(filterEcheance==='retard'&&!t.overdue) return false;
-    if(filterEcheance==='today'&&t.due_date!==TODAY) return false;
-    if(filterEcheance==='semaine'&&!(t.due_date&&t.due_date>=TODAY&&t.due_date<=endOfWeek)) return false;
+    if(filterEcheance==='today'&&t._date!==TODAY) return false;
+    if(filterEcheance==='semaine'&&!(t._date&&t._date>=TODAY&&t._date<=endOfWeek)) return false;
     if(search&&!(t.titre||'').toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   }),[allActives,search,filterEcheance,endOfWeek]);
 
   // Sections
   const enRetard  = actives.filter(t=>t.overdue);
-  const aujourdhui= actives.filter(t=>!t.overdue&&t.due_date===TODAY);
-  const aVenir    = actives.filter(t=>t.due_date&&!t.overdue&&t.due_date!==TODAY);
+  const aujourdhui= actives.filter(t=>!t.overdue&&t._date===TODAY);
+  const aVenir    = actives.filter(t=>t._date&&!t.overdue&&t._date!==TODAY);
   const enCours   = actives.filter(t=>!t.due_date&&t.statut==='en_cours');
   const aFaire    = actives.filter(t=>!t.due_date&&t.statut!=='en_cours');
   // Pour les commerciaux : filterResp est toujours leur nom, non réinitialisable à vide
@@ -1942,7 +2003,7 @@ function BesoinDetail({ besoin, contacts, historique, taches, missions, besoins,
           <div className="space-y-2">{besoinTaches.map(t=>(
             <div key={t.id} className="flex items-start gap-2 bg-blue-50 rounded-lg p-3">
               <span className="text-blue-400 mt-0.5">◆</span>
-              <div><div className="text-sm font-medium text-blue-900">{t.titre}</div>{t.due_date&&<div className="text-xs text-blue-600">Échéance : {t.due_date}</div>}</div>
+              <div><div className="text-sm font-medium text-blue-900">{t.titre}</div>{t.due_date&&<div className="text-xs text-blue-600">Échéance : {fmtDT(t.due_date,DEFAULT_TASK_TIME)}</div>}</div>
             </div>
           ))}</div>
         </div>
@@ -3247,7 +3308,7 @@ function App() {
   const vHistMiss   = histMissions; // filtré par missions déjà
 
   const tachesActives=vTaches.filter(t=>t.statut!=='fait'&&t.statut!=='annule');
-  const tachesRetard=tachesActives.filter(t=>t.due_date&&t.due_date<TODAY);
+  const tachesRetard=tachesActives.filter(t=>t.due_date&&extractDate(t.due_date)<TODAY);
   const besoinsPipeActifs=vBesoins.filter(b=>b.statut!=='Besoin Perdu');
   const TABS=[
     {id:'taches',     label:`✅ Tâches (${tachesActives.length})${tachesRetard.length>0?' 🔴':''}`},
