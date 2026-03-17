@@ -43,7 +43,8 @@ const { useState, useEffect, useMemo, useCallback, useRef } = React;
 const SUPABASE_URL = "https://ehfseahxoivfhmpiyoqa.supabase.co";
 const SUPABASE_KEY = "sb_publishable_BaNIdlZ09xavRRhG0G-ScQ_mW4hVueJ";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-const TODAY = new Date().toISOString().slice(0, 10);
+function getToday() { return new Date().toISOString().slice(0, 10); }
+const TODAY = getToday();
 
 // ── Helpers datetime ─────────────────────────────────────────────────────────
 // Extrait la partie date (YYYY-MM-DD) d'un datetime ISO ou date simple
@@ -287,7 +288,7 @@ function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
       if ((f.ville||'') !== (contact.ville||'')) changes.push(`ville → ${f.ville||'(vide)'}`);
       if (f.responsable !== (contact.responsable||'')) changes.push(`responsable → ${f.responsable}`);
       const details = changes.length ? `Fiche modifiée : ${changes.join(', ')}` : 'Fiche contact modifiée';
-      await sb.from('historique_actions').insert({ id_prospect:contact.id, date:TODAY, type_action:'Note interne', details, responsable:profile?.nom||contact.responsable });
+      await sb.from('historique_actions').insert({ id_prospect:contact.id, date:getToday(), type_action:'Note interne', details, responsable:profile?.nom||contact.responsable });
       toast('Contact modifié');onSaved();
     }
   };
@@ -313,7 +314,7 @@ function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
 }
 function AddHistoriqueModal({ contact, profile, onClose, onSaved }) {
   const types = typesForContact(contact);
-  const [f,setF] = useState({ date:TODAY, type_action:'Tel', details:'', responsable:profile.nom });
+  const [f,setF] = useState({ date:getToday(), type_action:'Tel', details:'', responsable:profile.nom });
   const [saving,setSaving]=useState(false);
   const save = async () => {
     setSaving(true);
@@ -343,7 +344,7 @@ function AddHistoriqueModal({ contact, profile, onClose, onSaved }) {
 // ── Modal : Ajouter action sur un besoin ──────────────────────────────────────
 function AddBesoinActionModal({ besoin, contact, profile, onClose, onSaved }) {
   const types = contact ? typesForContact(contact) : TYPES_ACTION;
-  const [f,setF] = useState({ date:TODAY, type_action:'Tel', details:'', responsable:profile.nom });
+  const [f,setF] = useState({ date:getToday(), type_action:'Tel', details:'', responsable:profile.nom });
   const [saving,setSaving]=useState(false);
   const save = async () => {
     setSaving(true);
@@ -674,7 +675,7 @@ function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
     const { data:inserted, error } = await sb.from('contacts').insert(ins).select('id').single();
     if (error) { setErr(error.message); setSaving(false); }
     else {
-      await sb.from('historique_actions').insert({ id_prospect:inserted.id, date:TODAY, type_action:'Note interne', details:`Contact créé (statut : ${f.statut})`, responsable:f.responsable });
+      await sb.from('historique_actions').insert({ id_prospect:inserted.id, date:getToday(), type_action:'Note interne', details:`Contact créé (statut : ${f.statut})`, responsable:f.responsable });
       toast('Contact créé');onSaved();
     }
   };
@@ -717,7 +718,7 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
   const saved = () => { setModal(null); onRefresh(); };
   const handleDelete = async () => {
     setDeleting(true);
-    await sb.from('historique_actions').insert({ id_prospect:contact.id, date:TODAY, type_action:'Note interne', details:`Contact supprimé par ${profile.nom}`, responsable:profile.nom });
+    await sb.from('historique_actions').insert({ id_prospect:contact.id, date:getToday(), type_action:'Note interne', details:`Contact supprimé par ${profile.nom}`, responsable:profile.nom });
     await sb.from('contacts').delete().eq('id',contact.id);
     toast('Contact supprimé');onRefresh(); onClose();
   };
@@ -781,7 +782,7 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
 
 // ── Modal : Ajouter action mission ────────────────────────────────────────────
 function AddHistMissionModal({ mission, profile, onClose, onSaved }) {
-  const [f,setF] = useState({ date:TODAY, type_action:'Appel consultant', details:'', responsable:profile.nom });
+  const [f,setF] = useState({ date:getToday(), type_action:'Appel consultant', details:'', responsable:profile.nom });
   const [saving,setSaving]=useState(false);
   const save = async () => {
     setSaving(true);
@@ -1210,14 +1211,14 @@ function CompleteTaskModal({ task, contact, profile, onClose, onSaved }) {
   const save=async()=>{
     if(createRelance&&!relanceDate) return;
     setSaving(true);
-    await sb.from('taches').update({statut:'fait',date_completion:TODAY}).eq('id',task.id);
+    await sb.from('taches').update({statut:'fait',date_completion:getToday()}).eq('id',task.id);
     if(task.contact_id){
       const details=note?`✅ ${task.titre} — ${note}`:`✅ ${task.titre}`;
-      await sb.from('historique_actions').insert({id_prospect:task.contact_id,date:TODAY,type_action:'Tâche accomplie',details,responsable:profile.nom,tache_id:task.id,besoin_id:task.besoin_id||null});
+      await sb.from('historique_actions').insert({id_prospect:task.contact_id,date:getToday(),type_action:'Tâche accomplie',details,responsable:profile.nom,tache_id:task.id,besoin_id:task.besoin_id||null});
     }
     if(task.mission_id){
       const details=note?`✅ ${task.titre} — ${note}`:`✅ ${task.titre}`;
-      await sb.from('historique_missions').insert({mission_id:task.mission_id,date:TODAY,type_action:'Tâche accomplie',details,responsable:profile.nom});
+      await sb.from('historique_missions').insert({mission_id:task.mission_id,date:getToday(),type_action:'Tâche accomplie',details,responsable:profile.nom});
     }
     if(createRelance&&relanceDate){
       await sb.from('taches').insert({
@@ -1395,7 +1396,7 @@ function CalendarTaches({ taches, contactMap, profile, isAdmin, onComplete }) {
 // ── Modal : Ajouter action depuis tâche ──────────────────────────────────────
 function AddActionFromTaskModal({ task, contact, profile, onClose, onSaved }) {
   const types = contact ? typesForContact(contact) : TYPES_ACTION;
-  const [f,setF] = useState({ date:TODAY, type_action:'Note interne', details:'', responsable:profile.nom });
+  const [f,setF] = useState({ date:getToday(), type_action:'Note interne', details:'', responsable:profile.nom });
   const [saving,setSaving]=useState(false);
   const save = async () => {
     setSaving(true);
@@ -1787,7 +1788,7 @@ function AddBesoinModal({ contacts, profile, allProfiles, onClose, onSaved }) {
     // Auto-log push opportuniste
     if(f.statut==='Push opportuniste'&&f.contact_id&&f.candidat_id){
       const cand=contacts.find(c=>c.id===f.candidat_id);
-      if(cand) await sb.from('historique_actions').insert({id_prospect:f.contact_id,date:TODAY,type_action:'Push opportuniste',details:`Push opportuniste — ${cand.prenom} ${cand.nom}`,responsable:f.responsable,besoin_id:inserted.id});
+      if(cand) await sb.from('historique_actions').insert({id_prospect:f.contact_id,date:getToday(),type_action:'Push opportuniste',details:`Push opportuniste — ${cand.prenom} ${cand.nom}`,responsable:f.responsable,besoin_id:inserted.id});
     }
     toast('Besoin créé');onSaved();
   };
@@ -1868,7 +1869,7 @@ function BesoinDetail({ besoin, contacts, historique, taches, missions, besoins,
       // Auto-log push opportuniste
       if(f.statut==='Push opportuniste'&&f.contact_id&&f.candidat_id&&(f.candidat_id!==besoin.candidat_id||f.statut!==besoin.statut)){
         const cand=contacts.find(c=>c.id===f.candidat_id);
-        if(cand) await sb.from('historique_actions').insert({id_prospect:f.contact_id,date:TODAY,type_action:'Push opportuniste',details:`Push opportuniste — ${cand.prenom} ${cand.nom}`,responsable:f.responsable,besoin_id:besoin.id});
+        if(cand) await sb.from('historique_actions').insert({id_prospect:f.contact_id,date:getToday(),type_action:'Push opportuniste',details:`Push opportuniste — ${cand.prenom} ${cand.nom}`,responsable:f.responsable,besoin_id:besoin.id});
       }
       // Besoin Gagné → proposer création mission
       if(f.statut==='Besoin Gagné'&&besoin.statut!=='Besoin Gagné'){
