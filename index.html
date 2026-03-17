@@ -1756,27 +1756,30 @@ function BesoinCandidatsList({ besoinId, candidats, contacts, profile, readOnly,
 
   const addCandidat=async(contactId)=>{
     setAdding(true);
-    await sb.from('besoin_candidats').insert({besoin_id:besoinId,contact_id:contactId,statut:'en_attente',created_by:profile.nom});
-    setQ('');setAdding(false);onRefresh();
+    const {error}=await sb.from('besoin_candidats').insert({besoin_id:besoinId,contact_id:contactId,statut:'en_attente',created_by:profile.nom});
+    if(error){toast('Erreur ajout candidat : '+error.message,'error');setAdding(false);return;}
+    toast('Candidat ajouté');setQ('');setAdding(false);onRefresh();
   };
   const migrateLegacy=async()=>{
     setAdding(true);
-    await sb.from('besoin_candidats').insert({besoin_id:besoinId,contact_id:legacyCandidatId,statut:'propose',created_by:profile.nom});
-    // Nettoyer l'ancien champ
+    const {error}=await sb.from('besoin_candidats').insert({besoin_id:besoinId,contact_id:legacyCandidatId,statut:'propose',created_by:profile.nom});
+    if(error){toast('Erreur migration : '+error.message,'error');setAdding(false);return;}
     await sb.from('besoins').update({candidat_id:null}).eq('id',besoinId);
-    setAdding(false);onRefresh();
+    toast('Candidat migré');setAdding(false);onRefresh();
   };
   const removeLegacy=async()=>{
     await sb.from('besoins').update({candidat_id:null}).eq('id',besoinId);
-    onRefresh();
+    toast('Candidat retiré');onRefresh();
   };
   const updateStatut=async(id,statut)=>{
-    await sb.from('besoin_candidats').update({statut}).eq('id',id);
+    const {error}=await sb.from('besoin_candidats').update({statut}).eq('id',id);
+    if(error){toast('Erreur : '+error.message,'error');return;}
     onRefresh();
   };
   const removeCandidat=async(id)=>{
-    await sb.from('besoin_candidats').delete().eq('id',id);
-    onRefresh();
+    const {error}=await sb.from('besoin_candidats').delete().eq('id',id);
+    if(error){toast('Erreur : '+error.message,'error');return;}
+    toast('Candidat retiré');onRefresh();
   };
 
   const statutObj=(val)=>CANDIDAT_STATUTS.find(s=>s.value===val)||CANDIDAT_STATUTS[0];
