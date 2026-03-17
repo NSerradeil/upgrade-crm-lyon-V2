@@ -102,6 +102,12 @@ const BESOIN_MOTIFS_PERTE = [
   {value:'reponse_commerciale',label:'Réponse commerciale'},{value:'autre',label:'Autre'},
 ];
 const BESOIN_HAS_CANDIDAT = new Set(['Push opportuniste','Profil proposé','Entretien programmé','Entretien passé','Besoin Gagné','Besoin Perdu']);
+const CANDIDAT_STATUTS=[
+  {value:'en_attente',label:'En attente',color:'bg-gray-100 text-gray-600',dot:'bg-gray-400'},
+  {value:'propose',label:'Proposé',color:'bg-blue-100 text-blue-700',dot:'bg-blue-500'},
+  {value:'retenu',label:'Retenu',color:'bg-green-100 text-green-700',dot:'bg-green-500'},
+  {value:'refuse',label:'Refusé',color:'bg-red-100 text-red-700',dot:'bg-red-500'},
+];
 const BESOIN_HAS_ENTRETIEN = new Set(['Entretien programmé','Entretien passé','Besoin Gagné','Besoin Perdu']);
 const BESOIN_HAS_CR = new Set(['Entretien passé','Besoin Gagné','Besoin Perdu']);
 
@@ -1735,6 +1741,82 @@ function CandidatSelector({ contacts, value, onChange }) {
   );
 }
 
+// Liste multi-candidats d'un besoin
+function BesoinCandidatsList({ besoinId, candidats, contacts, profile, readOnly, onRefresh }) {
+  const [q,setQ]=useState('');
+  const [adding,setAdding]=useState(false);
+  const pool=useMemo(()=>contacts.filter(c=>['Candidat','Consultant CDI','Freelance','Prestataire'].includes(c.statut)),[contacts]);
+  const filtered=useMemo(()=>{if(!q)return[];const s=q.toLowerCase();return pool.filter(c=>!candidats.some(bc=>bc.contact_id===c.id)&&[c.prenom,c.nom,c.groupe].some(v=>(v||'').toLowerCase().includes(s))).slice(0,10);},[pool,q,candidats]);
+  const contactMap=useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
+
+  const addCandidat=async(contactId)=>{
+    setAdding(true);
+    await sb.from('besoin_candidats').insert({besoin_id:besoinId,contact_id:contactId,statut:'en_attente',created_by:profile.nom});
+    setQ('');setAdding(false);onRefresh();
+  };
+  const updateStatut=async(id,statut)=>{
+    await sb.from('besoin_candidats').update({statut}).eq('id',id);
+    onRefresh();
+  };
+  const updateNote=async(id,note)=>{
+    await sb.from('besoin_candidats').update({note}).eq('id',id);
+  };
+  const removeCandidat=async(id)=>{
+    await sb.from('besoin_candidats').delete().eq('id',id);
+    onRefresh();
+  };
+
+  const statutObj=(val)=>CANDIDAT_STATUTS.find(s=>s.value===val)||CANDIDAT_STATUTS[0];
+
+  return (
+    <div>
+      <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">Candidats ({candidats.length})</div>
+      {candidats.length>0&&(
+        <div className="space-y-2 mb-3">
+          {candidats.map(bc=>{
+            const c=contactMap[bc.contact_id];
+            if(!c) return null;
+            const st=statutObj(bc.statut);
+            return (
+              <div key={bc.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                <div className={`w-2 h-2 rounded-full shrink-0 ${st.dot}`}/>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-900 truncate">{c.prenom} {c.nom}</div>
+                  {c.groupe&&<div className="text-xs text-gray-400 truncate">{c.groupe}</div>}
+                </div>
+                {!readOnly?(
+                  <select value={bc.statut} onChange={e=>updateStatut(bc.id,e.target.value)}
+                    className={`text-xs px-2 py-1 rounded-lg border-0 font-medium ${st.color}`}>
+                    {CANDIDAT_STATUTS.map(s=><option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                ):(
+                  <span className={`text-xs px-2 py-1 rounded-lg font-medium ${st.color}`}>{st.label}</span>
+                )}
+                {!readOnly&&<button onClick={()=>removeCandidat(bc.id)} className="text-gray-300 hover:text-red-500 text-sm shrink-0" title="Retirer">×</button>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {!readOnly&&(
+        <div className="relative">
+          <input type="text" value={q} onChange={e=>setQ(e.target.value)} placeholder="Ajouter un candidat..." className={inputCls+' text-sm'} disabled={adding}/>
+          {q&&filtered.length>0&&(
+            <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+              {filtered.map(c=>(
+                <div key={c.id} onClick={()=>addCandidat(c.id)} className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm flex items-center gap-2">
+                  <span>{c.prenom} {c.nom}</span><StatutBadge statut={c.statut}/>{c.groupe&&<span className="text-xs text-gray-400">{c.groupe}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+          {q&&filtered.length===0&&!adding&&<div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border rounded-lg shadow-lg px-3 py-2 text-sm text-gray-400">Aucun candidat trouvé</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Sélecteur de contact par recherche, filtré par statuts autorisés
 function ContactSearchField({ contacts, value, onChange, statuts, placeholder }) {
   const [q,setQ]=useState('');
@@ -1835,7 +1917,7 @@ function AddBesoinModal({ contacts, profile, allProfiles, onClose, onSaved }) {
 }
 
 // Panneau détail besoin (SidePanel)
-function BesoinDetail({ besoin, contacts, historique, taches, missions, besoins, profile, allProfiles, onClose, onRefresh }) {
+function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, missions, besoins, profile, allProfiles, onClose, onRefresh }) {
   const isAdmin=profile.role==='admin';
   const isOwner=isAdmin||besoin.responsable===profile.nom;
   const [editing,setEditing]=useState(false);
@@ -1845,6 +1927,7 @@ function BesoinDetail({ besoin, contacts, historique, taches, missions, besoins,
   const [deleting,setDeleting]=useState(false);
   const contact=contacts.find(c=>c.id===besoin.contact_id);
   const candidat=contacts.find(c=>c.id===besoin.candidat_id);
+  const mesCandidats=(besoinCandidats||[]).filter(bc=>bc.besoin_id===besoin.id);
   const besoinHist=historique.filter(h=>h.besoin_id===besoin.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const besoinTaches=taches.filter(t=>t.besoin_id===besoin.id&&t.statut!=='fait'&&t.statut!=='annule');
   // Indicateurs Besoin Gagné
@@ -1859,7 +1942,8 @@ function BesoinDetail({ besoin, contacts, historique, taches, missions, besoins,
     // Validation Besoin Gagné : candidat + contact obligatoires
     if(f.statut==='Besoin Gagné'){
       const errs={};
-      if(!f.candidat_id) errs.candidat='Merci de renseigner un candidat avant de passer ce besoin à Gagné. Il deviendra le consultant sur la mission.';
+      const hasCandidat=mesCandidats.length>0||f.candidat_id;
+      if(!hasCandidat) errs.candidat='Merci d\'ajouter au moins un candidat avant de passer ce besoin à Gagné.';
       if(!f.contact_id) errs.contact='Merci de renseigner un contact lié avant de passer ce besoin à Gagné. Il deviendra le référent client sur la mission.';
       if(Object.keys(errs).length){setGagneErrors(errs);setSaving(false);return;}
     }
@@ -1942,11 +2026,15 @@ function BesoinDetail({ besoin, contacts, historique, taches, missions, besoins,
       {editing?<Field label="Budget"><BudgetInput budget={f.budget} tjm={f.budget_tjm} jours={f.budget_jours} dateDebut={f.budget_date_debut} dateFin={f.budget_date_fin} onChange={upd=>setF(v=>({...v,...upd}))}/></Field>
         :besoin.budget>0&&<div className="text-sm"><span className="text-gray-400">Budget : </span><span className="font-medium text-green-700">{fmtCurrency(besoin.budget)}</span></div>}
 
-      {/* Candidat */}
-      {BESOIN_HAS_CANDIDAT.has(f.statut)&&(editing
-        ?<Field label="Candidat"><CandidatSelector contacts={contacts} value={f.candidat_id} onChange={cid=>{setF(v=>({...v,candidat_id:cid}));setGagneErrors(e=>({...e,candidat:undefined}));}}/>{gagneErrors.candidat&&<div className="text-xs text-red-600 mt-1">{gagneErrors.candidat}</div>}</Field>
-        :candidat&&<div className="text-sm"><span className="text-gray-400">Candidat : </span>{candidat.prenom} {candidat.nom} <StatutBadge statut={candidat.statut}/></div>
+      {/* Candidats (multi) */}
+      {BESOIN_HAS_CANDIDAT.has(f.statut)&&(
+        <BesoinCandidatsList besoinId={besoin.id} candidats={mesCandidats} contacts={contacts} profile={profile} readOnly={!isOwner} onRefresh={onRefresh}/>
       )}
+      {/* Candidat principal legacy (si pas encore migré) */}
+      {BESOIN_HAS_CANDIDAT.has(f.statut)&&mesCandidats.length===0&&candidat&&!editing&&(
+        <div className="text-sm"><span className="text-gray-400">Candidat : </span>{candidat.prenom} {candidat.nom} <StatutBadge statut={candidat.statut}/></div>
+      )}
+      {editing&&BESOIN_HAS_CANDIDAT.has(f.statut)&&gagneErrors.candidat&&<div className="text-xs text-red-600">{gagneErrors.candidat}</div>}
 
       {/* Entretien */}
       {BESOIN_HAS_ENTRETIEN.has(f.statut)&&(editing
@@ -2048,11 +2136,13 @@ function BesoinDetail({ besoin, contacts, historique, taches, missions, besoins,
           </div>
         </Modal>
       )}
-      {modal==='createMission'&&(
-        <MissionFormModal
+      {modal==='createMission'&&(()=>{
+        const retenu=mesCandidats.find(bc=>bc.statut==='retenu');
+        const missionCandidat=retenu?contacts.find(c=>c.id===retenu.contact_id):candidat;
+        return <MissionFormModal
           mission={{
-            consultant:candidat?`${candidat.prenom} ${candidat.nom}`:'',
-            contact_consultant_id:besoin.candidat_id||null,
+            consultant:missionCandidat?`${missionCandidat.prenom} ${missionCandidat.nom}`:'',
+            contact_consultant_id:missionCandidat?.id||null,
             client:besoin.compte||contact?.groupe||'',
             projet:besoin.titre,
             tjm:besoin.tjm_vente||'',
@@ -2072,14 +2162,14 @@ function BesoinDetail({ besoin, contacts, historique, taches, missions, besoins,
           onClose={()=>{setModal(null);onRefresh();}}
           onSaved={()=>{setModal(null);onRefresh();}}
           prefillBesoinId={besoin.id}
-        />
-      )}
+        />;
+      })()}
     </SidePanel>
   );
 }
 
 // ── Kanban Besoins ──────────────────────────────────────────────────────────
-function KanbanBesoins({ besoins, contacts, onSelect, onStatutChange }) {
+function KanbanBesoins({ besoins, contacts, besoinCandidats, onSelect, onStatutChange }) {
   const contactMap=useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
   const [dragId,setDragId]=useState(null);
   const [overCol,setOverCol]=useState(null);
@@ -2117,7 +2207,8 @@ function KanbanBesoins({ besoins, contacts, onSelect, onStatutChange }) {
             <div className="kanban-items" style={{minHeight:40}}>
               {items.map(b=>{
                 const contact=contactMap[b.contact_id];
-                const candidat=contactMap[b.candidat_id];
+                const bCandidats=(besoinCandidats||[]).filter(bc=>bc.besoin_id===b.id);
+                const candidatLegacy=contactMap[b.candidat_id];
                 const nbJ=b.statut==='Besoin Gagné'?joursOuvres(b.date_demarrage,b.date_fin):0;
                 const ca=nbJ*(b.tjm_vente||0);
                 return (
@@ -2126,7 +2217,10 @@ function KanbanBesoins({ besoins, contacts, onSelect, onStatutChange }) {
                     className={`kanban-card${dragId===b.id?' dragging':''} focus:outline-none focus:ring-2 focus:ring-blue-300`}>
                     <div className="text-xs font-medium text-gray-900 truncate">{b.titre}</div>
                     {contact&&<div className="text-xs text-gray-500 truncate">{contact.prenom} {contact.nom}</div>}
-                    {candidat&&<div className="text-xs text-blue-600 truncate">👤 {candidat.prenom} {candidat.nom}</div>}
+                    {bCandidats.length>0
+                      ?<div className="text-xs text-blue-600 truncate">👤 {bCandidats.map(bc=>{const c=contactMap[bc.contact_id];return c?`${c.prenom} ${c.nom}`:''}).filter(Boolean).join(', ')}</div>
+                      :candidatLegacy&&<div className="text-xs text-blue-600 truncate">👤 {candidatLegacy.prenom} {candidatLegacy.nom}</div>
+                    }
                     {b.statut==='Besoin Gagné'&&ca>0&&<div className="text-xs text-green-700 font-medium">{fmtCurrency(ca)}</div>}
                   </div>
                 );
@@ -2140,7 +2234,7 @@ function KanbanBesoins({ besoins, contacts, onSelect, onStatutChange }) {
 }
 
 // ── Onglet Pipeline V2 ──────────────────────────────────────────────────────
-function TabBesoins({ contacts, besoins, historique, taches, missions, profile, allProfiles, onRefresh }) {
+function TabBesoins({ contacts, besoins, besoinCandidats, historique, taches, missions, profile, allProfiles, onRefresh }) {
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
   const [filterResp,setFilterResp]=useState('');
   const [filterAgence,setFilterAgence]=useState(profile.role==='admin'?'':profile.agence);
@@ -2175,7 +2269,9 @@ function TabBesoins({ contacts, besoins, historique, taches, missions, profile, 
         if(q){
           const c=contactMap[b.contact_id];
           const cand=contactMap[b.candidat_id];
-          if(![b.titre,b.compte,b.responsable,c?.prenom,c?.nom,c?.groupe,cand?.prenom,cand?.nom].some(v=>(v||'').toLowerCase().includes(q))) return false;
+          const bCands=(besoinCandidats||[]).filter(bc=>bc.besoin_id===b.id).map(bc=>contactMap[bc.contact_id]).filter(Boolean);
+          const candNames=bCands.flatMap(c=>[c.prenom,c.nom]);
+          if(![b.titre,b.compte,b.responsable,c?.prenom,c?.nom,c?.groupe,cand?.prenom,cand?.nom,...candNames].some(v=>(v||'').toLowerCase().includes(q))) return false;
         }
         return true;
       })
@@ -2249,7 +2345,8 @@ function TabBesoins({ contacts, besoins, historique, taches, missions, profile, 
                   </div>
                   <div className="space-y-2">{items.map(b=>{
                     const contact=contactMap[b.contact_id];
-                    const candidat=contactMap[b.candidat_id];
+                    const bCandidats=(besoinCandidats||[]).filter(bc=>bc.besoin_id===b.id);
+                    const candidatLegacy=contactMap[b.candidat_id];
                     const nbJ=b.statut==='Besoin Gagné'?joursOuvres(b.date_demarrage,b.date_fin):0;
                     const ca=nbJ*(b.tjm_vente||0);
                     const marge=ca-nbJ*(b.cjm_achat||0);
@@ -2263,7 +2360,10 @@ function TabBesoins({ contacts, besoins, historique, taches, missions, profile, 
                             <div className="flex flex-wrap gap-2 text-xs text-gray-500">
                               {contact&&<span>{contact.prenom} {contact.nom}</span>}
                               {b.compte&&<span className="text-gray-400">· {b.compte}</span>}
-                              {candidat&&<span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">👤 {candidat.prenom} {candidat.nom}</span>}
+                              {bCandidats.length>0
+                                ?bCandidats.map(bc=>{const c=contactMap[bc.contact_id];return c?<span key={bc.id} className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">👤 {c.prenom} {c.nom}</span>:null;})
+                                :candidatLegacy&&<span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">👤 {candidatLegacy.prenom} {candidatLegacy.nom}</span>
+                              }
                             </div>
                             {b.budget>0&&b.statut!=='Besoin Gagné'&&<div className="text-xs text-green-700 font-medium mt-1">{fmtCurrency(b.budget)}</div>}
                             {b.statut==='Besoin Gagné'&&ca>0&&(
@@ -2288,11 +2388,12 @@ function TabBesoins({ contacts, besoins, historique, taches, missions, profile, 
         </>
       )}
       {viewMode==='kanban'&&(
-        <KanbanBesoins besoins={sorted} contacts={contacts} onSelect={b=>setSelected(b)}
+        <KanbanBesoins besoins={sorted} contacts={contacts} besoinCandidats={besoinCandidats} onSelect={b=>setSelected(b)}
           onStatutChange={async(besoin,newStatut)=>{
             if(newStatut==='Besoin Gagné'){
               const errs=[];
-              if(!besoin.candidat_id) errs.push('Candidat manquant');
+              const hasCand=(besoinCandidats||[]).some(bc=>bc.besoin_id===besoin.id)||besoin.candidat_id;
+              if(!hasCand) errs.push('Candidat manquant');
               if(!besoin.contact_id) errs.push('Contact lié manquant');
               if(errs.length){toast(`Impossible de passer à Gagné : ${errs.join(', ')}. Ouvre le besoin pour compléter.`,'error');return;}
             }
@@ -2300,7 +2401,7 @@ function TabBesoins({ contacts, besoins, historique, taches, missions, profile, 
             onRefresh();
           }}/>
       )}
-      {selected&&<BesoinDetail besoin={selected} contacts={contacts} historique={historique} taches={taches} missions={missions} besoins={besoins} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{onRefresh();setSelected(null);}}/>}
+      {selected&&<BesoinDetail besoin={selected} contacts={contacts} besoinCandidats={besoinCandidats} historique={historique} taches={taches} missions={missions} besoins={besoins} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{onRefresh();setSelected(null);}}/>}
       {showAdd&&<AddBesoinModal contacts={contacts} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
     </div>
   );
@@ -2411,7 +2512,7 @@ function besoinValeurBrute(b){
   if(b.budget_tjm&&b.budget_jours) return b.budget_tjm*b.budget_jours;
   return 0;
 }
-function TabPipe({ besoins, contacts, historique, taches, missions, profile, allProfiles, onRefresh }) {
+function TabPipe({ besoins, contacts, besoinCandidats, historique, taches, missions, profile, allProfiles, onRefresh }) {
   const isAdmin=profile.role==='admin';
   const [filterAgence,setFilterAgence]=useState('');
   const [filterResp,setFilterResp]=useState(isAdmin?'':profile.nom);
@@ -2673,7 +2774,7 @@ function TabPipe({ besoins, contacts, historique, taches, missions, profile, all
       </div>
 
       {/* BesoinDetail panel */}
-      {selected&&<BesoinDetail besoin={besoins.find(b=>b.id===selected.id)||selected} contacts={contacts} besoins={besoins} taches={taches} missions={missions} historique={historique} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
+      {selected&&<BesoinDetail besoin={besoins.find(b=>b.id===selected.id)||selected} contacts={contacts} besoinCandidats={besoinCandidats} besoins={besoins} taches={taches} missions={missions} historique={historique} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
     </div>
   );
 }
@@ -3238,6 +3339,7 @@ function App() {
         {data:contacts,  error:e1},{data:historique,error:e2},
         {data:taches,    error:e3},{data:besoins,   error:e4},
         {data:missions,  error:e5},{data:histMiss,  error:e6},
+        {data:besoinCandidats,error:e7},
       ] = await Promise.all([
         sb.from('contacts').select('*').order('id'),
         sb.from('historique_actions').select('*').order('date',{ascending:false}).limit(2000),
@@ -3245,11 +3347,12 @@ function App() {
         sb.from('besoins').select('*').order('created_at',{ascending:false}),
         sb.from('missions').select('*').order('consultant'),
         sb.from('historique_missions').select('*').order('date',{ascending:false}),
+        sb.from('besoin_candidats').select('*').order('created_at',{ascending:true}),
       ]);
       const err=e1||e2||e3||e4;
       if(err) throw new Error(err.message);
-      // e5/e6 peuvent échouer si tables pas encore créées — on ignore silencieusement
-      setData({contacts,historique,taches,besoins,missions:missions||[],histMissions:histMiss||[]});
+      // e5/e6/e7 peuvent échouer si tables pas encore créées — on ignore silencieusement
+      setData({contacts,historique,taches,besoins,missions:missions||[],histMissions:histMiss||[],besoinCandidats:besoinCandidats||[]});
       setLastRefresh(new Date().toLocaleTimeString('fr-FR'));
     } catch(err){ setError(err.message); } finally{ setLoading(false); }
   },[]);
@@ -3302,7 +3405,7 @@ function App() {
   if(!data||!profile) return <Loader label="Chargement depuis Supabase..."/>;
   if(error) return <div className="flex items-center justify-center min-h-screen"><div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md text-center"><div className="text-3xl mb-3">❌</div><div className="font-semibold text-red-800">Erreur Supabase</div><div className="text-sm text-red-600 mt-2 font-mono">{error}</div><button onClick={fetchAll} className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg text-sm">Réessayer</button></div></div>;
 
-  const {contacts,historique,taches,besoins,missions,histMissions}=data;
+  const {contacts,historique,taches,besoins,missions,histMissions,besoinCandidats}=data;
   const isAdmin=profile.role==='admin';
 
   // ── Mode "Voir comme" ──────────────────────────────────
@@ -3389,8 +3492,8 @@ function App() {
       <div className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-6">
         {tab==='prospects'&&<TabProspects contacts={vContacts} historique={vHistorique} taches={vTaches} missions={vMissions} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
         {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} besoins={vBesoins} missions={vMissions} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance}/>}
-        {tab==='besoins'  &&<TabBesoins  contacts={vContacts} besoins={vBesoins} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
-        {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
+        {tab==='besoins'  &&<TabBesoins  contacts={vContacts} besoins={vBesoins} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
+        {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
         {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} taches={vTaches} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
         {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
       </div>
