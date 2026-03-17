@@ -3408,7 +3408,22 @@ function App() {
       const err=e1||e2||e3||e4;
       if(err) throw new Error(err.message);
       // e5/e6/e7 peuvent échouer si tables pas encore créées — on ignore silencieusement
-      setData({contacts,historique,taches,besoins,missions:missions||[],histMissions:histMiss||[],besoinCandidats:besoinCandidats||[]});
+      const mList=missions||[];
+      // Auto-status missions : New→En cours si démarrée, En cours→Terminée si date fin dépassée
+      const today=new Date().toISOString().slice(0,10);
+      const autoUpdates=mList.filter(m=>{
+        if(m.statut==='New'&&m.date_debut_mission&&m.date_debut_mission.slice(0,10)<=today) return true;
+        if(m.statut==='En cours'&&m.date_fin_mission&&m.date_fin_mission.slice(0,10)<today) return true;
+        return false;
+      });
+      if(autoUpdates.length>0){
+        await Promise.all(autoUpdates.map(m=>{
+          const newStatut=m.statut==='New'?'En cours':'Terminée';
+          m.statut=newStatut;
+          return sb.from('missions').update({statut:newStatut}).eq('id',m.id);
+        }));
+      }
+      setData({contacts,historique,taches,besoins,missions:mList,histMissions:histMiss||[],besoinCandidats:besoinCandidats||[]});
       setLastRefresh(new Date().toLocaleTimeString('fr-FR'));
     } catch(err){ setError(err.message); } finally{ setLoading(false); }
   },[]);
