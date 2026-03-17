@@ -3472,7 +3472,7 @@ function App() {
   const vHistorique = activeIsAdmin ? historique : historique.filter(h=>h.responsable===activeProfile.nom);
   const vTaches     = activeIsAdmin ? taches     : taches.filter(t=>t.responsable===activeProfile.nom);
   const vMissions   = activeIsAdmin ? missions   : missions.filter(m=>m.responsable===activeProfile.nom);
-  const vBesoins    = activeIsAdmin ? besoins    : besoins.filter(b=>contactAgenceMap[String(b.contact_id)]===activeProfile.agence);
+  const vBesoins    = activeIsAdmin ? besoins    : besoins.filter(b=>contactAgenceMap[String(b.contact_id)]===activeProfile.agence||b.agence===activeProfile.agence);
   const vHistMiss   = histMissions; // filtré par missions déjà
 
   const tachesActives=vTaches.filter(t=>t.statut!=='fait'&&t.statut!=='annule');
