@@ -1742,24 +1742,37 @@ function CandidatSelector({ contacts, value, onChange }) {
 }
 
 // Liste multi-candidats d'un besoin
-function BesoinCandidatsList({ besoinId, candidats, contacts, profile, readOnly, onRefresh }) {
+function BesoinCandidatsList({ besoinId, candidats, contacts, profile, readOnly, legacyCandidatId, onClearLegacy, onRefresh }) {
   const [q,setQ]=useState('');
   const [adding,setAdding]=useState(false);
   const pool=useMemo(()=>contacts.filter(c=>['Candidat','Consultant CDI','Freelance','Prestataire'].includes(c.statut)),[contacts]);
-  const filtered=useMemo(()=>{if(!q)return[];const s=q.toLowerCase();return pool.filter(c=>!candidats.some(bc=>bc.contact_id===c.id)&&[c.prenom,c.nom,c.groupe].some(v=>(v||'').toLowerCase().includes(s))).slice(0,10);},[pool,q,candidats]);
   const contactMap=useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
+  // Le candidat legacy est-il déjà dans la liste multi ?
+  const legacyAlreadyMigrated=legacyCandidatId&&candidats.some(bc=>bc.contact_id===legacyCandidatId);
+  const legacyContact=legacyCandidatId&&!legacyAlreadyMigrated?contactMap[legacyCandidatId]:null;
+  const allIds=new Set(candidats.map(bc=>bc.contact_id));
+  if(legacyCandidatId) allIds.add(legacyCandidatId);
+  const filtered=useMemo(()=>{if(!q)return[];const s=q.toLowerCase();return pool.filter(c=>!allIds.has(c.id)&&[c.prenom,c.nom,c.groupe].some(v=>(v||'').toLowerCase().includes(s))).slice(0,10);},[pool,q,allIds]);
 
   const addCandidat=async(contactId)=>{
     setAdding(true);
     await sb.from('besoin_candidats').insert({besoin_id:besoinId,contact_id:contactId,statut:'en_attente',created_by:profile.nom});
     setQ('');setAdding(false);onRefresh();
   };
+  const migrateLegacy=async()=>{
+    setAdding(true);
+    await sb.from('besoin_candidats').insert({besoin_id:besoinId,contact_id:legacyCandidatId,statut:'propose',created_by:profile.nom});
+    // Nettoyer l'ancien champ
+    await sb.from('besoins').update({candidat_id:null}).eq('id',besoinId);
+    setAdding(false);onRefresh();
+  };
+  const removeLegacy=async()=>{
+    await sb.from('besoins').update({candidat_id:null}).eq('id',besoinId);
+    onRefresh();
+  };
   const updateStatut=async(id,statut)=>{
     await sb.from('besoin_candidats').update({statut}).eq('id',id);
     onRefresh();
-  };
-  const updateNote=async(id,note)=>{
-    await sb.from('besoin_candidats').update({note}).eq('id',id);
   };
   const removeCandidat=async(id)=>{
     await sb.from('besoin_candidats').delete().eq('id',id);
@@ -1767,10 +1780,28 @@ function BesoinCandidatsList({ besoinId, candidats, contacts, profile, readOnly,
   };
 
   const statutObj=(val)=>CANDIDAT_STATUTS.find(s=>s.value===val)||CANDIDAT_STATUTS[0];
+  const totalCount=candidats.length+(legacyContact?1:0);
 
   return (
     <div>
-      <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">Candidats ({candidats.length})</div>
+      <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">Candidats ({totalCount})</div>
+      {/* Candidat legacy non migré */}
+      {legacyContact&&(
+        <div className="flex items-center gap-2 bg-orange-50 rounded-lg px-3 py-2 mb-2">
+          <div className="w-2 h-2 rounded-full shrink-0 bg-orange-400"/>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-medium text-gray-900 truncate">{legacyContact.prenom} {legacyContact.nom}</div>
+            {legacyContact.groupe&&<div className="text-xs text-gray-400 truncate">{legacyContact.groupe}</div>}
+          </div>
+          {!readOnly&&(
+            <>
+              <button onClick={migrateLegacy} disabled={adding} className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-lg font-medium hover:bg-blue-200" title="Migrer vers la nouvelle liste">Migrer</button>
+              <button onClick={removeLegacy} className="text-gray-300 hover:text-red-500 text-sm shrink-0" title="Retirer">×</button>
+            </>
+          )}
+          {readOnly&&<span className="text-xs px-2 py-1 rounded-lg font-medium bg-orange-100 text-orange-600">Legacy</span>}
+        </div>
+      )}
       {candidats.length>0&&(
         <div className="space-y-2 mb-3">
           {candidats.map(bc=>{
@@ -2026,15 +2057,11 @@ function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, m
       {editing?<Field label="Budget"><BudgetInput budget={f.budget} tjm={f.budget_tjm} jours={f.budget_jours} dateDebut={f.budget_date_debut} dateFin={f.budget_date_fin} onChange={upd=>setF(v=>({...v,...upd}))}/></Field>
         :besoin.budget>0&&<div className="text-sm"><span className="text-gray-400">Budget : </span><span className="font-medium text-green-700">{fmtCurrency(besoin.budget)}</span></div>}
 
-      {/* Candidats (multi) */}
+      {/* Candidats (multi + legacy) */}
       {BESOIN_HAS_CANDIDAT.has(f.statut)&&(
-        <BesoinCandidatsList besoinId={besoin.id} candidats={mesCandidats} contacts={contacts} profile={profile} readOnly={!isOwner} onRefresh={onRefresh}/>
+        <BesoinCandidatsList besoinId={besoin.id} candidats={mesCandidats} contacts={contacts} profile={profile} readOnly={!isOwner} legacyCandidatId={besoin.candidat_id} onRefresh={onRefresh}/>
       )}
-      {/* Candidat principal legacy (si pas encore migré) */}
-      {BESOIN_HAS_CANDIDAT.has(f.statut)&&mesCandidats.length===0&&candidat&&!editing&&(
-        <div className="text-sm"><span className="text-gray-400">Candidat : </span>{candidat.prenom} {candidat.nom} <StatutBadge statut={candidat.statut}/></div>
-      )}
-      {editing&&BESOIN_HAS_CANDIDAT.has(f.statut)&&gagneErrors.candidat&&<div className="text-xs text-red-600">{gagneErrors.candidat}</div>}
+      {gagneErrors.candidat&&<div className="text-xs text-red-600">{gagneErrors.candidat}</div>}
 
       {/* Entretien */}
       {BESOIN_HAS_ENTRETIEN.has(f.statut)&&(editing
