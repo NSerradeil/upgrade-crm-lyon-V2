@@ -1445,10 +1445,18 @@ function TacheDetailPanel({ task, contact, besoinLabel, mission, besoin, histori
       {(contact||mission||besoin)&&(
         <div>
           <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">Objets liés</div>
-          <div className="flex flex-wrap gap-2">
-            {contact&&<button onClick={()=>onViewContact&&onViewContact(contact)} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-100">👤 {contact.prenom} {contact.nom}{contact.groupe?` · ${contact.groupe}`:''}</button>}
-            {mission&&<button onClick={()=>onViewMission&&onViewMission(mission)} className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-100">💼 {mission.consultant}{mission.client?` · ${mission.client}`:''}</button>}
-            {besoin&&<button onClick={()=>onViewBesoin&&onViewBesoin(besoin)} className="px-3 py-1.5 bg-orange-50 text-orange-700 rounded-lg text-xs font-medium hover:bg-orange-100">🎯 {besoin.titre||besoinLabel}</button>}
+          <div className="space-y-2">
+            {contact&&<div>
+              <button onClick={()=>onViewContact&&onViewContact(contact)} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-100 cursor-pointer">👤 {contact.prenom} {contact.nom}{contact.groupe?` · ${contact.groupe}`:''}</button>
+              {(contact.telephone||contact.email)&&<div className="ml-3 mt-1 space-y-0.5">
+                {contact.telephone&&<div><a href={`tel:${contact.telephone}`} className="text-xs text-gray-500 hover:text-blue-600" onClick={e=>e.stopPropagation()}>📞 {contact.telephone}</a></div>}
+                {contact.email&&<div><a href={`mailto:${contact.email}`} className="text-xs text-gray-500 hover:text-blue-600" onClick={e=>e.stopPropagation()}>✉️ {contact.email}</a></div>}
+              </div>}
+            </div>}
+            <div className="flex flex-wrap gap-2">
+              {mission&&<button onClick={()=>onViewMission&&onViewMission(mission)} className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-100 cursor-pointer">💼 {mission.consultant}{mission.client?` · ${mission.client}`:''}</button>}
+              {besoin&&<button onClick={()=>onViewBesoin&&onViewBesoin(besoin)} className="px-3 py-1.5 bg-orange-50 text-orange-700 rounded-lg text-xs font-medium hover:bg-orange-100 cursor-pointer">🎯 {besoin.titre||besoinLabel}</button>}
+            </div>
           </div>
         </div>
       )}
