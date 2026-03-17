@@ -1756,9 +1756,15 @@ function BesoinCandidatsList({ besoinId, candidats, contacts, profile, readOnly,
 
   const addCandidat=async(contactId)=>{
     setAdding(true);
-    const {error}=await sb.from('besoin_candidats').insert({besoin_id:besoinId,contact_id:contactId,statut:'en_attente',created_by:profile.nom});
+    const {error}=await sb.from('besoin_candidats').insert({besoin_id:besoinId,contact_id:contactId,statut:'en_attente',tjm_propose:null,created_by:profile.nom});
     if(error){toast('Erreur ajout candidat : '+error.message,'error');setAdding(false);return;}
     toast('Candidat ajouté');setQ('');setAdding(false);onRefresh();
+  };
+  const updateTjm=async(id,val)=>{
+    const tjm=val===''?null:parseFloat(val)||0;
+    const {error}=await sb.from('besoin_candidats').update({tjm_propose:tjm}).eq('id',id);
+    if(error) toast('Erreur : '+error.message,'error');
+    else onRefresh();
   };
   const migrateLegacy=async()=>{
     setAdding(true);
@@ -1812,12 +1818,18 @@ function BesoinCandidatsList({ besoinId, candidats, contacts, profile, readOnly,
             if(!c) return null;
             const st=statutObj(bc.statut);
             return (
-              <div key={bc.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+              <div key={bc.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 flex-wrap">
                 <div className={`w-2 h-2 rounded-full shrink-0 ${st.dot}`}/>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-gray-900 truncate">{c.prenom} {c.nom}</div>
                   {c.groupe&&<div className="text-xs text-gray-400 truncate">{c.groupe}</div>}
                 </div>
+                {!readOnly?(
+                  <input type="number" placeholder="TJM" defaultValue={bc.tjm_propose||''} onBlur={e=>updateTjm(bc.id,e.target.value)}
+                    className="w-16 text-xs px-1.5 py-1 border rounded text-right" title="TJM proposé (€/j)"/>
+                ):(
+                  bc.tjm_propose>0&&<span className="text-xs text-green-700 font-medium">{bc.tjm_propose}€/j</span>
+                )}
                 {!readOnly?(
                   <select value={bc.statut} onChange={e=>updateStatut(bc.id,e.target.value)}
                     className={`text-xs px-2 py-1 rounded-lg border-0 font-medium ${st.color}`}>
@@ -2533,10 +2545,19 @@ function TabHistorique({ historique, contacts, taches, profile, allProfiles, onR
 // ── Onglet Pipe Commercial ────────────────────────────────────────────────────
 const PIPE_PROBA={'Opportunité':0.10,'Besoin ouvert':0.20,'Push opportuniste':0.15,'Profil proposé':0.40,'Entretien programmé':0.60,'Entretien passé':0.75,'Besoin Gagné':1.00,'Besoin Perdu':0};
 const PIPE_STATUTS_ORDRE=['Opportunité','Push opportuniste','Besoin ouvert','Profil proposé','Entretien programmé','Entretien passé','Besoin Gagné'];
-function besoinValeurBrute(b){
+function besoinValeurBrute(b,bCandidats){
   if(b.statut==='Besoin Gagné'&&b.tjm_vente&&(b.date_demarrage||b.date_fin)){
     const j=joursOuvres(b.date_demarrage,b.date_fin);
     if(j>0) return b.tjm_vente*j;
+  }
+  // TJM max des candidats × jours budget si disponible
+  if(bCandidats&&bCandidats.length>0){
+    const maxTjm=Math.max(...bCandidats.map(bc=>bc.tjm_propose||0));
+    if(maxTjm>0&&b.budget_jours) return maxTjm*b.budget_jours;
+    if(maxTjm>0&&b.budget_date_debut&&b.budget_date_fin){
+      const j=joursOuvres(b.budget_date_debut,b.budget_date_fin);
+      if(j>0) return maxTjm*j;
+    }
   }
   if(b.budget&&b.budget>0) return b.budget;
   if(b.budget_tjm&&b.budget_jours) return b.budget_tjm*b.budget_jours;
@@ -2570,11 +2591,16 @@ function TabPipe({ besoins, contacts, besoinCandidats, historique, taches, missi
     return map;
   },[historique]);
 
+  // Index candidats par besoin
+  const candsByBesoin=useMemo(()=>{
+    const m={};(besoinCandidats||[]).forEach(bc=>(m[bc.besoin_id]=m[bc.besoin_id]||[]).push(bc));return m;
+  },[besoinCandidats]);
+
   // Besoins enrichis (valeur + proba + risque)
   const enriched=useMemo(()=>besoins
     .filter(b=>b.statut!=='Besoin Perdu')
     .map(b=>{
-      const brute=besoinValeurBrute(b);
+      const brute=besoinValeurBrute(b,candsByBesoin[b.id]);
       const proba=PIPE_PROBA[b.statut]||0;
       const ponderee=brute*proba;
       const lastAction=lastActionByBesoin[b.id]||b.updated_at||b.created_at;
@@ -2583,7 +2609,7 @@ function TabPipe({ besoins, contacts, besoinCandidats, historique, taches, missi
       const contact=b.contact_id?contactMap[b.contact_id]:null;
       return {...b,brute,proba,ponderee,lastAction,daysInactive,atRisk,contact};
     })
-  ,[besoins,lastActionByBesoin,contactMap]);
+  ,[besoins,lastActionByBesoin,contactMap,candsByBesoin]);
 
   // Filtrage
   const filtered=useMemo(()=>enriched.filter(b=>{
