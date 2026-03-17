@@ -1948,7 +1948,7 @@ function AddBesoinModal({ contacts, profile, allProfiles, onClose, onSaved }) {
 }
 
 // Panneau détail besoin (SidePanel)
-function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, missions, besoins, profile, allProfiles, onClose, onRefresh }) {
+function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, missions, besoins, profile, allProfiles, onClose, onRefresh, onDataRefresh }) {
   const isAdmin=profile.role==='admin';
   const isOwner=isAdmin||besoin.responsable===profile.nom;
   const [editing,setEditing]=useState(false);
@@ -2059,7 +2059,7 @@ function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, m
 
       {/* Candidats (multi + legacy) */}
       {BESOIN_HAS_CANDIDAT.has(f.statut)&&(
-        <BesoinCandidatsList besoinId={besoin.id} candidats={mesCandidats} contacts={contacts} profile={profile} readOnly={!isOwner} legacyCandidatId={besoin.candidat_id} onRefresh={onRefresh}/>
+        <BesoinCandidatsList besoinId={besoin.id} candidats={mesCandidats} contacts={contacts} profile={profile} readOnly={!isOwner} legacyCandidatId={besoin.candidat_id} onRefresh={onDataRefresh||onRefresh}/>
       )}
       {gagneErrors.candidat&&<div className="text-xs text-red-600">{gagneErrors.candidat}</div>}
 
@@ -2428,7 +2428,7 @@ function TabBesoins({ contacts, besoins, besoinCandidats, historique, taches, mi
             onRefresh();
           }}/>
       )}
-      {selected&&<BesoinDetail besoin={selected} contacts={contacts} besoinCandidats={besoinCandidats} historique={historique} taches={taches} missions={missions} besoins={besoins} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{onRefresh();setSelected(null);}}/>}
+      {selected&&<BesoinDetail besoin={besoins.find(b=>b.id===selected.id)||selected} contacts={contacts} besoinCandidats={besoinCandidats} historique={historique} taches={taches} missions={missions} besoins={besoins} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{onRefresh();setSelected(null);}} onDataRefresh={onRefresh}/>}
       {showAdd&&<AddBesoinModal contacts={contacts} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
     </div>
   );
@@ -2801,7 +2801,7 @@ function TabPipe({ besoins, contacts, besoinCandidats, historique, taches, missi
       </div>
 
       {/* BesoinDetail panel */}
-      {selected&&<BesoinDetail besoin={besoins.find(b=>b.id===selected.id)||selected} contacts={contacts} besoinCandidats={besoinCandidats} besoins={besoins} taches={taches} missions={missions} historique={historique} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
+      {selected&&<BesoinDetail besoin={besoins.find(b=>b.id===selected.id)||selected} contacts={contacts} besoinCandidats={besoinCandidats} besoins={besoins} taches={taches} missions={missions} historique={historique} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}} onDataRefresh={onRefresh}/>}
     </div>
   );
 }
