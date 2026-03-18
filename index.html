@@ -715,12 +715,14 @@ function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
 }
 
 // ── Panel : Détail contact ────────────────────────────────────────────────────
-function ContactDetail({ contact, historique, taches, missions, besoins, profile, allProfiles, onClose, onRefresh }) {
+function ContactDetail({ contact, historique, taches, missions, besoins, profile, allProfiles, onClose, onRefresh, onNavToBesoin, onNavToMission }) {
   const [modal,setModal] = useState(null);
   const [deleting,setDeleting] = useState(false);
   const isOwner = profile.role==='admin' || contact.responsable===profile.nom;
   const hist = historique.filter(h=>h.id_prospect===contact.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const tachesContact = taches.filter(t=>t.contact_id===contact.id&&t.statut!=='fait'&&t.statut!=='annule');
+  const besoinsContact = (besoins||[]).filter(b=>String(b.contact_id)===String(contact.id)||String(b.candidat_id)===String(contact.id));
+  const missionsContact = (missions||[]).filter(m=>{const n=(contact.prenom+' '+contact.nom).trim().toUpperCase();return (m.consultant||'').toUpperCase()===n;});
   const saved = () => { setModal(null); onRefresh(); };
   const handleDelete = async () => {
     setDeleting(true);
@@ -752,6 +754,15 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
         {contact.ats&&<div><span className="text-gray-400">ATS</span><br/><a href={contact.ats} target="_blank" className="text-purple-500 hover:underline text-xs">→ Fiche ATS</a></div>}
       </div>
       {contact.commentaires&&<div><div className="text-xs text-gray-400 font-semibold mb-1 uppercase tracking-wide">Commentaires</div><div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap">{contact.commentaires}</div></div>}
+      {(besoinsContact.length>0||missionsContact.length>0)&&(
+        <div>
+          <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">Objets liés</div>
+          <div className="flex flex-wrap gap-2">
+            {besoinsContact.map(b=><button key={b.id} onClick={()=>{if(onNavToBesoin){onClose();onNavToBesoin(b.id);}}} className="px-3 py-1.5 bg-orange-50 text-orange-700 rounded-lg text-xs font-medium hover:bg-orange-100 cursor-pointer">🎯 {b.titre||b.poste||'Besoin'}{b.compte?' · '+b.compte:''}</button>)}
+            {missionsContact.map(m=><button key={m.id} onClick={()=>{if(onNavToMission){onClose();onNavToMission(m.id);}}} className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-100 cursor-pointer">💼 {m.client||'Mission'}{m.projet?' · '+m.projet:''}</button>)}
+          </div>
+        </div>
+      )}
       {tachesContact.length>0&&(
         <div>
           <div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">Tâches actives</div>
@@ -923,7 +934,7 @@ function DeleteMissionModal({ mission, onClose, onDeleted }) {
 }
 
 // ── Panel : Détail mission ────────────────────────────────────────────────────
-function MissionDetail({ mission, histMissions, contacts, taches, missions, besoins, profile, allProfiles, onClose, onRefresh }) {
+function MissionDetail({ mission, histMissions, contacts, taches, missions, besoins, profile, allProfiles, onClose, onRefresh, onNavToContact, onNavToBesoin }) {
   const [showAdd,setShowAdd] = useState(false);
   const [modal,setModal]=useState(null);
   const [viewContact,setViewContact]=useState(null);
@@ -961,7 +972,7 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
   </div>) : null;
 
   return (
-    <SidePanel title={consultantContact?<span className="cursor-pointer text-blue-700 hover:underline" onClick={()=>setViewContact(consultantContact)}>{mission.consultant}</span>:mission.consultant} badge={<div className="flex gap-2 flex-wrap"><MissionStatutBadge statut={mission.statut}/>{mission.agence&&<span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">{mission.agence}</span>}{mission.type_contrat&&<span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{mission.type_contrat}</span>}</div>} onClose={onClose} actions={actions}>
+    <SidePanel title={consultantContact?<span className="cursor-pointer text-blue-700 hover:underline" onClick={()=>{if(onNavToContact){onClose();onNavToContact(consultantContact.id);}else setViewContact(consultantContact);}}>{mission.consultant}</span>:mission.consultant} badge={<div className="flex gap-2 flex-wrap"><MissionStatutBadge statut={mission.statut}/>{mission.agence&&<span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">{mission.agence}</span>}{mission.type_contrat&&<span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{mission.type_contrat}</span>}</div>} onClose={onClose} actions={actions}>
       <div className="space-y-6">
         <div className="text-sm text-gray-500">{mission.client}{mission.projet?` · ${mission.projet.substring(0,60)}`:''}</div>
 
@@ -986,11 +997,12 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
           <div><span className="text-gray-400 text-xs">TJM vente</span><br/><span className="font-mono font-semibold text-gray-800">{mission.tjm>0?`${mission.tjm}€`:'—'}</span></div>
           <div><span className="text-gray-400 text-xs">TJM achat</span><br/><span className="font-mono text-gray-600">{mission.cjm>0?`${mission.cjm}€`:'—'}</span></div>
           <div><span className="text-gray-400 text-xs">Responsable</span><br/><span className="text-gray-700">{mission.responsable||'—'}</span></div>
-          <div><span className="text-gray-400 text-xs">Référent client</span><br/>{mission.referent?(referentContact?<span className="text-blue-700 cursor-pointer hover:underline" onClick={()=>setViewContact(referentContact)}>{mission.referent}</span>:<span className="text-gray-700">{mission.referent}</span>):<span className="text-gray-300">—</span>}</div>
+          <div><span className="text-gray-400 text-xs">Référent client</span><br/>{mission.referent?(referentContact?<span className="text-blue-700 cursor-pointer hover:underline" onClick={()=>{if(onNavToContact){onClose();onNavToContact(referentContact.id);}else setViewContact(referentContact);}}>{mission.referent}</span>:<span className="text-gray-700">{mission.referent}</span>):<span className="text-gray-300">—</span>}</div>
           <div><span className="text-gray-400 text-xs">Marge</span><br/><span className="text-purple-700 font-medium">{fmtCurrency(margeTotal)} ({tauxMarge.toFixed(1)}%)</span></div>
           {mission.num_commande&&<div><span className="text-gray-400 text-xs">N° commande</span><br/><span className="text-gray-700 font-mono text-xs">{mission.num_commande}</span></div>}
           {(mission.date_debut_mission||mission.date_fin_mission)&&<div><span className="text-gray-400 text-xs">Période mission</span><br/><span className="text-gray-700">{fmtDT(mission.date_debut_mission,DEFAULT_MISSION_START_TIME)||'?'} → {fmtDT(mission.date_fin_mission,DEFAULT_MISSION_END_TIME)||'?'}</span></div>}
         </div>
+        {mission.besoin_id&&(()=>{const b=(besoins||[]).find(x=>String(x.id)===String(mission.besoin_id));return b?<div><div className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">Besoin lié</div><button onClick={()=>{if(onNavToBesoin){onClose();onNavToBesoin(b.id);}}} className="px-3 py-1.5 bg-orange-50 text-orange-700 rounded-lg text-xs font-medium hover:bg-orange-100 cursor-pointer">🎯 {b.titre||b.poste||'Besoin'}{b.compte?' · '+b.compte:''}</button></div>:null;})()}
 
         {/* Jours par mois — éditable */}
         {canEdit
@@ -1058,12 +1070,13 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
 }
 
 // ── Onglet Prospects ──────────────────────────────────────────────────────────
-function TabProspects({ contacts, historique, taches, missions, besoins, profile, allProfiles, onRefresh }) {
+function TabProspects({ contacts, historique, taches, missions, besoins, profile, allProfiles, onRefresh, navContactId, navContactKey, onNavToBesoin, onNavToMission }) {
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
   const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState(profile.nom);
   const [filterAgence,setFilterAgence]=useState(profile.role==='admin'?'':profile.agence);
   const [sortCol,setSortCol]=useState('date_dernier'); const [sortDir,setSortDir]=useState('desc');
   const [selected,setSelected]=useState(null); const [showAdd,setShowAdd]=useState(false);
+  useEffect(()=>{ if(navContactId){ const c=contacts.find(x=>x.id===navContactId||String(x.id)===String(navContactId)); if(c) setSelected(c); } },[navContactKey]);
   const isAdmin=profile.role==='admin';
   const statuts=useMemo(()=>[...new Set(contacts.map(c=>c.statut).filter(Boolean))].sort(),[contacts]);
   const agences=useMemo(()=>[...new Set(allProfiles.map(p=>p.agence).filter(Boolean))].sort(),[allProfiles]);
@@ -1188,7 +1201,7 @@ function TabProspects({ contacts, historique, taches, missions, besoins, profile
           ))}</tbody>
         </table>
       </div>
-      {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} missions={missions} besoins={besoins} profile={profile} allProfiles={allProfiles} onRefresh={()=>{onRefresh();setSelected(null);}} onClose={()=>setSelected(null)}/>}
+      {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} missions={missions} besoins={besoins} profile={profile} allProfiles={allProfiles} onRefresh={()=>{onRefresh();setSelected(null);}} onClose={()=>setSelected(null)} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission}/>}
       {showAdd&&<AddContactModal profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
     </div>
   );
@@ -1566,7 +1579,7 @@ function TacheSection({ label, taches, contactMap, besoinMap, missionMap, profil
   );
 }
 
-function TabTaches({ taches, contacts, besoins, missions, historique, profile, allProfiles, onRefresh, navKey, navEcheance }) {
+function TabTaches({ taches, contacts, besoins, missions, historique, profile, allProfiles, onRefresh, navKey, navEcheance, onNavToContact, onNavToBesoin, onNavToMission }) {
   const [search,setSearch]=useState(''); const [showAdd,setShowAdd]=useState(false);
   const [filterResp,setFilterResp]=useState(profile.nom);
   const [filterEcheance,setFilterEcheance]=useState('');
@@ -1664,7 +1677,7 @@ function TabTaches({ taches, contacts, besoins, missions, historique, profile, a
         <CalendarTaches taches={actives} contactMap={contactMap} profile={profile} isAdmin={isAdmin} onComplete={setCompletingModal}/>
       )}
       {showAdd&&<AddTacheModal contacts={contacts} besoins={besoins} missions={missions} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
-      {detailTask&&(()=>{const t=detailTask;const contact=t.contact_id?contactMap[t.contact_id]:null;const besoinLabel=t.besoin_id?besoinMap[t.besoin_id]:null;const mission=t.mission_id?missionMap[t.mission_id]:null;const besoin=t.besoin_id?besoinObjMap[t.besoin_id]:null;const canEdit=isAdmin||t.responsable===profile.nom;return<TacheDetailPanel task={t} contact={contact} besoinLabel={besoinLabel} mission={mission} besoin={besoin} historique={historique} profile={profile} canEdit={canEdit} onClose={()=>setDetailTask(null)} onEdit={()=>handleEdit(t)} onComplete={()=>handleComplete(t)} onDelete={()=>handleDelete(t)} onAddAction={()=>{setDetailTask(null);onRefresh();}}/>;})()}
+      {detailTask&&(()=>{const t=detailTask;const contact=t.contact_id?contactMap[t.contact_id]:null;const besoinLabel=t.besoin_id?besoinMap[t.besoin_id]:null;const mission=t.mission_id?missionMap[t.mission_id]:null;const besoin=t.besoin_id?besoinObjMap[t.besoin_id]:null;const canEdit=isAdmin||t.responsable===profile.nom;return<TacheDetailPanel task={t} contact={contact} besoinLabel={besoinLabel} mission={mission} besoin={besoin} historique={historique} profile={profile} canEdit={canEdit} onClose={()=>setDetailTask(null)} onEdit={()=>handleEdit(t)} onComplete={()=>handleComplete(t)} onDelete={()=>handleDelete(t)} onAddAction={()=>{setDetailTask(null);onRefresh();}} onViewContact={c=>{setDetailTask(null);onNavToContact&&onNavToContact(c.id);}} onViewMission={m=>{setDetailTask(null);onNavToMission&&onNavToMission(m.id);}} onViewBesoin={b=>{setDetailTask(null);onNavToBesoin&&onNavToBesoin(b.id);}}/>;})()}
       {completingModal&&<CompleteTaskModal task={completingModal} contact={contactMap[completingModal.contact_id]||null} profile={profile} onClose={()=>setCompletingModal(null)} onSaved={()=>{setCompletingModal(null);onRefresh();}}/>}
       {editingTask&&<EditTacheModal task={editingTask} contacts={contacts} besoins={besoins} missions={missions} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingTask(null)} onSaved={()=>{setEditingTask(null);onRefresh();}}/>}
       {deletingTask&&<DeleteTacheModal task={deletingTask} onClose={()=>setDeletingTask(null)} onDeleted={()=>{setDeletingTask(null);onRefresh();}}/>}
@@ -1963,7 +1976,7 @@ function AddBesoinModal({ contacts, profile, allProfiles, onClose, onSaved }) {
 }
 
 // Panneau détail besoin (SidePanel)
-function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, missions, besoins, profile, allProfiles, onClose, onRefresh, onDataRefresh }) {
+function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, missions, besoins, profile, allProfiles, onClose, onRefresh, onDataRefresh, onNavToContact, onNavToMission }) {
   const isAdmin=profile.role==='admin';
   const isOwner=isAdmin||besoin.responsable===profile.nom;
   const [editing,setEditing]=useState(false);
@@ -2052,7 +2065,7 @@ function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, m
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div><span className="text-gray-400">Responsable</span><br/>{editing&&isAdmin?<select value={f.responsable} onChange={e=>setF(v=>({...v,responsable:e.target.value}))} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select>:<span>{besoin.responsable}</span>}</div>
         <div><span className="text-gray-400">Compte</span><br/>{editing?<CompteSearchField contacts={contacts} value={f.compte||''} onChange={compte=>setF(v=>({...v,compte}))}/>:<span>{besoin.compte||'—'}</span>}</div>
-        {contact&&<div className="col-span-2"><span className="text-gray-400">Contact</span><br/>{contact.prenom} {contact.nom} — {contact.groupe}</div>}
+        {contact&&<div className="col-span-2"><span className="text-gray-400">Contact</span><br/>{onNavToContact?<button onClick={()=>{onClose();onNavToContact(contact.id);}} className="text-blue-700 hover:underline cursor-pointer font-medium">{contact.prenom} {contact.nom} — {contact.groupe}</button>:<span>{contact.prenom} {contact.nom} — {contact.groupe}</span>}</div>}
         {besoin.lien&&!editing&&<div className="col-span-2"><span className="text-gray-400">Lien</span><br/><a href={besoin.lien} target="_blank" className="text-blue-600 hover:underline text-xs">{besoin.lien}</a></div>}
         {editing&&<div className="col-span-2"><Field label="Lien"><input type="url" value={f.lien||''} onChange={e=>setF(v=>({...v,lien:e.target.value}))} className={inputCls}/></Field></div>}
       </div>
@@ -2276,11 +2289,12 @@ function KanbanBesoins({ besoins, contacts, besoinCandidats, onSelect, onStatutC
 }
 
 // ── Onglet Pipeline V2 ──────────────────────────────────────────────────────
-function TabBesoins({ contacts, besoins, besoinCandidats, historique, taches, missions, profile, allProfiles, onRefresh }) {
+function TabBesoins({ contacts, besoins, besoinCandidats, historique, taches, missions, profile, allProfiles, onRefresh, navBesoinId, navBesoinKey, onNavToContact, onNavToMission }) {
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
   const [filterResp,setFilterResp]=useState('');
   const [filterAgence,setFilterAgence]=useState(profile.role==='admin'?'':profile.agence);
   const [selected,setSelected]=useState(null);
+  useEffect(()=>{ if(navBesoinId){ const b=besoins.find(x=>String(x.id)===String(navBesoinId)); if(b) setSelected(b); } },[navBesoinKey]);
   const [showAdd,setShowAdd]=useState(false);
   const [viewMode,setViewMode]=useState('list');
   const isAdmin=profile.role==='admin';
@@ -2443,14 +2457,14 @@ function TabBesoins({ contacts, besoins, besoinCandidats, historique, taches, mi
             onRefresh();
           }}/>
       )}
-      {selected&&<BesoinDetail besoin={besoins.find(b=>b.id===selected.id)||selected} contacts={contacts} besoinCandidats={besoinCandidats} historique={historique} taches={taches} missions={missions} besoins={besoins} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{onRefresh();setSelected(null);}} onDataRefresh={onRefresh}/>}
+      {selected&&<BesoinDetail besoin={besoins.find(b=>b.id===selected.id)||selected} contacts={contacts} besoinCandidats={besoinCandidats} historique={historique} taches={taches} missions={missions} besoins={besoins} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{onRefresh();setSelected(null);}} onDataRefresh={onRefresh} onNavToContact={onNavToContact} onNavToMission={onNavToMission}/>}
       {showAdd&&<AddBesoinModal contacts={contacts} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
     </div>
   );
 }
 
 // ── Onglet Historique ─────────────────────────────────────────────────────────
-function TabHistorique({ historique, contacts, taches, profile, allProfiles, onRefresh }) {
+function TabHistorique({ historique, contacts, taches, profile, allProfiles, onRefresh, onNavToContact, onNavToBesoin }) {
   const [search,setSearch]=useState(''); const [filterResp,setFilterResp]=useState('');
   const [filterType,setFilterType]=useState('');
   const [selected,setSelected]=useState(null);
@@ -2517,7 +2531,7 @@ function TabHistorique({ historique, contacts, taches, profile, allProfiles, onR
                   <div className="flex items-center gap-2 flex-wrap mb-0.5">
                     <span style={{backgroundColor:s.bg,color:s.color,padding:'2px 8px',borderRadius:9999,fontSize:11,fontWeight:600,whiteSpace:'nowrap'}}>{h.type_action}</span>
                     {contact&&(
-                      <button onClick={()=>setSelected(contact)} className="text-sm font-semibold text-blue-700 hover:underline">
+                      <button onClick={()=>{if(onNavToContact)onNavToContact(contact.id);else setSelected(contact);}} className="text-sm font-semibold text-blue-700 hover:underline">
                         {contact.prenom} {contact.nom}
                         {contact.groupe&&<span className="ml-1 text-xs font-normal text-gray-400">· {contact.groupe}</span>}
                       </button>
@@ -3083,8 +3097,9 @@ function EditableJoursGridCell({ mission, moisKey, moisIdx, onUpdate }) {
 }
 
 // ── Onglet TDB Missions ───────────────────────────────────────────────────────
-function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, allProfiles, onRefresh }) {
+function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, allProfiles, onRefresh, navMissionId, navMissionKey, onNavToContact, onNavToBesoin }) {
   const [selected,setSelected] = useState(null); const [showAdd,setShowAdd]=useState(false);
+  useEffect(()=>{ if(navMissionId){ const m=missions.find(x=>String(x.id)===String(navMissionId)); if(m) setSelected(m); } },[navMissionKey]);
   const [search,setSearch] = useState(''); const [filterStatut,setFilterStatut] = useState('');
   const [filterAgence,setFilterAgence] = useState(profile.role==='admin'?'':profile.agence);
   const [filterResp,setFilterResp] = useState('');
@@ -3334,7 +3349,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
         </div>
       </div>
 
-      {selected&&<MissionDetail mission={selected} histMissions={histMissions} contacts={contacts||[]} taches={taches||[]} missions={missions||[]} besoins={besoins||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
+      {selected&&<MissionDetail mission={selected} histMissions={histMissions} contacts={contacts||[]} taches={taches||[]} missions={missions||[]} besoins={besoins||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}} onNavToContact={onNavToContact} onNavToBesoin={onNavToBesoin}/>}
       {showAdd&&<MissionFormModal profile={profile} allProfiles={allProfiles} contacts={contacts||[]} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
     </div>
   );
@@ -3378,6 +3393,13 @@ function App() {
   const [viewAs,setViewAs]=useState(null); const [allProfiles,setAllProfiles]=useState([]);
   const [tachesNavKey,setTachesNavKey]=useState(0); const [tachesNavEcheance,setTachesNavEcheance]=useState('');
   const navToTaches = echeance => { setTab('taches'); setTachesNavEcheance(echeance); setTachesNavKey(k=>k+1); };
+  // Cross-tab navigation
+  const [navContactId,setNavContactId]=useState(null); const [navContactKey,setNavContactKey]=useState(0);
+  const [navBesoinId,setNavBesoinId]=useState(null); const [navBesoinKey,setNavBesoinKey]=useState(0);
+  const [navMissionId,setNavMissionId]=useState(null); const [navMissionKey,setNavMissionKey]=useState(0);
+  const navToContact = id => { setTab('prospects'); setNavContactId(id); setNavContactKey(k=>k+1); };
+  const navToBesoin = id => { setTab('besoins'); setNavBesoinId(id); setNavBesoinKey(k=>k+1); };
+  const navToMission = id => { setTab('tdb'); setNavMissionId(id); setNavMissionKey(k=>k+1); };
 
   useEffect(()=>{
     sb.auth.getUser().then(({data:{user}})=>setUser(user||null));
@@ -3561,12 +3583,12 @@ function App() {
         </div>
       )}
       <div className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-6">
-        {tab==='prospects'&&<TabProspects contacts={vContacts} historique={vHistorique} taches={vTaches} missions={vMissions} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
-        {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} besoins={vBesoins} missions={vMissions} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance}/>}
-        {tab==='besoins'  &&<TabBesoins  contacts={vContacts} besoins={vBesoins} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
+        {tab==='prospects'&&<TabProspects contacts={vContacts} historique={vHistorique} taches={vTaches} missions={vMissions} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navContactId={navContactId} navContactKey={navContactKey} onNavToBesoin={navToBesoin} onNavToMission={navToMission}/>}
+        {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} besoins={vBesoins} missions={vMissions} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToMission={navToMission}/>}
+        {tab==='besoins'  &&<TabBesoins  contacts={vContacts} besoins={vBesoins} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navBesoinId={navBesoinId} navBesoinKey={navBesoinKey} onNavToContact={navToContact} onNavToMission={navToMission}/>}
         {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
-        {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} taches={vTaches} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
-        {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
+        {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} taches={vTaches} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToBesoin={navToBesoin}/>}
+        {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navMissionId={navMissionId} navMissionKey={navMissionKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin}/>}
       </div>
       {/* Shortcuts modal */}
       {showShortcuts&&(
