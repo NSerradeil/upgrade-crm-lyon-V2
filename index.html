@@ -2641,7 +2641,7 @@ function TabPipe({ besoins, contacts, besoinCandidats, historique, taches, missi
       const ponderee=brute*proba;
       const lastAction=lastActionByBesoin[b.id]||b.updated_at||b.created_at;
       const daysInactive=daysSince(lastAction);
-      const atRisk=daysInactive>10;
+      const atRisk=daysInactive>10&&b.statut!=='Besoin Gagné';
       const contact=b.contact_id?contactMap[b.contact_id]:null;
       return {...b,brute,proba,ponderee,lastAction,daysInactive,atRisk,contact};
     })
