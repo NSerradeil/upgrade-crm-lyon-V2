@@ -855,6 +855,13 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, onClose, on
       const {error}=await sb.from('missions').insert(row);
       if(error){toast('Erreur : '+error.message,'error');setSaving(false);return;}
     }
+    // Auto-passage en Client du référent lié
+    if(f.contact_referent_id){
+      const ref=(contacts||[]).find(c=>c.id===f.contact_referent_id);
+      if(ref&&ref.statut!=='Client'){
+        await sb.from('contacts').update({statut:'Client',updated_at:new Date().toISOString()}).eq('id',ref.id);
+      }
+    }
     toast(isEdit?'Mission modifiée':'Mission créée');onSaved();
   };
   return (
@@ -3451,6 +3458,18 @@ function App() {
           m.statut=newStatut;
           return sb.from('missions').update({statut:newStatut}).eq('id',m.id);
         }));
+      }
+      // Auto-passage en Client des référents liés à une mission active
+      if(contacts&&mList.length>0){
+        const contactMap=Object.fromEntries(contacts.map(c=>[c.id,c]));
+        const toClient=mList.filter(m=>m.contact_referent_id&&(m.statut==='En cours'||m.statut==='New')).map(m=>contactMap[m.contact_referent_id]).filter(c=>c&&c.statut!=='Client');
+        const uniqueIds=[...new Set(toClient.map(c=>c.id))];
+        if(uniqueIds.length>0){
+          await Promise.all(uniqueIds.map(id=>{
+            const c=contactMap[id]; if(c) c.statut='Client';
+            return sb.from('contacts').update({statut:'Client',updated_at:new Date().toISOString()}).eq('id',id);
+          }));
+        }
       }
       setData({contacts,historique,taches,besoins,missions:mList,histMissions:histMiss||[],besoinCandidats:besoinCandidats||[]});
       setLastRefresh(new Date().toLocaleTimeString('fr-FR'));
