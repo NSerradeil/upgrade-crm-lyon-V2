@@ -896,7 +896,18 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, on
           <Field label="Référent client"><ContactSearchField contacts={contacts||[]} value={f.contact_referent_id} onChange={(id,name)=>setF(v=>({...v,contact_referent_id:id,referent:name||v.referent}))} statuts={['Client','Prospect','Decision Maker']} placeholder="Rechercher contact client..."/></Field>
         </div>
         {!prefillBesoinId&&availableBesoins.length>0&&<Field label="Besoin lié">
-          <select value={f.besoin_id||''} onChange={e=>{const bid=e.target.value;setF(v=>({...v,besoin_id:bid}));if(bid){const b=availableBesoins.find(x=>String(x.id)===bid);if(b){const consultantC=b.consultant_id?contacts.find(c=>c.id===b.consultant_id):null;const contactRef=b.contact_id?contacts.find(c=>c.id===b.contact_id):null;setF(v=>({...v,besoin_id:bid,projet:b.titre||v.projet,client:b.compte||v.client,tjm:b.tjm_vente||v.tjm,cjm:b.cjm_achat||v.cjm,date_debut_mission:b.date_demarrage||v.date_debut_mission,date_fin_mission:b.date_fin||v.date_fin_mission,...(consultantC?{contact_consultant_id:consultantC.id,consultant:`${consultantC.prenom} ${consultantC.nom}`}:{}),...(contactRef?{contact_referent_id:contactRef.id,referent:`${contactRef.prenom} ${contactRef.nom}`}:{})}));}}} className={inputCls}>
+          <select value={f.besoin_id||''} onChange={e=>{
+            const bid=e.target.value;
+            if(!bid){setF(v=>({...v,besoin_id:''}));return;}
+            const b=availableBesoins.find(x=>String(x.id)===bid);
+            if(!b){setF(v=>({...v,besoin_id:bid}));return;}
+            const consultantC=b.consultant_id?contacts.find(c=>c.id===b.consultant_id):null;
+            const contactRef=b.contact_id?contacts.find(c=>c.id===b.contact_id):null;
+            const patch={besoin_id:bid,projet:b.titre||'',client:b.compte||'',tjm:b.tjm_vente||'',cjm:b.cjm_achat||'',date_debut_mission:b.date_demarrage||'',date_fin_mission:b.date_fin||''};
+            if(consultantC){patch.contact_consultant_id=consultantC.id;patch.consultant=consultantC.prenom+' '+consultantC.nom;}
+            if(contactRef){patch.contact_referent_id=contactRef.id;patch.referent=contactRef.prenom+' '+contactRef.nom;}
+            setF(v=>({...v,...patch}));
+          }} className={inputCls}>
             <option value="">— Aucun —</option>
             {availableBesoins.map(b=><option key={b.id} value={b.id}>{b.titre}{b.compte?' · '+b.compte:''}</option>)}
           </select>
