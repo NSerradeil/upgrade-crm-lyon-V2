@@ -2610,12 +2610,22 @@ function TabPipe({ besoins, contacts, besoinCandidats, historique, taches, missi
   // Dernière action par besoin
   const lastActionByBesoin=useMemo(()=>{
     const map={};
+    // Actions explicitement liées au besoin
     (historique||[]).forEach(h=>{
       if(!h.besoin_id) return;
       if(!map[h.besoin_id]||h.date>map[h.besoin_id]) map[h.besoin_id]=h.date;
     });
+    // Aussi : actions sur le contact lié (même sans besoin_id)
+    const besoinByContact={};
+    (besoins||[]).forEach(b=>{ if(b.contact_id){ if(!besoinByContact[b.contact_id]) besoinByContact[b.contact_id]=[]; besoinByContact[b.contact_id].push(b.id); } });
+    (historique||[]).forEach(h=>{
+      if(!h.id_prospect||h.besoin_id) return; // déjà compté si besoin_id
+      const bids=besoinByContact[h.id_prospect];
+      if(!bids) return;
+      bids.forEach(bid=>{ if(!map[bid]||h.date>map[bid]) map[bid]=h.date; });
+    });
     return map;
-  },[historique]);
+  },[historique,besoins]);
 
   // Index candidats par besoin
   const candsByBesoin=useMemo(()=>{
