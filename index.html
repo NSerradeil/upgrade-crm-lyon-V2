@@ -848,7 +848,7 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, on
   const isAdmin=profile.role==='admin';
   const init=mission||{consultant:'',client:'',projet:'',tjm:'',cjm:'',statut:'En cours',type_contrat:'CDI',responsable:profile.nom,agence:profile.agence||'Lyon',num_commande:'',date_debut_mission:'',date_fin_mission:'',referent:'',contact_consultant_id:null,contact_referent_id:null};
   const [f,setF]=useState({...init, besoin_id:prefillBesoinId||init.besoin_id||'', date_debut_mission:extractDate(init.date_debut_mission), date_fin_mission:extractDate(init.date_fin_mission), debut_time:extractTime(init.date_debut_mission)||DEFAULT_MISSION_START_TIME, fin_time:extractTime(init.date_fin_mission)||DEFAULT_MISSION_END_TIME});
-  const availableBesoins=useMemo(()=>(besoins||[]).filter(b=>b.statut==='Besoin Gagné'),[besoins]);
+  const availableBesoins=useMemo(()=>(besoins||[]).filter(b=>b.statut==='Besoin Gagné'||b.statut==='Besoin Gagne'),[besoins]);
   const [jours,setJours]=useState(()=>{
     const j={};MOIS_KEYS.forEach(k=>{j[k]=mission?mission[`jours_${k}`]||'':'';});return j;
   });
