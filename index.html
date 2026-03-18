@@ -43,20 +43,38 @@ const { useState, useEffect, useMemo, useCallback, useRef } = React;
 const SUPABASE_URL = "https://ehfseahxoivfhmpiyoqa.supabase.co";
 const SUPABASE_KEY = "sb_publishable_BaNIdlZ09xavRRhG0G-ScQ_mW4hVueJ";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-function getToday() { return new Date().toISOString().slice(0, 10); }
+const TZ='Europe/Paris';
+function getToday() { return new Date().toLocaleDateString('sv-SE',{timeZone:TZ}); }
 const TODAY = getToday();
 
 // ── Helpers datetime ─────────────────────────────────────────────────────────
-// Extrait la partie date (YYYY-MM-DD) d'un datetime ISO ou date simple
-function extractDate(dt) { return dt ? String(dt).slice(0,10) : ''; }
-// Extrait l'heure (HH:MM) d'un datetime ISO ; retourne '' si date simple ou minuit
+// Extrait la partie date (YYYY-MM-DD) d'un datetime ISO ou date simple — conversion UTC→Europe/Paris
+function extractDate(dt) {
+  if(!dt) return '';
+  const s=String(dt);
+  if(s.length<=10) return s; // date simple, pas de timezone à convertir
+  const d=new Date(dt);
+  if(isNaN(d)) return s.slice(0,10);
+  return d.toLocaleDateString('sv-SE',{timeZone:TZ}); // YYYY-MM-DD en heure Paris
+}
+// Extrait l'heure (HH:MM) d'un datetime ISO — conversion UTC→Europe/Paris ; retourne '' si date simple ou minuit
 function extractTime(dt) {
   if(!dt) return '';
   const s=String(dt);
   if(s.length<=10) return ''; // date simple, pas d'heure
-  const m=s.match(/T(\d{2}:\d{2})/);
-  if(!m) return '';
-  return m[1]==='00:00'?'':m[1]; // minuit = pas d'heure explicite
+  const d=new Date(dt);
+  if(isNaN(d)) return '';
+  const t=d.toLocaleTimeString('fr-FR',{timeZone:TZ,hour:'2-digit',minute:'2-digit',hour12:false});
+  return t==='00:00'?'':t; // minuit = pas d'heure explicite
+}
+// Formate une date UTC en DD/MM/YYYY heure Paris (pour historique)
+function fmtDateParis(dt) {
+  if(!dt) return '—';
+  const s=String(dt);
+  if(s.length<=10){ const [y,mo,dd]=(s||'').split('-'); return dd&&mo&&y?`${dd}/${mo}/${y}`:'—'; }
+  const p=new Date(dt);
+  if(isNaN(p)) return s.slice(0,10);
+  return p.toLocaleDateString('fr-FR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric'});
 }
 // Combine date YYYY-MM-DD + time HH:MM → ISO string ; si pas de time, renvoie la date seule
 function combineDT(date, time) {
@@ -780,7 +798,7 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
           ? <div className="text-sm text-gray-400 italic">Aucune action enregistrée</div>
           : <div className="space-y-2">{hist.map((h,i)=>(
               <div key={i} className="flex gap-3 text-sm border-l-2 border-gray-100 pl-3">
-                <div className="text-gray-400 shrink-0 w-14">{h.date?.slice(0,10)||'—'}</div>
+                <div className="text-gray-400 shrink-0 w-14">{fmtDateParis(h.date)}</div>
                 <div>
                   <span className="font-medium text-gray-700">{h.type_action}</span>
                   {h.responsable&&h.responsable!==contact.responsable&&<span className="ml-1 text-xs text-gray-400">({h.responsable})</span>}
@@ -825,11 +843,12 @@ function AddHistMissionModal({ mission, profile, onClose, onSaved }) {
 const MISSION_STATUTS=['En cours','New','Intercontrat','Terminée'];
 const MISSION_CONTRATS=['CDI','Freelance','Prestataire','CDD','Alternance'];
 
-function MissionFormModal({ mission, profile, allProfiles, contacts, onClose, onSaved, prefillBesoinId }) {
+function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, onClose, onSaved, prefillBesoinId }) {
   const isEdit=!!mission&&!!mission.id;
   const isAdmin=profile.role==='admin';
   const init=mission||{consultant:'',client:'',projet:'',tjm:'',cjm:'',statut:'En cours',type_contrat:'CDI',responsable:profile.nom,agence:profile.agence||'Lyon',num_commande:'',date_debut_mission:'',date_fin_mission:'',referent:'',contact_consultant_id:null,contact_referent_id:null};
-  const [f,setF]=useState({...init, date_debut_mission:extractDate(init.date_debut_mission), date_fin_mission:extractDate(init.date_fin_mission), debut_time:extractTime(init.date_debut_mission)||DEFAULT_MISSION_START_TIME, fin_time:extractTime(init.date_fin_mission)||DEFAULT_MISSION_END_TIME});
+  const [f,setF]=useState({...init, besoin_id:prefillBesoinId||init.besoin_id||'', date_debut_mission:extractDate(init.date_debut_mission), date_fin_mission:extractDate(init.date_fin_mission), debut_time:extractTime(init.date_debut_mission)||DEFAULT_MISSION_START_TIME, fin_time:extractTime(init.date_fin_mission)||DEFAULT_MISSION_END_TIME});
+  const availableBesoins=useMemo(()=>(besoins||[]).filter(b=>b.statut==='Besoin Gagné'),[besoins]);
   const [jours,setJours]=useState(()=>{
     const j={};MOIS_KEYS.forEach(k=>{j[k]=mission?mission[`jours_${k}`]||'':'';});return j;
   });
@@ -846,7 +865,7 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, onClose, on
       referent:f.referent||null};
     if(f.contact_consultant_id) row.contact_consultant_id=f.contact_consultant_id;
     if(f.contact_referent_id) row.contact_referent_id=f.contact_referent_id;
-    if(prefillBesoinId) row.besoin_id=prefillBesoinId;
+    if(f.besoin_id) row.besoin_id=f.besoin_id;
     MOIS_KEYS.forEach(k=>{row[`jours_${k}`]=parseFloat(jours[k])||0;});
     if(isEdit){
       const {error}=await sb.from('missions').update(row).eq('id',mission.id);
@@ -876,6 +895,23 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, onClose, on
           <Field label="Projet"><input value={f.projet||''} onChange={s('projet')} className={inputCls} placeholder="Intitulé du projet"/></Field>
           <Field label="Référent client"><ContactSearchField contacts={contacts||[]} value={f.contact_referent_id} onChange={(id,name)=>setF(v=>({...v,contact_referent_id:id,referent:name||v.referent}))} statuts={['Client','Prospect','Decision Maker']} placeholder="Rechercher contact client..."/></Field>
         </div>
+        {!prefillBesoinId&&availableBesoins.length>0&&<Field label="Besoin lié">
+          <select value={f.besoin_id||''} onChange={e=>{
+            const bid=e.target.value;
+            if(!bid){setF(v=>({...v,besoin_id:''}));return;}
+            const b=availableBesoins.find(x=>String(x.id)===bid);
+            if(!b){setF(v=>({...v,besoin_id:bid}));return;}
+            const consultantC=b.consultant_id?contacts.find(c=>c.id===b.consultant_id):null;
+            const contactRef=b.contact_id?contacts.find(c=>c.id===b.contact_id):null;
+            const patch={besoin_id:bid,projet:b.titre||'',client:b.compte||'',tjm:b.tjm_vente||'',cjm:b.cjm_achat||'',date_debut_mission:b.date_demarrage||'',date_fin_mission:b.date_fin||''};
+            if(consultantC){patch.contact_consultant_id=consultantC.id;patch.consultant=consultantC.prenom+' '+consultantC.nom;}
+            if(contactRef){patch.contact_referent_id=contactRef.id;patch.referent=contactRef.prenom+' '+contactRef.nom;}
+            setF(v=>({...v,...patch}));
+          }} className={inputCls}>
+            <option value="">— Aucun —</option>
+            {availableBesoins.map(b=><option key={b.id} value={b.id}>{b.titre}{b.compte?' · '+b.compte:''}</option>)}
+          </select>
+        </Field>}
         <div className="grid grid-cols-3 gap-3">
           <Field label="N° commande"><input value={f.num_commande||''} onChange={s('num_commande')} className={inputCls} placeholder="5090-4210617888"/></Field>
           <Field label="Début mission">
@@ -1068,7 +1104,7 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
         </div>
       </div>
       {showAdd&&<AddHistMissionModal mission={mission} profile={profile} onClose={()=>setShowAdd(false)} onSaved={saved}/>}
-      {modal==='edit'&&<MissionFormModal mission={mission} profile={profile} allProfiles={allProfiles} contacts={contacts} onClose={()=>setModal(null)} onSaved={saved}/>}
+      {modal==='edit'&&<MissionFormModal mission={mission} profile={profile} allProfiles={allProfiles} contacts={contacts} besoins={besoins} onClose={()=>setModal(null)} onSaved={saved}/>}
       {modal==='tache'&&<AddTacheModal contacts={contacts} besoins={besoins||[]} missions={missions||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved} defaultMissionId={mission.id}/>}
       {modal==='confirmDel'&&<DeleteMissionModal mission={mission} onClose={()=>setModal(null)} onDeleted={()=>{onClose();onRefresh();}}/>}
       {viewContact&&<ContactDetail contact={viewContact} historique={[]} taches={[]} profile={profile} allProfiles={allProfiles} onClose={()=>setViewContact(null)} onRefresh={()=>{setViewContact(null);onRefresh();}}/>}
@@ -1494,7 +1530,7 @@ function TacheDetailPanel({ task, contact, besoinLabel, mission, besoin, histori
           ? <div className="text-sm text-gray-400 italic">Aucune action enregistrée sur cette tâche</div>
           : <div className="space-y-2">{taskHist.map((h,i)=>(
               <div key={i} className="flex gap-3 text-sm border-l-2 border-gray-100 pl-3">
-                <div className="text-gray-400 shrink-0 w-14">{h.date?.slice(0,10)||'—'}</div>
+                <div className="text-gray-400 shrink-0 w-14">{fmtDateParis(h.date)}</div>
                 <div>
                   <span className="font-medium text-gray-700">{h.type_action}</span>
                   {h.responsable&&<span className="ml-1 text-xs text-gray-400">({h.responsable})</span>}
@@ -2019,6 +2055,7 @@ function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, m
     const upd={statut:f.statut,titre:f.titre,lien:f.lien||null,compte:f.compte||null,contact_id:f.contact_id||null,
       description:f.description||null,budget:f.budget||0,budget_tjm:f.budget_tjm,budget_jours:f.budget_jours,
       budget_date_debut:f.budget_date_debut,budget_date_fin:f.budget_date_fin,candidat_id:f.candidat_id||null,
+      consultant_id:f.consultant_id||null,
       date_entretien:f.date_entretien||null,compte_rendu:f.compte_rendu||null,
       date_demarrage:f.date_demarrage||null,date_fin:f.date_fin||null,tjm_vente:f.tjm_vente||null,cjm_achat:f.cjm_achat||null,
       motif_perte:f.motif_perte||null,motif_perte_precision:f.motif_perte_precision||null,
@@ -2102,7 +2139,7 @@ function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, m
       {/* Entretien */}
       {BESOIN_HAS_ENTRETIEN.has(f.statut)&&(editing
         ?<Field label="Date entretien"><input type="datetime-local" value={f.date_entretien?.slice(0,16)||''} onChange={e=>setF(v=>({...v,date_entretien:e.target.value}))} className={inputCls}/></Field>
-        :besoin.date_entretien&&<div className="text-sm"><span className="text-gray-400">Entretien : </span>{new Date(besoin.date_entretien).toLocaleString('fr-FR')}</div>
+        :besoin.date_entretien&&<div className="text-sm"><span className="text-gray-400">Entretien : </span>{new Date(besoin.date_entretien).toLocaleString('fr-FR',{timeZone:TZ})}</div>
       )}
 
       {/* Compte-rendu */}
@@ -2115,6 +2152,7 @@ function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, m
       {f.statut==='Besoin Gagné'&&(editing?(
         <div className="space-y-3 bg-green-50 rounded-lg p-3">
           <div className="text-xs font-semibold text-green-800 uppercase">Besoin Gagné — Mission</div>
+          <Field label="Consultant"><ContactSearchField contacts={contacts||[]} value={f.consultant_id} onChange={(id,name)=>setF(v=>({...v,consultant_id:id,consultant_name:name||''}))} statuts={['Consultant CDI','Freelance','Prestataire']} placeholder="Rechercher consultant CDI/freelance/prestataire..."/></Field>
           <div className="grid grid-cols-2 gap-2">
             <Field label="Date démarrage"><input type="date" value={f.date_demarrage||''} onChange={e=>setF(v=>({...v,date_demarrage:e.target.value}))} className={inputCls}/></Field>
             <Field label="Date fin"><input type="date" value={f.date_fin||''} onChange={e=>setF(v=>({...v,date_fin:e.target.value}))} className={inputCls}/></Field>
@@ -2127,7 +2165,7 @@ function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, m
         <div className="bg-green-50 rounded-lg p-3">
           <div className="text-xs font-semibold text-green-800 uppercase mb-2">Mission</div>
           <div className="grid grid-cols-2 gap-2 text-sm">
-            <div><span className="text-gray-500">Période</span><br/>{besoin.date_demarrage} → {besoin.date_fin} ({nbJours}j)</div>
+            <div><span className="text-gray-500">Période</span><br/>{fmtDateParis(besoin.date_demarrage)} → {fmtDateParis(besoin.date_fin)} ({nbJours}j)</div>
             <div><span className="text-gray-500">TJM / CJM</span><br/>{besoin.tjm_vente}€ / {besoin.cjm_achat}€</div>
             <div><span className="text-gray-500">CA projeté</span><br/><span className="font-semibold text-green-700">{fmtCurrency(caProj)}</span></div>
             <div><span className="text-gray-500">Marge</span><br/><span className="font-semibold">{fmtCurrency(margeProj)} ({tauxMarge.toFixed(1)}%)</span></div>
@@ -2179,7 +2217,7 @@ function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, m
           ?<div className="text-sm text-gray-400 italic">Aucune action</div>
           :<div className="space-y-2">{besoinHist.map((h,i)=>(
             <div key={i} className="flex gap-3 text-sm border-l-2 border-gray-100 pl-3">
-              <div className="text-gray-400 shrink-0 w-14">{h.date?.slice(0,10)||'—'}</div>
+              <div className="text-gray-400 shrink-0 w-14">{fmtDateParis(h.date)}</div>
               <div><span className="font-medium text-gray-700">{h.type_action}</span>{h.details&&<div className="text-gray-500 text-xs mt-0.5">{h.details}</div>}</div>
             </div>
           ))}</div>
@@ -2203,8 +2241,9 @@ function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, m
         </Modal>
       )}
       {modal==='createMission'&&(()=>{
+        const consultantFromBesoin=besoin.consultant_id?contacts.find(c=>c.id===besoin.consultant_id):null;
         const retenu=mesCandidats.find(bc=>bc.statut==='retenu');
-        const missionCandidat=retenu?contacts.find(c=>c.id===retenu.contact_id):candidat;
+        const missionCandidat=consultantFromBesoin||(retenu?contacts.find(c=>c.id===retenu.contact_id):candidat);
         return <MissionFormModal
           mission={{
             consultant:missionCandidat?`${missionCandidat.prenom} ${missionCandidat.nom}`:'',
@@ -2224,7 +2263,7 @@ function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, m
             contact_referent_id:besoin.contact_id||null,
             besoin_id:besoin.id
           }}
-          profile={profile} allProfiles={allProfiles} contacts={contacts}
+          profile={profile} allProfiles={allProfiles} contacts={contacts} besoins={besoins}
           onClose={()=>{setModal(null);onRefresh();}}
           onSaved={()=>{setModal(null);onRefresh();}}
           prefillBesoinId={besoin.id}
@@ -2440,7 +2479,7 @@ function TabBesoins({ contacts, besoins, besoinCandidats, historique, taches, mi
                                 <span className="text-gray-400">{nbJ}j</span>
                               </div>
                             )}
-                            {b.date_entretien&&<div className="text-xs text-gray-400 mt-1">📅 {new Date(b.date_entretien).toLocaleString('fr-FR')}</div>}
+                            {b.date_entretien&&<div className="text-xs text-gray-400 mt-1">📅 {new Date(b.date_entretien).toLocaleString('fr-FR',{timeZone:TZ})}</div>}
                           </div>
                           <div className="shrink-0 text-xs text-gray-400">{b.responsable}</div>
                         </div>
@@ -2537,7 +2576,7 @@ function TabHistorique({ historique, contacts, taches, besoins, profile, allProf
           return (
             <div key={i} className="px-4 py-3 hover:bg-gray-50 transition-colors">
               <div className="flex gap-3 items-start">
-                <div className="shrink-0 w-20 text-xs text-gray-400 pt-1 tabular-nums">{h.date?.slice(0,10)||'—'}</div>
+                <div className="shrink-0 w-20 text-xs text-gray-400 pt-1 tabular-nums">{fmtDateParis(h.date)}</div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-0.5">
                     <span style={{backgroundColor:s.bg,color:s.color,padding:'2px 8px',borderRadius:9999,fontSize:11,fontWeight:600,whiteSpace:'nowrap'}}>{h.type_action}</span>
@@ -3372,7 +3411,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
       </div>
 
       {selected&&<MissionDetail mission={selected} histMissions={histMissions} contacts={contacts||[]} taches={taches||[]} missions={missions||[]} besoins={besoins||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}} onNavToContact={onNavToContact} onNavToBesoin={onNavToBesoin} onNavToTache={onNavToTache}/>}
-      {showAdd&&<MissionFormModal profile={profile} allProfiles={allProfiles} contacts={contacts||[]} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
+      {showAdd&&<MissionFormModal profile={profile} allProfiles={allProfiles} contacts={contacts||[]} besoins={besoins||[]} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
     </div>
   );
 }
@@ -3521,7 +3560,7 @@ function TabSettings({ user, profile, taches, subTab, onSubTabChange }) {
                     ))}
                   </div>
                   <div className="text-xs text-gray-600 bg-gray-50 rounded-lg p-4 space-y-2">
-                    {calInstrTab==='outlook'&&<><p className="font-medium text-gray-800">Outlook (Web/Desktop)</p><ol className="list-decimal ml-4 space-y-1"><li>Ouvrir Outlook → Calendrier</li><li>Clic droit « Ajouter un calendrier » → « À partir d'Internet »</li><li>Coller l'URL ci-dessus</li><li>Le calendrier se rafraîchit automatiquement</li></ol></>}
+                    {calInstrTab==='outlook'&&<><p className="font-medium text-gray-800">Outlook (via Outlook Web)</p><p className="text-gray-500 italic">L'app Outlook Mac/Desktop ne permet pas de s'abonner à une URL ICS. Passez par Outlook Web — le calendrier se synchronisera ensuite sur le desktop.</p><ol className="list-decimal ml-4 space-y-1"><li>Ouvrir <strong>outlook.office.com</strong> dans votre navigateur</li><li>Aller dans la vue <strong>Calendrier</strong> (icône en bas à gauche)</li><li>Cliquer « Ajouter un calendrier » → « S'abonner à partir du web »</li><li>Coller l'URL ICS ci-dessus</li><li>Nommer le calendrier (ex: « Tâches CRM Upgrade »), choisir une couleur</li><li>Valider — le calendrier apparaîtra aussi sur Outlook Desktop</li></ol></>}
                     {calInstrTab==='google'&&<><p className="font-medium text-gray-800">Google Calendar</p><ol className="list-decimal ml-4 space-y-1"><li>Ouvrir Google Calendar → Paramètres</li><li>« Ajouter un agenda » → « À partir de l'URL »</li><li>Coller l'URL ci-dessus</li><li>Mise à jour automatique toutes les 12-24h</li></ol></>}
                     {calInstrTab==='apple'&&<><p className="font-medium text-gray-800">Apple Calendar (macOS/iOS)</p><ol className="list-decimal ml-4 space-y-1"><li>Fichier → « Nouvel abonnement à un calendrier »</li><li>Coller l'URL ci-dessus</li><li>Choisir la fréquence de rafraîchissement</li></ol></>}
                   </div>
