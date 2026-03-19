@@ -1117,7 +1117,7 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
 // ── Onglet Prospects ──────────────────────────────────────────────────────────
 function TabProspects({ contacts, historique, taches, missions, besoins, profile, allProfiles, onRefresh, navContactId, navContactKey, onNavToBesoin, onNavToMission, onNavToTache }) {
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
-  const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState(profile.nom);
+  const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState('');
   const [filterAgence,setFilterAgence]=useState('');
   const [sortCol,setSortCol]=useState('date_dernier'); const [sortDir,setSortDir]=useState('desc');
   const [selected,setSelected]=useState(null); const [showAdd,setShowAdd]=useState(false);
@@ -1172,8 +1172,8 @@ function TabProspects({ contacts, historique, taches, missions, besoins, profile
     return rows;
   },[contacts,search,filterStatut,filterPeriode,filterResp,filterAgence,sortCol,sortDir]);
 
-  const hasFilter=search||filterStatut||filterPeriode||filterResp!==profile.nom||filterAgence;
-  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterPeriode('');setFilterResp(profile.nom);setFilterAgence('');};
+  const hasFilter=search||filterStatut||filterPeriode||filterResp||filterAgence;
+  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterPeriode('');setFilterResp('');setFilterAgence('');};
   const thCls="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-blue-600 whitespace-nowrap";
   return (
     <div>
