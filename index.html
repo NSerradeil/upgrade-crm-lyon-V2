@@ -3605,114 +3605,159 @@ function PreferencesPanel({ prefs, onSave, profileNom }) {
   const [filtMisAgence,setFiltMisAgence]=useState(prefs.missions_filter_agence||'');
   const [filtMisStatut,setFiltMisStatut]=useState(prefs.missions_filter_statut||'');
   const [saving,setSaving]=useState(false);
+  const [saved,setSaved]=useState(false);
 
-  const current=JSON.stringify({default_tab:defaultTab,taches_view:tachesView,besoins_view:besoinsView,pipe_ventilation:pipeVent,filter_responsable:filtResp,besoins_filter_agence:filtBesAgence,missions_filter_agence:filtMisAgence,missions_filter_statut:filtMisStatut});
-  const original=JSON.stringify({default_tab:prefs.default_tab||'taches',taches_view:prefs.taches_view||'list',besoins_view:prefs.besoins_view||'list',pipe_ventilation:prefs.pipe_ventilation||'agence',filter_responsable:prefs.filter_responsable===undefined?'moi':prefs.filter_responsable,besoins_filter_agence:prefs.besoins_filter_agence||'',missions_filter_agence:prefs.missions_filter_agence||'',missions_filter_statut:prefs.missions_filter_statut||''});
-  const hasChanges=current!==original;
+  const buildPrefs=()=>({default_tab:defaultTab,taches_view:tachesView,besoins_view:besoinsView,pipe_ventilation:pipeVent,filter_responsable:filtResp,besoins_filter_agence:filtBesAgence,missions_filter_agence:filtMisAgence,missions_filter_statut:filtMisStatut});
+  const origPrefs=()=>({default_tab:prefs.default_tab||'taches',taches_view:prefs.taches_view||'list',besoins_view:prefs.besoins_view||'list',pipe_ventilation:prefs.pipe_ventilation||'agence',filter_responsable:prefs.filter_responsable===undefined?'moi':prefs.filter_responsable,besoins_filter_agence:prefs.besoins_filter_agence||'',missions_filter_agence:prefs.missions_filter_agence||'',missions_filter_statut:prefs.missions_filter_statut||''});
+  const hasChanges=JSON.stringify(buildPrefs())!==JSON.stringify(origPrefs());
 
   const handleSave=async()=>{
     setSaving(true);
-    await onSave({...prefs,default_tab:defaultTab,taches_view:tachesView,besoins_view:besoinsView,pipe_ventilation:pipeVent,filter_responsable:filtResp,besoins_filter_agence:filtBesAgence,missions_filter_agence:filtMisAgence,missions_filter_statut:filtMisStatut});
+    const ok=await onSave({...prefs,...buildPrefs()});
     setSaving(false);
+    if(ok!==false){setSaved(true);setTimeout(()=>setSaved(false),1600);}
   };
-
-  const selectCls="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300";
-  const toggleBtn=(active)=>`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${active?'bg-blue-600 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200'}`;
+  const handleCancel=()=>{
+    const o=origPrefs();
+    setDefaultTab(o.default_tab);setTachesView(o.taches_view);setBesoinsView(o.besoins_view);setPipeVent(o.pipe_ventilation);
+    setFiltResp(o.filter_responsable);setFiltBesAgence(o.besoins_filter_agence);setFiltMisAgence(o.missions_filter_agence);setFiltMisStatut(o.missions_filter_statut);
+  };
 
   const TAB_OPTIONS=[{v:'taches',l:'✅ Tâches'},{v:'prospects',l:'📋 Contacts'},{v:'besoins',l:'🎯 Besoins'},{v:'pipe',l:'📊 Pipe'},{v:'tdb',l:'💼 Missions'},{v:'historique',l:'📖 Historique'}];
   const AGENCES=['Lyon','Paris','Bordeaux'];
 
+  const selectStyle={appearance:'none',padding:'9px 36px 9px 12px',border:'1px solid #e2e8f0',borderRadius:9,fontSize:'13.5px',fontWeight:500,color:'#1e293b',background:'white url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath d=\'M3 4.5L6 7.5L9 4.5\' fill=\'none\' stroke=\'%2394a3b8\' stroke-width=\'1.5\' stroke-linecap=\'round\'/%3E%3C/svg%3E") no-repeat right 12px center',boxShadow:'0 1px 2px rgba(0,0,0,.04)',width:'100%',outline:'none'};
+  const segGroup={display:'inline-flex',background:'#f1f5f9',borderRadius:10,padding:3,gap:2,border:'1px solid #e2e8f0'};
+  const segBtn=(active)=>({padding:'6px 14px',borderRadius:8,fontSize:13,fontWeight:active?600:400,color:active?'#1d4ed8':'#64748b',background:active?'white':'transparent',boxShadow:active?'0 1px 3px rgba(0,0,0,.12), 0 0 0 1px rgba(0,0,0,.04)':'none',border:'none',cursor:'pointer',transition:'all .15s'});
+  const cardCls="bg-white rounded-xl border shadow-sm p-5 sm:p-6";
+
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-xl border p-6 space-y-6">
-        <div>
-          <h3 className="font-semibold text-gray-900">⚙️ Préférences de navigation</h3>
-          <p className="text-xs text-gray-500 mt-1">Personnalisez votre expérience sur le CRM</p>
-        </div>
-
-        <div className="space-y-4">
-          <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Navigation</div>
+    <div className="max-w-2xl mx-auto space-y-5 pb-24">
+      {/* Card 1 — Navigation */}
+      <div className={cardCls}>
+        <div className="flex items-start gap-3 mb-5">
+          <div style={{background:'#eff6ff',borderRadius:10,padding:'8px 10px',lineHeight:1}}>
+            <span style={{fontSize:18}}>🧭</span>
+          </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Onglet à l'ouverture</label>
-            <select value={defaultTab} onChange={e=>setDefaultTab(e.target.value)} className={selectCls}>
-              {TAB_OPTIONS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
-            </select>
-            <p className="text-xs text-gray-400 mt-1">L'onglet affiché à l'ouverture du CRM</p>
+            <h3 className="font-bold text-gray-900 text-sm">Navigation</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Choisissez votre point d'entrée dans le CRM</p>
           </div>
         </div>
-
-        <div className="border-t pt-4 space-y-4">
-          <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Vues par défaut</div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Tâches</label>
-              <div className="flex gap-1">
-                <button onClick={()=>setTachesView('list')} className={toggleBtn(tachesView==='list')}>≡ Liste</button>
-                <button onClick={()=>setTachesView('calendrier')} className={toggleBtn(tachesView==='calendrier')}>📅 Calendrier</button>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Besoins</label>
-              <div className="flex gap-1">
-                <button onClick={()=>setBesoinsView('list')} className={toggleBtn(besoinsView==='list')}>≡ Liste</button>
-                <button onClick={()=>setBesoinsView('kanban')} className={toggleBtn(besoinsView==='kanban')}>⬛ Kanban</button>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Pipe</label>
-              <div className="flex gap-1">
-                <button onClick={()=>setPipeVent('agence')} className={toggleBtn(pipeVent==='agence')}>🏢 Agence</button>
-                <button onClick={()=>setPipeVent('responsable')} className={toggleBtn(pipeVent==='responsable')}>👤 Resp.</button>
-              </div>
-            </div>
-          </div>
-          <p className="text-xs text-gray-400">Changer de vue manuellement dans l'interface ne modifie pas cette préférence</p>
-        </div>
-
-        <div className="border-t pt-4 space-y-4">
-          <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Filtres par défaut</div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Responsable (Tâches & Contacts)</label>
-              <select value={filtResp} onChange={e=>setFiltResp(e.target.value)} className={selectCls}>
-                <option value="">Tous</option>
-                <option value="moi">{profileNom} (moi)</option>
-              </select>
-              <p className="text-xs text-gray-400 mt-1">Pré-filtre sur les onglets Tâches et Contacts</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Agence (Besoins)</label>
-              <select value={filtBesAgence} onChange={e=>setFiltBesAgence(e.target.value)} className={selectCls}>
-                <option value="">Toutes agences</option>
-                {AGENCES.map(a=><option key={a} value={a}>{a}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Agence (Missions)</label>
-              <select value={filtMisAgence} onChange={e=>setFiltMisAgence(e.target.value)} className={selectCls}>
-                <option value="">Toutes agences</option>
-                {AGENCES.map(a=><option key={a} value={a}>{a}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Statut mission</label>
-              <select value={filtMisStatut} onChange={e=>setFiltMisStatut(e.target.value)} className={selectCls}>
-                <option value="">Tous</option>
-                <option value="En cours">En cours</option>
-                <option value="New">New</option>
-                <option value="Intercontrat">Intercontrat</option>
-                <option value="Terminée">Terminée</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div className="border-t pt-4 flex items-center justify-between">
-          {hasChanges&&<span className="text-xs text-orange-600 font-medium">● Modifications non sauvegardées</span>}
-          {!hasChanges&&<span/>}
-          <button onClick={handleSave} disabled={!hasChanges||saving} className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${hasChanges?'bg-blue-600 text-white hover:bg-blue-700':'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>{saving?'Sauvegarde...':'Sauvegarder'}</button>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Onglet au démarrage</label>
+          <select value={defaultTab} onChange={e=>setDefaultTab(e.target.value)} style={selectStyle}>
+            {TAB_OPTIONS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+          </select>
+          <p className="text-xs text-gray-400 mt-1.5">L'onglet affiché dès que vous ouvrez le CRM</p>
         </div>
       </div>
+
+      {/* Card 2 — Vues par défaut */}
+      <div className={cardCls}>
+        <div className="flex items-start gap-3 mb-5">
+          <div style={{background:'#f0fdf4',borderRadius:10,padding:'8px 10px',lineHeight:1}}>
+            <span style={{fontSize:18}}>🎛️</span>
+          </div>
+          <div>
+            <h3 className="font-bold text-gray-900 text-sm">Vues par défaut</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Mode d'affichage à l'ouverture de chaque onglet</p>
+          </div>
+        </div>
+        <div className="space-y-0 divide-y divide-gray-50">
+          <div className="flex items-center justify-between py-3">
+            <span className="text-sm text-gray-700 font-medium">Tâches</span>
+            <div style={segGroup}>
+              <button onClick={()=>setTachesView('list')} style={segBtn(tachesView==='list')}>≡ Liste</button>
+              <button onClick={()=>setTachesView('calendrier')} style={segBtn(tachesView==='calendrier')}>📅 Calendrier</button>
+            </div>
+          </div>
+          <div className="flex items-center justify-between py-3">
+            <span className="text-sm text-gray-700 font-medium">Besoins</span>
+            <div style={segGroup}>
+              <button onClick={()=>setBesoinsView('list')} style={segBtn(besoinsView==='list')}>≡ Liste</button>
+              <button onClick={()=>setBesoinsView('kanban')} style={segBtn(besoinsView==='kanban')}>⬛ Kanban</button>
+            </div>
+          </div>
+          <div className="flex items-center justify-between py-3">
+            <span className="text-sm text-gray-700 font-medium">Pipe — Ventilation</span>
+            <div style={segGroup}>
+              <button onClick={()=>setPipeVent('agence')} style={segBtn(pipeVent==='agence')}>🏢 Agence</button>
+              <button onClick={()=>setPipeVent('responsable')} style={segBtn(pipeVent==='responsable')}>👤 Resp.</button>
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 rounded-lg px-3 py-2.5" style={{background:'#eff6ff',border:'1px solid #bfdbfe'}}>
+          <p className="text-xs" style={{color:'#1e40af'}}>Changer de vue manuellement dans l'interface ne modifie pas cette préférence — c'est une navigation temporaire.</p>
+        </div>
+      </div>
+
+      {/* Card 3 — Filtres par défaut */}
+      <div className={cardCls}>
+        <div className="flex items-start gap-3 mb-5">
+          <div style={{background:'#fef3c7',borderRadius:10,padding:'8px 10px',lineHeight:1}}>
+            <span style={{fontSize:18}}>🔍</span>
+          </div>
+          <div>
+            <h3 className="font-bold text-gray-900 text-sm">Filtres par défaut</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Pré-remplissage des filtres à l'ouverture de chaque onglet</p>
+          </div>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Responsable — Tâches & Contacts</label>
+            <select value={filtResp} onChange={e=>setFiltResp(e.target.value)} style={selectStyle}>
+              <option value="">Tous les responsables</option>
+              <option value="moi">{profileNom} (moi)</option>
+            </select>
+            <p className="text-xs text-gray-400 mt-1.5">Pré-filtre le responsable sur les onglets Tâches et Contacts</p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Agence — Besoins</label>
+              <select value={filtBesAgence} onChange={e=>setFiltBesAgence(e.target.value)} style={selectStyle}>
+                <option value="">Toutes agences</option>
+                {AGENCES.map(a=><option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Agence — Missions</label>
+              <select value={filtMisAgence} onChange={e=>setFiltMisAgence(e.target.value)} style={selectStyle}>
+                <option value="">Toutes agences</option>
+                {AGENCES.map(a=><option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Statut — Missions</label>
+            <select value={filtMisStatut} onChange={e=>setFiltMisStatut(e.target.value)} style={selectStyle}>
+              <option value="">Tous les statuts</option>
+              <option value="En cours">En cours</option>
+              <option value="New">New</option>
+              <option value="Intercontrat">Intercontrat</option>
+              <option value="Terminée">Terminée</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Save bar flottante */}
+      {(hasChanges||saved)&&(
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50" style={{animation:'slideUp .3s cubic-bezier(.34,1.56,.64,1)'}}>
+          <div className="flex items-center gap-3 px-5 py-3 rounded-2xl shadow-lg" style={{background:saved?'#166534':'#1e293b',transition:'background .3s'}}>
+            {saved?(
+              <span className="text-white text-sm font-medium">✓ Préférences sauvegardées</span>
+            ):(
+              <>
+                <span className="text-gray-300 text-sm">Modifications non sauvegardées</span>
+                <button onClick={handleCancel} className="px-3 py-1.5 text-sm font-medium text-gray-300 hover:text-white rounded-lg hover:bg-white/10 transition-colors">Annuler</button>
+                <button onClick={handleSave} disabled={saving} className="px-4 py-1.5 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50 transition-colors">{saving?'...':'Sauvegarder →'}</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      <style>{`@keyframes slideUp{from{opacity:0;transform:translate(-50%,20px)}to{opacity:1;transform:translate(-50%,0)}}`}</style>
     </div>
   );
 }
