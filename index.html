@@ -1808,7 +1808,7 @@ function CandidatSelector({ contacts, value, onChange }) {
 }
 
 // Liste multi-candidats d'un besoin
-function BesoinCandidatsList({ besoinId, candidats, contacts, profile, readOnly, legacyCandidatId, onClearLegacy, onRefresh }) {
+function BesoinCandidatsList({ besoinId, candidats, contacts, profile, readOnly, legacyCandidatId, onClearLegacy, onRefresh, onNavToContact, onClose }) {
   const [q,setQ]=useState('');
   const [adding,setAdding]=useState(false);
   const pool=useMemo(()=>contacts.filter(c=>['Candidat','Consultant CDI','Freelance','Prestataire'].includes(c.statut)),[contacts]);
@@ -1865,7 +1865,7 @@ function BesoinCandidatsList({ besoinId, candidats, contacts, profile, readOnly,
         <div className="flex items-center gap-2 bg-orange-50 rounded-lg px-3 py-2 mb-2">
           <div className="w-2 h-2 rounded-full shrink-0 bg-orange-400"/>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-gray-900 truncate">{legacyContact.prenom} {legacyContact.nom}</div>
+            {onNavToContact?<button onClick={()=>{onClose?.();onNavToContact(legacyContact.id);}} className="text-sm font-medium text-blue-700 hover:underline truncate text-left cursor-pointer">{legacyContact.prenom} {legacyContact.nom}</button>:<div className="text-sm font-medium text-gray-900 truncate">{legacyContact.prenom} {legacyContact.nom}</div>}
             {legacyContact.groupe&&<div className="text-xs text-gray-400 truncate">{legacyContact.groupe}</div>}
           </div>
           {!readOnly&&(
@@ -1887,7 +1887,7 @@ function BesoinCandidatsList({ besoinId, candidats, contacts, profile, readOnly,
               <div key={bc.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 flex-wrap">
                 <div className={`w-2 h-2 rounded-full shrink-0 ${st.dot}`}/>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-900 truncate">{c.prenom} {c.nom}</div>
+                  {onNavToContact?<button onClick={()=>{onClose?.();onNavToContact(c.id);}} className="text-sm font-medium text-blue-700 hover:underline truncate text-left cursor-pointer">{c.prenom} {c.nom}</button>:<div className="text-sm font-medium text-gray-900 truncate">{c.prenom} {c.nom}</div>}
                   {c.groupe&&<div className="text-xs text-gray-400 truncate">{c.groupe}</div>}
                 </div>
                 {!readOnly?(
@@ -2086,6 +2086,18 @@ function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, m
           return;
         }
       }
+      // Auto-création tâche entretien
+      const shouldCreateEntretienTache=f.statut==='Entretien programmé'&&f.date_entretien&&(f.date_entretien!==besoin.date_entretien||besoin.statut!=='Entretien programmé');
+      if(shouldCreateEntretienTache){
+        const alreadyHasEntretienTache=taches.some(t=>t.besoin_id===besoin.id&&(t.titre||'').startsWith('Entretien —')&&t.statut!=='fait'&&t.statut!=='annule');
+        if(alreadyHasEntretienTache){
+          toast('📅 Entretien re-planifié — pense à mettre à jour la tâche existante');
+        } else {
+          const {error:tacheErr}=await sb.from('taches').insert({id:`tw_entretien_${besoin.id}_${Date.now()}`,titre:`Entretien — ${besoin.titre}`,statut:'en_cours',due_date:combineDT(f.date_entretien.slice(0,10),f.date_entretien.length>10?f.date_entretien.slice(11,16):null),contact_id:besoin.contact_id?parseInt(besoin.contact_id):null,besoin_id:besoin.id,mission_id:null,notes:null,responsable:f.responsable});
+          if(!tacheErr) toast('📅 Tâche entretien créée');
+          else toast('Entretien enregistré — tâche non créée','error');
+        }
+      }
       toast('Besoin modifié');setEditing(false);onRefresh();
     }
     setSaving(false);
@@ -2141,7 +2153,7 @@ function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, m
 
       {/* Candidats (multi + legacy) */}
       {BESOIN_HAS_CANDIDAT.has(f.statut)&&(
-        <BesoinCandidatsList besoinId={besoin.id} candidats={mesCandidats} contacts={contacts} profile={profile} readOnly={!isOwner} legacyCandidatId={besoin.candidat_id} onRefresh={onDataRefresh||onRefresh}/>
+        <BesoinCandidatsList besoinId={besoin.id} candidats={mesCandidats} contacts={contacts} profile={profile} readOnly={!isOwner} legacyCandidatId={besoin.candidat_id} onRefresh={onDataRefresh||onRefresh} onNavToContact={onNavToContact} onClose={onClose}/>
       )}
       {gagneErrors.candidat&&<div className="text-xs text-red-600">{gagneErrors.candidat}</div>}
 
