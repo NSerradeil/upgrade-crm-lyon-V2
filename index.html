@@ -80,7 +80,13 @@ function fmtDateParis(dt) {
 function combineDT(date, time) {
   if(!date) return null;
   if(!time) return date;
-  return `${date}T${time}:00`;
+  const dt=new Date(`${date}T${time}:00`);
+  if(isNaN(dt)) return date;
+  const off=-dt.getTimezoneOffset();
+  const sign=off>=0?'+':'-';
+  const hh=String(Math.floor(Math.abs(off)/60)).padStart(2,'0');
+  const mm=String(Math.abs(off)%60).padStart(2,'0');
+  return `${date}T${time}:00${sign}${hh}:${mm}`;
 }
 // Affiche une date/datetime de manière lisible, avec heure si != defaultTime
 function fmtDT(dt, defaultTime) {
