@@ -996,8 +996,8 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
       return full===n || c.nom?.toUpperCase()===n;
     })||null;
   };
-  const consultantContact=matchContact(mission.consultant);
-  const referentContact=matchContact(mission.referent);
+  const consultantContact=mission.contact_consultant_id?allContacts.find(c=>c.id===mission.contact_consultant_id):matchContact(mission.consultant);
+  const referentContact=mission.contact_referent_id?allContacts.find(c=>c.id===mission.contact_referent_id):matchContact(mission.referent);
 
   const joursTotal = MOIS_KEYS.reduce((s,k)=>s+(parseFloat(mission[`jours_${k}`])||0),0);
   const caTotal    = joursTotal*(parseFloat(mission.tjm)||0);
@@ -1037,6 +1037,8 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
 
         {/* Infos mission */}
         <div className="grid grid-cols-2 gap-3 text-sm">
+          <div><span className="text-gray-400 text-xs">Consultant</span><br/>{consultantContact?<span className="text-blue-700 cursor-pointer hover:underline font-medium" onClick={()=>{if(onNavToContact){onClose();onNavToContact(consultantContact.id);}else setViewContact(consultantContact);}}>{mission.consultant} ↗</span>:<span className="text-gray-700">{mission.consultant||'—'}</span>}</div>
+          <div><span className="text-gray-400 text-xs">Client</span><br/><span className="text-gray-700 font-medium">{mission.client||'—'}</span></div>
           <div><span className="text-gray-400 text-xs">TJM vente</span><br/><span className="font-mono font-semibold text-gray-800">{mission.tjm>0?`${mission.tjm}€`:'—'}</span></div>
           <div><span className="text-gray-400 text-xs">TJM achat</span><br/><span className="font-mono text-gray-600">{mission.cjm>0?`${mission.cjm}€`:'—'}</span></div>
           <div><span className="text-gray-400 text-xs">Responsable</span><br/><span className="text-gray-700">{mission.responsable||'—'}</span></div>
