@@ -1121,9 +1121,10 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
 }
 
 // ── Onglet Prospects ──────────────────────────────────────────────────────────
-function TabProspects({ contacts, historique, taches, missions, besoins, profile, allProfiles, onRefresh, navContactId, navContactKey, onNavToBesoin, onNavToMission, onNavToTache }) {
+function TabProspects({ contacts, historique, taches, missions, besoins, profile, allProfiles, onRefresh, navContactId, navContactKey, onNavToBesoin, onNavToMission, onNavToTache, prefs }) {
+  const prefResp=prefs?.filter_responsable==='moi'?profile.nom:(prefs?.filter_responsable||'');
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
-  const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState('');
+  const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState(prefResp);
   const [filterAgence,setFilterAgence]=useState('');
   const [sortCol,setSortCol]=useState('date_dernier'); const [sortDir,setSortDir]=useState('desc');
   const [selected,setSelected]=useState(null); const [showAdd,setShowAdd]=useState(false);
@@ -1629,11 +1630,12 @@ function TacheSection({ label, taches, contactMap, besoinMap, missionMap, profil
   );
 }
 
-function TabTaches({ taches, contacts, besoins, missions, historique, profile, allProfiles, onRefresh, navKey, navEcheance, navTacheId, navTacheKey, onNavToContact, onNavToBesoin, onNavToMission }) {
+function TabTaches({ taches, contacts, besoins, missions, historique, profile, allProfiles, onRefresh, navKey, navEcheance, navTacheId, navTacheKey, onNavToContact, onNavToBesoin, onNavToMission, prefs }) {
+  const tPrefResp=prefs?.filter_responsable==='moi'?profile.nom:(prefs?.filter_responsable||profile.nom);
   const [search,setSearch]=useState(''); const [showAdd,setShowAdd]=useState(false);
-  const [filterResp,setFilterResp]=useState(profile.nom);
+  const [filterResp,setFilterResp]=useState(tPrefResp);
   const [filterEcheance,setFilterEcheance]=useState('');
-  const [viewMode,setViewMode]=useState('list');
+  const [viewMode,setViewMode]=useState(prefs?.taches_view||'list');
   const [detailTask,setDetailTask]=useState(null);
   useEffect(()=>{ if(navEcheance) setFilterEcheance(navEcheance); },[navKey]);
   useEffect(()=>{ if(navTacheId){ const t=taches.find(x=>String(x.id)===String(navTacheId)); if(t) setDetailTask({...t,_date:extractDate(t.due_date),overdue:!!(t.due_date&&extractDate(t.due_date)<TODAY)}); } },[navTacheKey]);
@@ -2346,14 +2348,14 @@ function KanbanBesoins({ besoins, contacts, besoinCandidats, onSelect, onStatutC
 }
 
 // ── Onglet Pipeline V2 ──────────────────────────────────────────────────────
-function TabBesoins({ contacts, besoins, besoinCandidats, historique, taches, missions, profile, allProfiles, onRefresh, navBesoinId, navBesoinKey, onNavToContact, onNavToMission, onNavToTache }) {
+function TabBesoins({ contacts, besoins, besoinCandidats, historique, taches, missions, profile, allProfiles, onRefresh, navBesoinId, navBesoinKey, onNavToContact, onNavToMission, onNavToTache, prefs }) {
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
   const [filterResp,setFilterResp]=useState('');
-  const [filterAgence,setFilterAgence]=useState(profile.role==='admin'?'':profile.agence);
+  const [filterAgence,setFilterAgence]=useState(prefs?.besoins_filter_agence||(profile.role==='admin'?'':profile.agence));
   const [selected,setSelected]=useState(null);
   useEffect(()=>{ if(navBesoinId){ const b=besoins.find(x=>String(x.id)===String(navBesoinId)); if(b) setSelected(b); } },[navBesoinKey]);
   const [showAdd,setShowAdd]=useState(false);
-  const [viewMode,setViewMode]=useState('list');
+  const [viewMode,setViewMode]=useState(prefs?.besoins_view||'list');
   const isAdmin=profile.role==='admin';
   const contactMap=useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
 
@@ -2635,11 +2637,11 @@ function besoinValeurBrute(b,bCandidats){
   if(b.budget_tjm&&b.budget_jours) return b.budget_tjm*b.budget_jours;
   return 0;
 }
-function TabPipe({ besoins, contacts, besoinCandidats, historique, taches, missions, profile, allProfiles, onRefresh }) {
+function TabPipe({ besoins, contacts, besoinCandidats, historique, taches, missions, profile, allProfiles, onRefresh, prefs }) {
   const isAdmin=profile.role==='admin';
   const [filterAgence,setFilterAgence]=useState('');
   const [filterResp,setFilterResp]=useState(isAdmin?'':profile.nom);
-  const [ventilation,setVentilation]=useState('agence');
+  const [ventilation,setVentilation]=useState(prefs?.pipe_ventilation||'agence');
   const [riskFilter,setRiskFilter]=useState(false);
   const [donutFilter,setDonutFilter]=useState('');
   const [sortCol,setSortCol]=useState('ponderee');
@@ -3165,11 +3167,11 @@ function EditableJoursGridCell({ mission, moisKey, moisIdx, onUpdate }) {
 }
 
 // ── Onglet TDB Missions ───────────────────────────────────────────────────────
-function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, allProfiles, onRefresh, navMissionId, navMissionKey, onNavToContact, onNavToBesoin, onNavToTache }) {
+function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, allProfiles, onRefresh, navMissionId, navMissionKey, onNavToContact, onNavToBesoin, onNavToTache, prefs }) {
   const [selected,setSelected] = useState(null); const [showAdd,setShowAdd]=useState(false);
   useEffect(()=>{ if(navMissionId){ const m=missions.find(x=>String(x.id)===String(navMissionId)); if(m) setSelected(m); } },[navMissionKey]);
-  const [search,setSearch] = useState(''); const [filterStatut,setFilterStatut] = useState('');
-  const [filterAgence,setFilterAgence] = useState(profile.role==='admin'?'':profile.agence);
+  const [search,setSearch] = useState(''); const [filterStatut,setFilterStatut] = useState(prefs?.missions_filter_statut||'');
+  const [filterAgence,setFilterAgence] = useState(prefs?.missions_filter_agence||(profile.role==='admin'?'':profile.agence));
   const [filterResp,setFilterResp] = useState('');
   const [tick,setTick] = useState(0); // force re-render on optimistic update
   const forceUpdate=useCallback(()=>setTick(t=>t+1),[]);
@@ -3721,6 +3723,7 @@ function App() {
   const [data,setData]=useState(null); const [loading,setLoading]=useState(false);
   const [error,setError]=useState(null); const [tab,setTab]=useState(()=>localStorage.getItem('crm_tab')||'taches');
   useEffect(()=>{if(tab!=='settings')localStorage.setItem('crm_tab',tab);},[tab]);
+  useEffect(()=>{if(prefs.default_tab&&!localStorage.getItem('crm_tab'))setTab(prefs.default_tab);},[prefs.default_tab]);
   const [lastRefresh,setLastRefresh]=useState(null);
   const [viewAs,setViewAs]=useState(null); const [allProfiles,setAllProfiles]=useState([]);
   const [tachesNavKey,setTachesNavKey]=useState(0); const [tachesNavEcheance,setTachesNavEcheance]=useState('');
@@ -3944,12 +3947,12 @@ function App() {
         </div>
       )}
       <div className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-6">
-        {tab==='prospects'&&<TabProspects contacts={vContacts} historique={vHistorique} taches={vTaches} missions={vMissions} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navContactId={navContactId} navContactKey={navContactKey} onNavToBesoin={navToBesoin} onNavToMission={navToMission} onNavToTache={navToTache}/>}
-        {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} besoins={vBesoins} missions={vMissions} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance} navTacheId={navTacheId} navTacheKey={navTacheKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToMission={navToMission}/>}
-        {tab==='besoins'  &&<TabBesoins  contacts={vContacts} besoins={vBesoins} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navBesoinId={navBesoinId} navBesoinKey={navBesoinKey} onNavToContact={navToContact} onNavToMission={navToMission} onNavToTache={navToTache}/>}
-        {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll}/>}
+        {tab==='prospects'&&<TabProspects contacts={vContacts} historique={vHistorique} taches={vTaches} missions={vMissions} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navContactId={navContactId} navContactKey={navContactKey} onNavToBesoin={navToBesoin} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
+        {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} besoins={vBesoins} missions={vMissions} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance} navTacheId={navTacheId} navTacheKey={navTacheKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToMission={navToMission} prefs={prefs}/>}
+        {tab==='besoins'  &&<TabBesoins  contacts={vContacts} besoins={vBesoins} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navBesoinId={navBesoinId} navBesoinKey={navBesoinKey} onNavToContact={navToContact} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
+        {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} prefs={prefs}/>}
         {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache}/>}
-        {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navMissionId={navMissionId} navMissionKey={navMissionKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache}/>}
+        {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navMissionId={navMissionId} navMissionKey={navMissionKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache} prefs={prefs}/>}
         {tab==='settings' &&<TabSettings user={user} profile={profile} taches={vTaches} subTab={settingsSubTab} onSubTabChange={setSettingsSubTab} prefs={prefs} onSavePrefs={savePrefs}/>}
       </div>
       {/* Shortcuts modal */}
