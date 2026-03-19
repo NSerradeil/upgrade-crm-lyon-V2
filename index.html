@@ -1117,8 +1117,8 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
 // ── Onglet Prospects ──────────────────────────────────────────────────────────
 function TabProspects({ contacts, historique, taches, missions, besoins, profile, allProfiles, onRefresh, navContactId, navContactKey, onNavToBesoin, onNavToMission, onNavToTache }) {
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
-  const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState(profile.nom);
-  const [filterAgence,setFilterAgence]=useState(profile.role==='admin'?'':profile.agence);
+  const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState('');
+  const [filterAgence,setFilterAgence]=useState('');
   const [sortCol,setSortCol]=useState('date_dernier'); const [sortDir,setSortDir]=useState('desc');
   const [selected,setSelected]=useState(null); const [showAdd,setShowAdd]=useState(false);
   useEffect(()=>{ if(navContactId){ const c=contacts.find(x=>x.id===navContactId||String(x.id)===String(navContactId)); if(c) setSelected(c); } },[navContactKey]);
@@ -1130,9 +1130,9 @@ function TabProspects({ contacts, historique, taches, missions, besoins, profile
     Object.values(map).forEach(arr=>arr.sort());return map;
   },[allProfiles]);
   const responsablesVisibles=useMemo(()=>{
-    if(isAdmin&&!filterAgence) return [...new Set(allProfiles.map(p=>p.nom).filter(Boolean))].sort();
-    const ag=filterAgence||profile.agence;return commerciauxParAgence[ag]||[];
-  },[isAdmin,filterAgence,profile.agence,allProfiles,commerciauxParAgence]);
+    if(!filterAgence) return [...new Set(allProfiles.map(p=>p.nom).filter(Boolean))].sort();
+    return commerciauxParAgence[filterAgence]||[];
+  },[filterAgence,allProfiles,commerciauxParAgence]);
 
   const toggleSort = col => {
     if(sortCol===col) setSortDir(d=>d==='asc'?'desc':'asc');
@@ -1172,8 +1172,8 @@ function TabProspects({ contacts, historique, taches, missions, besoins, profile
     return rows;
   },[contacts,search,filterStatut,filterPeriode,filterResp,filterAgence,sortCol,sortDir]);
 
-  const hasFilter=search||filterStatut||filterPeriode||filterResp!==profile.nom||(isAdmin?filterAgence!=='':filterAgence!==profile.agence);
-  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterPeriode('');setFilterResp(profile.nom);setFilterAgence(isAdmin?'':profile.agence);};
+  const hasFilter=search||filterStatut||filterPeriode||filterResp||filterAgence;
+  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterPeriode('');setFilterResp('');setFilterAgence('');};
   const thCls="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-blue-600 whitespace-nowrap";
   return (
     <div>
@@ -1191,14 +1191,13 @@ function TabProspects({ contacts, historique, taches, missions, besoins, profile
           <option value="7j">Contactés 7 derniers jours</option>
           <option value="30j">Contactés 30 derniers jours</option>
         </select>
-        {isAdmin&&agences.length>1&&(
-          <select value={filterAgence} onChange={e=>{setFilterAgence(e.target.value);setFilterResp(e.target.value?'':profile.nom);}} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none">
+        {agences.length>1&&(
+          <select value={filterAgence} onChange={e=>{setFilterAgence(e.target.value);setFilterResp('');}} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none">
             <option value="">Toutes agences</option>{agences.map(a=><option key={a} value={a}>{a}</option>)}
           </select>
         )}
-        {!isAdmin&&<span className="px-2 sm:px-3 py-2 bg-gray-50 border rounded-lg text-sm text-gray-500 hidden sm:block">{profile.agence}</span>}
         <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none hidden sm:block">
-          <option value="">Tous{!isAdmin?` (${profile.agence})`:filterAgence?` (${filterAgence})`:''}</option>
+          <option value="">Tous{filterAgence?` (${filterAgence})`:''}</option>
           {responsablesVisibles.map(r=><option key={r} value={r}>{r}{r===profile.nom?' (moi)':''}</option>)}
         </select>
         {hasFilter&&<button onClick={resetAll} className="px-2 sm:px-3 py-2 text-sm text-gray-500 hover:text-gray-700">✕</button>}
