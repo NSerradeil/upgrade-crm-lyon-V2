@@ -297,9 +297,12 @@ const STATUT_STYLE = {
   'À définir':      { bg:'#E4E4E6', color:'#1C1F35' },
 };
 const BADGE_STYLE = { padding:'2px 8px', borderRadius:0, fontSize:11, fontWeight:700, whiteSpace:'nowrap', fontFamily:'Outfit,sans-serif', textTransform:'uppercase', letterSpacing:'0.04em' };
+function ColorBadge({ label, bg, color }) {
+  return <span style={{ ...BADGE_STYLE, backgroundColor:bg, color }}>{label}</span>;
+}
 function StatutBadge({ statut }) {
   const st = STATUT_STYLE[statut] || STATUT_STYLE['Prospect'];
-  return <span style={{ ...BADGE_STYLE, backgroundColor:st.bg, color:st.color }}>{statut||'Prospect'}</span>;
+  return <ColorBadge label={statut||'Prospect'} bg={st.bg} color={st.color}/>;
 }
 const BESOIN_BADGE_COLORS_GLOBAL = {
   'Besoin Gagné':        { bg:'#00C218', color:'#1C1F35' },
@@ -313,7 +316,7 @@ const BESOIN_BADGE_COLORS_GLOBAL = {
 };
 function BesoinBadge({ statut }) {
   const c = BESOIN_BADGE_COLORS_GLOBAL[statut] || { bg:'#E4E4E6', color:'#1C1F35' };
-  return <span style={{ ...BADGE_STYLE, backgroundColor:c.bg, color:c.color }}>{statut}</span>;
+  return <ColorBadge label={statut} bg={c.bg} color={c.color}/>;
 }
 function MissionStatutBadge({ statut }) {
   const s = ({
@@ -322,7 +325,7 @@ function MissionStatutBadge({ statut }) {
     'Intercontrat': { bg:'#FF3D2E', color:'#FFFFFF' },
     'Terminée':     { bg:'#E4E4E6', color:'#1C1F35' },
   })[statut] || { bg:'#E4E4E6', color:'#1C1F35' };
-  return <span style={{ ...BADGE_STYLE, backgroundColor:s.bg, color:s.color }}>{statut}</span>;
+  return <ColorBadge label={statut} bg={s.bg} color={s.color}/>;
 }
 // ── Icon System (Material Symbols — weight 200, optical 24dp) ─────────────
 const Icon = ({d, size=16, className=''}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 -960 960 960" className={className} style={{display:'inline-block',verticalAlign:'middle',fill:'currentColor'}}><path d={d}/></svg>;
@@ -480,6 +483,27 @@ function Field({ label, children }) {
   return <div><label className="block text-[11px] font-bold text-midnight mb-1.5 uppercase tracking-[0.12em]">{label}</label>{children}</div>;
 }
 const inputCls = "w-full px-3 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight font-[Outfit] transition-colors";
+const dateInputCls = "flex-1 px-3 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight transition-colors";
+const timeInputCls = "w-24 px-2 py-2.5 border-2 border-neutral-200 text-xs focus:outline-none focus:border-midnight transition-colors";
+function DateTimeInput({ date, time, onDateChange, onTimeChange, min }) {
+  return (
+    <div className="flex">
+      <input type="date" value={date||''} min={min} onChange={onDateChange}
+        className={dateInputCls} style={{borderRight:date?'none':undefined}}/>
+      {date && <input type="time" value={time||''} onChange={onTimeChange}
+        className={timeInputCls}/>}
+    </div>
+  );
+}
+function ModalFooter({ onClose, onSave, saving, disabled, label='Enregistrer' }) {
+  return <>
+    <button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button>
+    <button onClick={onSave} disabled={saving||disabled}
+      className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon disabled:opacity-50 btn-brutal">
+      {saving?'...':label}
+    </button>
+  </>;
+}
 // Renvoie les options allProfiles + éventuellement la valeur courante si absente (protection données legacy)
 function respOptions(allProfiles, current) {
   const list = allProfiles&&allProfiles.length>0 ? allProfiles : [];
@@ -512,7 +536,7 @@ function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
   };
   return (
     <Modal title={<><Icon d={ICONS.edit} size={14}/> Modifier — {contact.prenom} {contact.nom}</>} onClose={onClose}
-      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon disabled:opacity-50 btn-brutal">{saving?'Enregistrement...':'Enregistrer'}</button></>}>
+      footer={<ModalFooter onClose={onClose} onSave={save} saving={saving}/>}>
       {[['Groupe / Société','groupe','text'],['Rôle / Poste','role','text']].map(([l,k,t])=>(
         <Field key={k} label={l}><input type={t} value={f[k]} onChange={s(k)} className={inputCls}/></Field>
       ))}
@@ -831,7 +855,7 @@ function AddTacheModal({ contacts, besoins, missions, profile, allProfiles, onCl
 
   return (
     <Modal title={<><Icon d={ICONS.check} size={14}/> Nouvelle tâche</>} onClose={onClose}
-      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving||!f.titre.trim()} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon disabled:opacity-50 btn-brutal">{saving?'Enregistrement...':'+ Créer'}</button></>}>
+      footer={<ModalFooter onClose={onClose} onSave={save} saving={saving} disabled={!f.titre.trim()} label="+ Créer"/>}>
       <Field label="Contact lié">
         <ContactPicker contacts={myContacts} value={f.contact_id} onChange={handleContactChange}/>
       </Field>
@@ -851,10 +875,9 @@ function AddTacheModal({ contacts, besoins, missions, profile, allProfiles, onCl
       </Field>
       <Field label="Titre *"><input type="text" value={f.titre} onChange={e=>setF(v=>({...v,titre:e.target.value}))} placeholder="Sélectionne un type ou saisis directement" className={inputCls}/></Field>
       <Field label="Échéance">
-        <div className="flex">
-          <input type="date" value={f.due_date} min={TODAY} onChange={e=>setF(v=>({...v,due_date:e.target.value}))} className="flex-1 px-3 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight transition-colors" style={{borderRight:f.due_date?'none':undefined}}/>
-          {f.due_date && <input type="time" value={f.due_time} onChange={e=>setF(v=>({...v,due_time:e.target.value}))} className="w-24 px-2 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight transition-colors"/>}
-        </div>
+        <DateTimeInput date={f.due_date} time={f.due_time} min={TODAY}
+          onDateChange={e=>setF(v=>({...v,due_date:e.target.value}))}
+          onTimeChange={e=>setF(v=>({...v,due_time:e.target.value}))}/>
       </Field>
       <Field label="Mission liée">
         {defaultMissionId
@@ -899,7 +922,7 @@ function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
   };
   return (
     <Modal title={<><Icon d={ICONS.person} size={14}/> Nouveau contact</>} onClose={onClose}
-      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon disabled:opacity-50 btn-brutal">{saving?'Enregistrement...':'+ Créer'}</button></>}>
+      footer={<ModalFooter onClose={onClose} onSave={save} saving={saving} label="+ Créer"/>}>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Prénom"><input type="text" value={f.prenom} autoFocus onChange={sNorm('prenom',normPrenom)} className={inputCls} placeholder="ex: Jean-Pierre"/></Field>
         <Field label="Nom *"><input type="text" value={f.nom} onChange={sNorm('nom',normNom)} className={inputCls} placeholder="ex: DUPONT"/></Field>
@@ -1127,16 +1150,14 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, on
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Début mission">
-            <div className="flex">
-              <input type="date" value={f.date_debut_mission||''} onChange={s('date_debut_mission')} className="flex-1 px-3 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight transition-colors" style={{borderRight:f.date_debut_mission?'none':undefined}}/>
-              {f.date_debut_mission && <input type="time" value={f.debut_time} onChange={e=>setF(v=>({...v,debut_time:e.target.value}))} className="w-24 px-2 py-2.5 border-2 border-neutral-200 text-xs focus:outline-none focus:border-midnight transition-colors"/>}
-            </div>
+            <DateTimeInput date={f.date_debut_mission} time={f.debut_time}
+              onDateChange={s('date_debut_mission')}
+              onTimeChange={e=>setF(v=>({...v,debut_time:e.target.value}))}/>
           </Field>
           <Field label="Fin mission">
-            <div className="flex">
-              <input type="date" value={f.date_fin_mission||''} onChange={s('date_fin_mission')} className="flex-1 px-3 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight transition-colors" style={{borderRight:f.date_fin_mission?'none':undefined}}/>
-              {f.date_fin_mission && <input type="time" value={f.fin_time} onChange={e=>setF(v=>({...v,fin_time:e.target.value}))} className="w-24 px-2 py-2.5 border-2 border-neutral-200 text-xs focus:outline-none focus:border-midnight transition-colors"/>}
-            </div>
+            <DateTimeInput date={f.date_fin_mission} time={f.fin_time}
+              onDateChange={s('date_fin_mission')}
+              onTimeChange={e=>setF(v=>({...v,fin_time:e.target.value}))}/>
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -1549,10 +1570,10 @@ function CompleteTaskModal({ task, contact, profile, onClose, onSaved }) {
               ))}
             </div>
             {preset==='custom'&&(
-              <div className="flex mt-2">
-                <input type="date" value={customDate} min={addDays(1)}
-                  onChange={e=>setCustomDate(e.target.value)} className="flex-1 px-3 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight transition-colors" style={{borderRight:'none'}}/>
-                <input type="time" value={relanceTime} onChange={e=>setRelanceTime(e.target.value)} className="w-24 px-2 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight transition-colors"/>
+              <div className="mt-2">
+                <DateTimeInput date={customDate} time={relanceTime} min={addDays(1)}
+                  onDateChange={e=>setCustomDate(e.target.value)}
+                  onTimeChange={e=>setRelanceTime(e.target.value)}/>
               </div>
             )}
           </div>
@@ -1580,13 +1601,12 @@ function EditTacheModal({ task, contacts, besoins, missions, profile, allProfile
   };
   return (
     <Modal title={<><Icon d={ICONS.edit} size={14}/> Modifier la tâche</>} onClose={onClose}
-      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving||!f.titre.trim()} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon disabled:opacity-50 btn-brutal">{saving?'Enregistrement...':'Enregistrer'}</button></>}>
+      footer={<ModalFooter onClose={onClose} onSave={save} saving={saving} disabled={!f.titre.trim()}/>}>
       <Field label="Titre *"><input type="text" value={f.titre} autoFocus onChange={e=>setF(v=>({...v,titre:e.target.value}))} className={inputCls}/></Field>
       <Field label="Échéance">
-        <div className="flex">
-          <input type="date" value={f.due_date} min={TODAY} onChange={e=>setF(v=>({...v,due_date:e.target.value}))} className="flex-1 px-3 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight transition-colors" style={{borderRight:f.due_date?'none':undefined}}/>
-          {f.due_date && <input type="time" value={f.due_time} onChange={e=>setF(v=>({...v,due_time:e.target.value}))} className="w-24 px-2 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight transition-colors"/>}
-        </div>
+        <DateTimeInput date={f.due_date} time={f.due_time} min={TODAY}
+          onDateChange={e=>setF(v=>({...v,due_date:e.target.value}))}
+          onTimeChange={e=>setF(v=>({...v,due_time:e.target.value}))}/>
       </Field>
       {isAdmin&&<Field label="Responsable"><select value={f.responsable} onChange={e=>setF(v=>({...v,responsable:e.target.value}))} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>}
       <Field label="Contact lié">
