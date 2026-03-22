@@ -372,10 +372,13 @@ function LoginScreen() {
   const logoSnow = <svg height="32" viewBox="0 0 879 212" fill="none" xmlns="http://www.w3.org/2000/svg" style={{fill:'white'}}>{logoSvgPaths}</svg>;
   const logoMidnight = <svg height="28" viewBox="0 0 879 212" fill="none" xmlns="http://www.w3.org/2000/svg" style={{fill:'#0A0A0A'}}>{logoSvgPaths}</svg>;
   const logoHero = <svg viewBox="0 0 879 212" fill="none" xmlns="http://www.w3.org/2000/svg" style={{fill:'white',width:'clamp(200px,40vw,500px)',opacity:0,animation:'fadeSlideUp 600ms 200ms forwards'}}>{logoSvgPaths}</svg>;
+  const LOGIN_WALLPAPERS=['wallpaper-login-1.jpg','wallpaper-login-2.jpg','wallpaper-login-3.jpg','wallpaper-login-4.jpg'];
+  const LOGIN_BG_COLORS=['#1C1F35','#FF3D2E','#4A7FE5','#FFE500'];
+  const [wpIdx]=useState(()=>Math.floor(Math.random()*LOGIN_WALLPAPERS.length));
   const [mounted,setMounted]=useState(false);
   useEffect(()=>{setTimeout(()=>setMounted(true),50);},[]);
   return (
-    <div style={{minHeight:'100vh',background:'#FF3D2E',backgroundImage:'url(wallpaper-login.jpg)',backgroundSize:'cover',backgroundPosition:'center',position:'relative',overflow:'hidden',display:'flex',alignItems:'flex-end',justifyContent:'flex-end'}}>
+    <div style={{minHeight:'100vh',background:LOGIN_BG_COLORS[wpIdx],backgroundImage:`url(${LOGIN_WALLPAPERS[wpIdx]})`,backgroundSize:'cover',backgroundPosition:'center',position:'relative',overflow:'hidden',display:'flex',alignItems:'flex-end',justifyContent:'flex-end'}}>
       {/* Logo hero — top left, massive */}
       <div style={{position:'absolute',top:'clamp(24px,5vh,64px)',left:'clamp(24px,4vw,64px)',zIndex:2}}>
         {logoHero}
