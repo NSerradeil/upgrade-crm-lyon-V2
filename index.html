@@ -3403,8 +3403,9 @@ function EditableJoursCell({ mission, moisKey, moisIdx, curMonthIdx, isDebut, is
   };
 
   // Colors
-  const cellCls=j>0?(rec==='Réceptionné'?'text-jade-100 font-semibold':rec==='Livré'?'text-azure-100':'text-slate'):'text-neutral-200';
-  let cellBg=moisIdx===curMonthIdx?'bg-azure-20':'';
+  const isCurMonth=moisIdx===curMonthIdx;
+  const cellCls=isCurMonth?'text-white font-semibold':(j>0?(rec==='Réceptionné'?'text-jade-100 font-semibold':rec==='Livré'?'text-azure-100':'text-slate'):'text-neutral-200');
+  let cellBg=isCurMonth?'bg-midnight':'';
   let cellStyle={};
   if(isDebut&&isFin) cellStyle={background:'linear-gradient(90deg, rgba(34,197,94,0.15) 50%, rgba(239,68,68,'+(finSoon?'0.30':'0.15')+') 50%)'};
   else if(isDebut) cellStyle={background:'rgba(34,197,94,0.15)'};
@@ -3765,7 +3766,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
                 <th className="px-1 py-2 text-right">TJM</th>
                 <th className="px-1 py-2 text-left">Statut</th>
                 {MOIS_LABELS.map((m,i)=>(
-                  <th key={i} className={`px-1 py-2 text-right whitespace-nowrap ${i===curMonthIdx?'text-azure-100 bg-azure-20':''}`} style={{fontSize:'10px'}}>{m}</th>
+                  <th key={i} className={`px-1 py-2 text-right whitespace-nowrap ${i===curMonthIdx?'text-white bg-midnight font-bold':''}`} style={{fontSize:'10px'}}>{m}</th>
                 ))}
                 <th className="px-2 py-2 text-right">CA</th>
               </tr>
