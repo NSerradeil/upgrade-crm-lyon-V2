@@ -2507,17 +2507,48 @@ function KanbanBesoins({ besoins, contacts, besoinCandidats, onSelect, onStatutC
   const contactMap=useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
   const [dragId,setDragId]=useState(null);
   const [overCol,setOverCol]=useState(null);
+  const [dragOverCardId,setDragOverCardId]=useState(null);
+  const [colOrders,setColOrders]=useState(()=>{
+    try { return JSON.parse(localStorage.getItem('besoins_kanban_order')||'{}'); }
+    catch { return {}; }
+  });
+
+  const getOrderedItems = (statut, items) => {
+    const saved = colOrders[statut];
+    if (!saved || saved.length === 0) return items;
+    const idSet = new Set(items.map(b => String(b.id)));
+    const ordered = saved.filter(id => idSet.has(String(id))).map(id => items.find(b => String(b.id) === String(id))).filter(Boolean);
+    const orderedIds = new Set(ordered.map(b => String(b.id)));
+    const extras = items.filter(b => !orderedIds.has(String(b.id)));
+    return [...ordered, ...extras];
+  };
 
   const onDragStart=(e,besoin)=>{setDragId(besoin.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',besoin.id);};
-  const onDragEnd=()=>{setDragId(null);setOverCol(null);};
+  const onDragEnd=()=>{setDragId(null);setOverCol(null);setDragOverCardId(null);};
   const onDragOver=(e,statut)=>{e.preventDefault();e.dataTransfer.dropEffect='move';setOverCol(statut);};
   const onDragLeave=(e,statut)=>{if(!e.currentTarget.contains(e.relatedTarget))setOverCol(null);};
   const onDrop=async(e,statut)=>{
     e.preventDefault();setOverCol(null);
     const id=e.dataTransfer.getData('text/plain');
-    const besoin=besoins.find(b=>b.id===id);
-    if(besoin&&besoin.statut!==statut) onStatutChange(besoin,statut);
-    setDragId(null);
+    const besoin=besoins.find(b=>String(b.id)===String(id));
+    if(!besoin) { setDragId(null); setDragOverCardId(null); return; }
+    if(besoin.statut!==statut) {
+      onStatutChange(besoin,statut);
+    } else if(dragOverCardId && String(dragOverCardId)!==String(id)) {
+      const items = getOrderedItems(statut, besoins.filter(b=>b.statut===statut));
+      const oldIdx = items.findIndex(b=>String(b.id)===String(id));
+      const newIdx = items.findIndex(b=>String(b.id)===String(dragOverCardId));
+      if(oldIdx!==-1 && newIdx!==-1) {
+        const reordered = [...items];
+        const [moved] = reordered.splice(oldIdx,1);
+        reordered.splice(newIdx,0,moved);
+        const newOrder = reordered.map(b=>String(b.id));
+        const updated = {...colOrders, [statut]: newOrder};
+        setColOrders(updated);
+        localStorage.setItem('besoins_kanban_order', JSON.stringify(updated));
+      }
+    }
+    setDragId(null); setDragOverCardId(null);
   };
 
   const STATUT_SHORT={'Opportunité':'Opport.','Push opportuniste':'Push','Besoin ouvert':'Ouvert','Profil proposé':'Proposé','Entretien programmé':'Entr. prog.','Entretien passé':'Entr. passé','Besoin Gagné':'Gagné','Besoin Perdu':'Perdu'};
@@ -2528,7 +2559,7 @@ function KanbanBesoins({ besoins, contacts, besoinCandidats, onSelect, onStatutC
   return (
     <div className="kanban-board">
       {visibleStatuts.map(statut=>{
-        const items=besoins.filter(b=>b.statut===statut);
+        const items=getOrderedItems(statut, besoins.filter(b=>b.statut===statut));
         return (
           <div key={statut}
             className={`kanban-col${overCol===statut?' drag-over':''}`}
@@ -2547,8 +2578,10 @@ function KanbanBesoins({ besoins, contacts, besoinCandidats, onSelect, onStatutC
                 const ca=nbJ*(b.tjm_vente||0);
                 return (
                   <div key={b.id} draggable onDragStart={e=>onDragStart(e,b)} onDragEnd={onDragEnd}
+                    onDragEnter={e=>{e.preventDefault();if(dragId&&dragId!==b.id)setDragOverCardId(b.id);}}
+                    onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDragOverCardId(v=>v===b.id?null:v);}}
                     onClick={()=>onSelect(b)} data-detail tabIndex="0"
-                    className={`kanban-card${dragId===b.id?' dragging':''} focus:outline-none focus:border-midnight`}>
+                    className={`kanban-card${dragId===b.id?' dragging':''}${dragOverCardId===b.id&&dragId!==b.id?' border-t-2 border-t-lemon-100':''} focus:outline-none focus:border-midnight`}>
                     <div className="text-xs font-medium text-midnight truncate">{b.titre}</div>
                     {contact&&<div className="text-xs text-slate truncate">{contact.prenom} {contact.nom}</div>}
                     {bCandidats.length>0
