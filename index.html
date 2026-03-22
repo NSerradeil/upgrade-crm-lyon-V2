@@ -1635,13 +1635,13 @@ function TacheDetailPanel({ task, contact, besoinLabel, mission, besoin, histori
         {taskHist.length===0
           ? <div className="text-sm text-neutral-300 italic">Aucune action enregistrée sur cette tâche</div>
           : <div className="space-y-2">{taskHist.map((h,i)=>(
-              <div key={i} className="flex gap-3 text-sm border-l-2 border-neutral-100 pl-3">
-                <div className="text-neutral-300 shrink-0 w-14">{fmtDateParis(h.date)}</div>
-                <div>
+              <div key={i} className="text-sm border-l-2 border-neutral-100 pl-3">
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-[11px] text-neutral-300 tabular-nums whitespace-nowrap">{fmtDateParis(h.date)}</span>
                   <span className="font-medium text-carbon">{h.type_action}</span>
-                  {h.responsable&&<span className="ml-1 text-xs text-neutral-300">({h.responsable})</span>}
-                  {h.details&&<div className="text-slate text-xs mt-0.5">{h.details}</div>}
+                  {h.responsable&&<span className="text-xs text-neutral-300">({h.responsable})</span>}
                 </div>
+                {h.details&&<div className="text-slate text-xs mt-0.5">{h.details}</div>}
               </div>
             ))}</div>
         }
@@ -2335,9 +2335,12 @@ function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, m
         {besoinHist.length===0
           ?<div className="text-sm text-neutral-300 italic">Aucune action</div>
           :<div className="space-y-2">{besoinHist.map((h,i)=>(
-            <div key={i} className="flex gap-3 text-sm border-l-2 border-neutral-100 pl-3">
-              <div className="text-neutral-300 shrink-0 w-14">{fmtDateParis(h.date)}</div>
-              <div><span className="font-medium text-carbon">{h.type_action}</span>{h.details&&<div className="text-slate text-xs mt-0.5">{h.details}</div>}</div>
+            <div key={i} className="text-sm border-l-2 border-neutral-100 pl-3">
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span className="text-[11px] text-neutral-300 tabular-nums whitespace-nowrap">{fmtDateParis(h.date)}</span>
+                <span className="font-medium text-carbon">{h.type_action}</span>
+              </div>
+              {h.details&&<div className="text-slate text-xs mt-0.5">{h.details}</div>}
             </div>
           ))}</div>
         }
