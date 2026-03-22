@@ -272,6 +272,10 @@ function fmtCurrency(n) {
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
+const CH = { TOTAL: 180, TOP: 22, BOT: 20, H: 138 };
+function fmtK(n) { return n >= 1000 ? `${(n/1000).toFixed(0)}k€` : `${Math.round(n)}€`; }
+function fmtFull(n) { return new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n); }
+
 const STATUT_STYLE = {
   'Consultant CDI': { bg:'#1C1F35', color:'#FFFFFF' },
   'CDI':            { bg:'#1C1F35', color:'#FFFFFF' },
@@ -286,6 +290,146 @@ const BADGE_STYLE = { padding:'2px 8px', borderRadius:0, fontSize:11, fontWeight
 // ═══════════════════════════════════════════════════════════════════════════════
 // SHARED COMPONENTS
 // ═══════════════════════════════════════════════════════════════════════════════
+
+function ChartHeader({ title, kpi, kpiLabel, color, children }) {
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:4,flexWrap:'wrap'}}>
+      <span style={{width:10,height:10,background:color,display:'inline-block',flexShrink:0}}/>
+      <span style={{fontSize:13,fontWeight:700,color:'#1C1F35',fontFamily:'Outfit,sans-serif'}}>{title}</span>
+      <span style={{fontSize:12,color:'#bbb'}}>{kpiLabel} : {kpi}</span>
+      {children}
+    </div>
+  );
+}
+
+function AbsBars({ data, max, getColor, getTopLabel, getTopLabel2, getFins, gap=4, curMonth }) {
+  const barH = v => Math.max((v/max)*CH.H, v>0?6:2);
+  const MOIS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+  return (
+    <div style={{position:'relative',height:CH.TOTAL,marginTop:8}}>
+      <div style={{position:'absolute',left:0,right:0,top:0,bottom:0,display:'flex',gap,zIndex:3}}>
+        {data.map((v,i) => {
+          const bh = barH(v);
+          const color = getColor(v,i);
+          const topLbl = getTopLabel?getTopLabel(v,i):null;
+          const topLb2 = getTopLabel2?getTopLabel2(v,i):null;
+          const fins = getFins?getFins(i):null;
+          return (
+            <div key={i} style={{flex:1,position:'relative',minWidth:0}}>
+              <div style={{position:'absolute',left:0,right:0,bottom:CH.BOT,height:bh,background:color,transition:'height 300ms'}}/>
+              {topLbl&&<div style={{position:'absolute',left:0,right:0,bottom:CH.BOT+bh+2,textAlign:'center',fontSize:10,fontWeight:700,color:topLbl.color,whiteSpace:'nowrap',lineHeight:1.2}}>{topLbl.text}</div>}
+              {topLb2&&<div style={{position:'absolute',left:0,right:0,bottom:CH.BOT+bh+14,textAlign:'center',fontSize:9,color:'#aaa',whiteSpace:'nowrap'}}>{topLb2}</div>}
+              {fins&&fins>0&&<div style={{position:'absolute',left:'50%',transform:'translateX(-50%)',bottom:CH.BOT-1,fontSize:9,fontWeight:800,color:'#FF3D2E',background:'#FF3D2E15',padding:'0 3px',whiteSpace:'nowrap',zIndex:4}}>−{fins}</div>}
+              <div style={{position:'absolute',left:0,right:0,bottom:3,textAlign:'center',fontSize:10,fontWeight:600,color:i===curMonth?'#1C1F35':'#ccc'}}>{MOIS[i]}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ChartCA({ caMensuel, caYTD, curMonth }) {
+  const max = Math.max(...caMensuel, 1);
+  return <>
+    <ChartHeader title="CA mensuel 2026" kpi={fmtFull(caYTD)} kpiLabel="YTD" color="#4A7FE5"/>
+    <AbsBars data={caMensuel} max={max} curMonth={curMonth}
+      getColor={(v,i) => i>curMonth?'#E4E4E6':i<curMonth?'#4A7FE5BB':'#4A7FE5'}
+      getTopLabel={(v,i) => v>0?{text:fmtK(v),color:i>curMonth?'#ddd':'#4A7FE5'}:null}/>
+  </>;
+}
+
+function ChartMarge({ margeMensuel, margeYTD, caMensuel, tauxMarge, curMonth }) {
+  const max = Math.max(...margeMensuel, 1);
+  const rates = margeMensuel.map((m,i) => caMensuel[i]>0?(m/caMensuel[i]*100):0);
+  return <>
+    <ChartHeader title="Marge mensuelle 2026" kpi={fmtFull(margeYTD)} kpiLabel="YTD" color="#FF66FF">
+      <span style={{fontSize:11,background:'#FF66FF22',color:'#c020c0',padding:'2px 8px',fontWeight:700,borderRadius:0}}>Taux moyen {tauxMarge.toFixed(1)}%</span>
+    </ChartHeader>
+    <AbsBars data={margeMensuel} max={max} curMonth={curMonth}
+      getColor={(v,i) => i>curMonth?'#E4E4E6':i<curMonth?'#FF66FFBB':'#FF66FF'}
+      getTopLabel={(v,i) => v>0?{text:fmtK(v),color:i>curMonth?'#ddd':'#FF66FF'}:null}
+      getTopLabel2={(v,i) => rates[i]>0&&i<=curMonth?`${rates[i].toFixed(0)}%`:null}/>
+  </>;
+}
+
+function ChartInter({ tauxM, tauxAnn, curMonth }) {
+  const max = Math.max(...tauxM, 10, 1);
+  const col = v => v>=8?'#FF3D2E':v>=5?'#FFE500':'#00C218';
+  const status = tauxAnn<5?{label:'OK',bg:'#dcfce7',color:'#166534'}:tauxAnn<8?{label:'Attention',bg:'#fef9c3',color:'#92400e'}:{label:'MALUS',bg:'#fee2e2',color:'#991b1b'};
+  const barH = v => Math.max((v/max)*CH.H, v>0?6:2);
+  const lineBot = t => CH.BOT+(t/max)*CH.H;
+  const MOIS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+  return <>
+    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6,flexWrap:'wrap'}}>
+      <span style={{fontSize:13,fontWeight:700,color:'#1C1F35',fontFamily:'Outfit,sans-serif'}}>Taux intercontrat mensuel 2026</span>
+      <span style={{fontSize:11,background:'#1C1F35',color:'#FFE500',padding:'2px 10px',fontWeight:800,borderRadius:0}}>Annuel YTD : {tauxAnn.toFixed(1)}%</span>
+      <span style={{fontSize:11,background:status.bg,color:status.color,padding:'2px 10px',fontWeight:700,borderRadius:0}}>{status.label}</span>
+    </div>
+    <div style={{position:'relative',height:CH.TOTAL,marginTop:8}}>
+      {[{v:5,color:'#00C218',label:'objectif 5%'},{v:8,color:'#FF3D2E',label:'malus 8%'}].map(({v,color,label}) => (
+        <div key={v} style={{position:'absolute',left:0,right:0,bottom:lineBot(v),borderTop:`2px dashed ${color}`,zIndex:2}}>
+          <span style={{position:'absolute',right:0,top:-14,fontSize:9,fontWeight:800,color,background:'#fff',padding:'0 4px'}}>{label}</span>
+        </div>
+      ))}
+      <div style={{position:'absolute',left:0,right:0,top:0,bottom:0,display:'flex',gap:4,zIndex:3}}>
+        {tauxM.map((v,i) => {
+          const bh = barH(v);
+          const future = i>curMonth;
+          const c = future?'#E4E4E6':col(v);
+          return (
+            <div key={i} style={{flex:1,position:'relative',minWidth:0}}>
+              <div style={{position:'absolute',left:0,right:0,bottom:CH.BOT,height:bh,background:c,opacity:future?0.35:1,transition:'height 300ms'}}/>
+              {v>0&&<div style={{position:'absolute',left:0,right:0,bottom:CH.BOT+bh+2,textAlign:'center',fontSize:10,fontWeight:700,color:future?'#ddd':col(v),whiteSpace:'nowrap'}}>{v.toFixed(1)}%</div>}
+              <div style={{position:'absolute',left:0,right:0,bottom:3,textAlign:'center',fontSize:10,fontWeight:600,color:i===curMonth?'#1C1F35':'#ccc'}}>{MOIS[i]}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+    <div style={{display:'flex',gap:8,marginTop:14,flexWrap:'wrap'}}>
+      {[['T1',0,3],['T2',3,6],['T3',6,9],['T4',9,12]].map(([t,from,to]) => {
+        const vals = tauxM.slice(from,to).filter(v=>v>0);
+        const avg = vals.length>0?vals.reduce((a,b)=>a+b,0)/vals.length:null;
+        const isCur = from<=curMonth&&curMonth<to;
+        const bg = avg===null?'#f3f4f6':avg>=8?'#fee2e2':avg>=5?'#fef9c3':'#dcfce7';
+        const clr = avg===null?'#999':avg>=8?'#991b1b':avg>=5?'#92400e':'#166534';
+        return <div key={t} style={{fontSize:11,background:isCur?'#1C1F35':bg,color:isCur?'#FFE500':clr,padding:'4px 12px',fontWeight:700,borderRadius:0,border:isCur?'2px solid #1C1F35':'2px solid transparent'}}>{t} — {avg!==null?avg.toFixed(1)+'%':'n/a'}</div>;
+      })}
+    </div>
+  </>;
+}
+
+function ChartMissions({ flow, curMonth }) {
+  const max = Math.max(...flow.map(f=>f.actifs), 1);
+  const barH = v => Math.max((v/max)*CH.H, v>0?6:2);
+  const MOIS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+  return <>
+    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4,flexWrap:'wrap'}}>
+      <span style={{fontSize:13,fontWeight:700,color:'#1C1F35',fontFamily:'Outfit,sans-serif'}}>Activité missions 2026</span>
+      <span style={{fontSize:11,background:'#00C21815',color:'#00C218',padding:'2px 8px',fontWeight:700}}>+Démarrage</span>
+      <span style={{fontSize:11,background:'#FF3D2E15',color:'#FF3D2E',padding:'2px 8px',fontWeight:700}}>-Fin</span>
+      <span style={{fontSize:11,background:'#4A7FE515',color:'#4A7FE5',padding:'2px 8px',fontWeight:700}}>Actifs</span>
+    </div>
+    <div style={{position:'relative',height:CH.TOTAL,marginTop:8}}>
+      <div style={{position:'absolute',left:0,right:0,top:0,bottom:0,display:'flex',gap:4,zIndex:3}}>
+        {flow.map((f,i) => {
+          const bh = barH(f.actifs);
+          const future = i>curMonth;
+          return (
+            <div key={i} style={{flex:1,position:'relative',minWidth:0}}>
+              <div style={{position:'absolute',left:0,right:0,bottom:CH.BOT,height:bh,background:future?'#E4E4E6':'#4A7FE5',opacity:future?0.35:1,transition:'height 300ms'}}/>
+              {f.nouvelles>0&&<div style={{position:'absolute',left:'50%',transform:'translateX(-50%)',bottom:CH.BOT+bh+2,fontSize:9,fontWeight:800,color:'#00C218',background:'#00C21815',padding:'0 3px',whiteSpace:'nowrap',zIndex:4}}>+{f.nouvelles}</div>}
+              {f.actifs>0&&<div style={{position:'absolute',left:0,right:0,bottom:CH.BOT+bh+(f.nouvelles>0?14:2),textAlign:'center',fontSize:9,fontWeight:700,color:future?'#ccc':'#4A7FE5'}}>{f.actifs}</div>}
+              {f.fins>0&&<div style={{position:'absolute',left:'50%',transform:'translateX(-50%)',bottom:CH.BOT-1,fontSize:9,fontWeight:800,color:'#FF3D2E',background:'#FF3D2E15',padding:'0 3px',whiteSpace:'nowrap',zIndex:4}}>-{f.fins}</div>}
+              <div style={{position:'absolute',left:0,right:0,bottom:3,textAlign:'center',fontSize:10,fontWeight:600,color:i===curMonth?'#1C1F35':'#ccc'}}>{MOIS[i]}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  </>;
+}
 
 function ColorBadge({ label, bg, color }) {
   return <span style={{ ...BADGE_STYLE, backgroundColor:bg, color }}>{label}</span>;
@@ -3436,6 +3580,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
   const [filterResp,setFilterResp] = useState('');
   const [tick,setTick] = useState(0); // force re-render on optimistic update
   const forceUpdate=useCallback(()=>setTick(t=>t+1),[]);
+  const [activeChart, setActiveChart] = useState('ca');
   const isAdmin = profile.role==='admin';
   const curMonthIdx = new Date().getMonth();
 
@@ -3468,6 +3613,41 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
   const caMensuel = MOIS_KEYS.map(k=>missionsFiltrees.reduce((sum,m)=>(parseFloat(m[`jours_${k}`])||0)*(parseFloat(m.tjm)||0)+sum,0));
   const maxCA = Math.max(...caMensuel,1);
 
+  const currentYear = new Date().getFullYear();
+
+  // Marge mensuelle
+  const margeMensuel = MOIS_KEYS.map(k => missionsFiltrees.reduce((s,m) => s+(parseFloat(m[`jours_${k}`])||0)*((parseFloat(m.tjm)||0)-(parseFloat(m.cjm)||0)),0));
+
+  // Intercontrat mensuel
+  const JOURS_OUV = 18.16;
+  const missionsAll = missions || [];
+  const cdiMissions = missionsAll.filter(m => m.type_contrat==='CDI'||m.statut==='Intercontrat');
+  const nbCdiParMois = MOIS_KEYS.map((k,i) => cdiMissions.filter(m => {
+    const debut = m.date_debut_mission ? new Date(m.date_debut_mission).getMonth() : 0;
+    const fin = m.date_fin_mission ? new Date(m.date_fin_mission).getMonth() : 11;
+    return i >= debut && i <= fin;
+  }).length);
+  const joursInterParMois = MOIS_KEYS.map(k => intercontrat.reduce((s,m) => s+(parseFloat(m[`jours_${k}`])||0),0));
+  const tauxInterM = MOIS_KEYS.map((_,i) => nbCdiParMois[i]>0?(joursInterParMois[i]/(nbCdiParMois[i]*JOURS_OUV))*100:0);
+  const joursInterYTD = joursInterParMois.slice(0,curMonthIdx+1).reduce((a,b)=>a+b,0);
+  const avgCdi = nbCdiParMois.slice(0,curMonthIdx+1).reduce((a,b)=>a+b,0)/(curMonthIdx+1);
+  const tauxInterAnn = avgCdi>0?(joursInterYTD/(avgCdi*JOURS_OUV*(curMonthIdx+1)))*100:0;
+
+  // Mission flow
+  const missionFlow = MOIS_KEYS.map((_,i) => ({
+    actifs: missionsFiltrees.filter(m => (parseFloat(m[`jours_${MOIS_KEYS[i]}`])||0)>0 && m.statut!=='Intercontrat').length,
+    nouvelles: missionsFiltrees.filter(m => {
+      if(!m.date_debut_mission) return false;
+      const dd = new Date(m.date_debut_mission);
+      return dd.getFullYear()===currentYear && dd.getMonth()===i;
+    }).length,
+    fins: missionsFiltrees.filter(m => {
+      if(!m.date_fin_mission) return false;
+      const df = new Date(m.date_fin_mission);
+      return df.getFullYear()===currentYear && df.getMonth()===i;
+    }).length,
+  }));
+
   const ORDRE_STATUT={'En cours':0,'New':1,'Intercontrat':2,'Terminée':3};
   const missionsTri=[...missionsFiltrees].sort((a,b)=>{const d=(ORDRE_STATUT[a.statut]??9)-(ORDRE_STATUT[b.statut]??9);return d!==0?d:(a.consultant||'').localeCompare(b.consultant||'');});
 
@@ -3488,50 +3668,42 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
         </div>
         <button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">+ Nouvelle mission</button>
       </div>
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white border border-neutral-200 rounded-lg p-4 shadow-sm" style={{borderLeft:'4px solid #0BA600'}}>
-          <div className="text-3xl font-black text-carbon">{enMission.length}</div>
-          <div className="text-[11px] uppercase tracking-wider text-slate mt-1 font-semibold">En mission</div>
-          <div className="text-xs text-neutral-300 mt-0.5">consultant{enMission.length>1?'s':''} actif{enMission.length>1?'s':''}</div>
-        </div>
-        <div className="bg-white border border-neutral-200 rounded-lg p-4 shadow-sm" style={{borderLeft:intercontrat.length>0?'4px solid #FFE500':'4px solid #e5e5e5'}}>
-          <div className={`text-3xl font-black ${intercontrat.length>0?'text-carbon':'text-neutral-200'}`}>{intercontrat.length}</div>
-          <div className="text-[11px] uppercase tracking-wider text-slate mt-1 font-semibold">Intercontrat</div>
-          <div className="text-xs text-neutral-300 mt-0.5 truncate">{intercontrat.length>0?intercontrat.map(m=>m.consultant.split(/\s+/)[0]).join(', '):'Aucun'}</div>
-        </div>
-        <div className="bg-white border border-neutral-200 rounded-lg p-4 shadow-sm" style={{borderLeft:'4px solid #5090FE'}}>
-          <div className="text-3xl font-black text-carbon">{fmtCurrency(caYTD)}</div>
-          <div className="text-[11px] uppercase tracking-wider text-slate mt-1 font-semibold">CA YTD</div>
-          <div className="text-xs text-neutral-300 mt-0.5">{hasFilter?'sélection filtrée':'missions visibles'}</div>
-        </div>
-        <div className="bg-white border border-neutral-200 rounded-lg p-4 shadow-sm" style={{borderLeft:tauxMarge>=0?'4px solid #FF78FD':'4px solid #FF3D2E'}}>
-          <div className="text-3xl font-black text-carbon">{fmtCurrency(margeYTD)}</div>
-          <div className="text-[11px] uppercase tracking-wider text-slate mt-1 font-semibold">Marge YTD</div>
-          <div className="text-xs text-neutral-300 mt-0.5">{tauxMarge.toFixed(1)}% taux de marge</div>
-        </div>
-      </div>
+      {/* KPI cards — clickable */}
+      {(()=>{
+        const CARDS = [
+          {id:'missions',color:'#00C218',value:enMission.length,label:'EN MISSION',sub:`${enMission.length} consultant${enMission.length>1?'s':''} actifs`},
+          {id:'inter',color:intercontrat.length>0?'#FFE500':'#ccc',value:intercontrat.length,label:'INTERCONTRAT',
+            sub:intercontrat.length>0?intercontrat.map(m=>(m.consultant||'').split(' ')[0]).join(', '):'Aucun',
+            badge:tauxInterAnn>=8?'MALUS':tauxInterAnn>=5?'Attention':null,
+            badgeColor:tauxInterAnn>=8?'#FF3D2E':'#92400e'},
+          {id:'ca',color:'#4A7FE5',value:fmtK(caYTD),label:'CA YTD',sub:'toutes missions'},
+          {id:'marge',color:'#FF66FF',value:fmtK(margeYTD),label:'MARGE YTD',sub:`${tauxMarge.toFixed(1)}% taux de marge`},
+        ];
+        return (
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
+            {CARDS.map(c=>{
+              const active = activeChart===c.id;
+              return (
+                <div key={c.id} onClick={()=>setActiveChart(c.id)} style={{cursor:'pointer',background:active?'#1C1F35':'#fff',border:`2px solid ${active?'#1C1F35':'#E4E4E6'}`,borderLeft:`4px solid ${c.color}`,padding:'14px 16px',borderRadius:0,transition:'all 200ms'}}>
+                  <div style={{fontSize:28,fontWeight:900,color:active?'#fff':'#1C1F35',fontFamily:'Outfit,sans-serif',lineHeight:1}}>{c.value}</div>
+                  <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',color:active?'#ffffff99':'#6B7280',marginTop:4}}>{c.label}</div>
+                  <div style={{fontSize:11,color:active?'#ffffff66':'#bbb',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.sub}</div>
+                  {c.badge&&<div style={{fontSize:10,fontWeight:800,color:c.badgeColor,marginTop:4,textTransform:'uppercase'}}>{c.badge}</div>}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
-      {/* CA mensuel */}
-      <div className="bg-white border border-neutral-200 rounded-lg p-5 shadow-sm">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{background:'#5090FE'}}/>
-          <span className="text-sm font-semibold text-carbon">CA mensuel {new Date().getFullYear()}</span>
-        </div>
-        <div className="text-xs text-neutral-300 mb-4">{isAdmin?'Total Lyon':'Mes missions'} · YTD : {fmtCurrency(caYTD)}</div>
-        <div className="flex items-end gap-1.5 h-80" style={{backgroundImage:'linear-gradient(to bottom, rgba(0,0,0,0.03) 1px, transparent 1px)',backgroundSize:'100% 20%'}}>
-          {caMensuel.map((ca,i)=>{
-            const pct=maxCA>0?Math.max((ca/maxCA)*100,ca>0?8:0):0;
-            return (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1 group" style={{minWidth:0}}>
-                {ca>0&&<div className="text-carbon font-bold leading-tight truncate w-full text-center" style={{fontSize:'11px'}}>{(ca/1000).toFixed(0)}k€</div>}
-                <div className="w-full transition-all" title={ca>0?fmtCurrency(ca):''} style={{height:`${pct}%`,minHeight:ca>0?'8px':'2px',background:i===curMonthIdx?'#5090FE':i<curMonthIdx?'#5090FE88':'#E4E4E6'}}/>
-                <div className={`font-semibold mt-1 ${i===curMonthIdx?'text-carbon':'text-neutral-300'}`} style={{fontSize:'11px'}}>{MOIS_LABELS[i]}</div>
-              </div>
-            );
-          })}
-        </div>
+      {/* Chart area — switches based on activeChart */}
+      <div style={{background:'#fff',border:'2px solid #1C1F35',padding:'20px 24px 24px',borderRadius:0}}>
+        {activeChart==='ca'&&<ChartCA caMensuel={caMensuel} caYTD={caYTD} curMonth={curMonthIdx}/>}
+        {activeChart==='marge'&&<ChartMarge margeMensuel={margeMensuel} margeYTD={margeYTD} caMensuel={caMensuel} tauxMarge={tauxMarge} curMonth={curMonthIdx}/>}
+        {activeChart==='inter'&&<ChartInter tauxM={tauxInterM} tauxAnn={tauxInterAnn} curMonth={curMonthIdx}/>}
+        {activeChart==='missions'&&<ChartMissions flow={missionFlow} curMonth={curMonthIdx}/>}
       </div>
+      <div style={{marginTop:8,fontSize:11,color:'#bbb',textAlign:'right',fontFamily:'Outfit,sans-serif'}}>Cliquer sur une dalle pour changer la vue</div>
 
       {/* Table missions — cliquer sur une ligne ouvre le détail */}
       <div className="bg-white border border-neutral-200 rounded-lg overflow-hidden shadow-sm">
