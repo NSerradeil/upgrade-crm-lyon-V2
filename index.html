@@ -518,7 +518,7 @@ function CompteSearchField({ contacts, value, onChange, placeholder }) {
         placeholder={placeholder||'Rechercher une société…'}
         className={inputCls}/>
       {open&&filtered.length>0&&(
-        <div className="absolute z-50 w-full mt-1 bg-white border border-neutral-200 rounded-xl border-2 border-midnight overflow-hidden max-h-48 overflow-y-auto">
+        <div className="absolute z-50 w-full mt-1 bg-white border-2 border-midnight overflow-hidden max-h-48 overflow-y-auto">
           {filtered.map(c=>(
             <button key={c} type="button" onMouseDown={()=>{onChange(c);setQuery('');setOpen(false);}}
               className="w-full text-left px-3 py-2 hover:bg-azure-20 text-sm text-midnight border-b border-neutral-50 last:border-0">{c}</button>
@@ -526,7 +526,7 @@ function CompteSearchField({ contacts, value, onChange, placeholder }) {
         </div>
       )}
       {open&&filtered.length===0&&query.trim().length>=1&&(
-        <div className="absolute z-50 w-full mt-1 bg-white border border-neutral-200 rounded-xl border-2 border-neutral-200 px-3 py-2 text-sm text-neutral-300">Aucune société trouvée</div>
+        <div className="absolute z-50 w-full mt-1 bg-white border-2 border-neutral-200 px-3 py-2 text-sm text-neutral-300">Aucune société trouvée</div>
       )}
     </div>
   );
@@ -570,7 +570,7 @@ function ContactPicker({ contacts, value, onChange, filterCompte }) {
         placeholder="Rechercher par nom, société…"
         className={inputCls}/>
       {open&&query.trim().length>=2&&(
-        <div className="absolute z-50 w-full mt-1 bg-white border border-neutral-200 rounded-xl border-2 border-midnight overflow-hidden max-h-60 overflow-y-auto">
+        <div className="absolute z-50 w-full mt-1 bg-white border-2 border-midnight overflow-hidden max-h-60 overflow-y-auto">
           {results.length===0
             ? <div className="px-4 py-3 text-sm text-neutral-300 text-center">Aucun résultat</div>
             : results.map((item,i)=>(
@@ -621,7 +621,7 @@ function MissionPicker({ missions, value, onChange }) {
         placeholder="Rechercher une mission (consultant, client)…"
         className={inputCls}/>
       {open&&query.trim().length>=2&&(
-        <div className="absolute z-50 w-full mt-1 bg-white border border-neutral-200 rounded-xl border-2 border-midnight overflow-hidden max-h-60 overflow-y-auto">
+        <div className="absolute z-50 w-full mt-1 bg-white border-2 border-midnight overflow-hidden max-h-60 overflow-y-auto">
           {results.length===0
             ? <div className="px-4 py-3 text-sm text-neutral-300 text-center">Aucun résultat</div>
             : results.map((m,i)=>(
@@ -673,7 +673,7 @@ function BesoinPicker({ besoins, value, onChange, contactId }) {
         placeholder="Rechercher un besoin (titre, compte, statut)…"
         className={inputCls}/>
       {open&&(
-        <div className="absolute z-50 w-full mt-1 bg-white border border-neutral-200 rounded-xl border-2 border-midnight overflow-hidden max-h-60 overflow-y-auto">
+        <div className="absolute z-50 w-full mt-1 bg-white border-2 border-midnight overflow-hidden max-h-60 overflow-y-auto">
           {filtered.length===0
             ? <div className="px-4 py-3 text-sm text-neutral-300 text-center">Aucun résultat</div>
             : filtered.map((b,i)=>(
@@ -1010,20 +1010,22 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, on
             {availableBesoins.map(b=><option key={b.id} value={b.id}>{b.titre}{b.compte?' · '+b.compte:''}</option>)}
           </select>
         </Field>}
-        <div className="grid grid-cols-5 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <Field label="Démarrage initial"><input type="date" value={f.date_demarrage_initiale||''} onChange={s('date_demarrage_initiale')} className={inputCls}/></Field>
           <Field label="Dernier suivi"><input type="date" value={f.date_dernier_suivi_mission||''} onChange={s('date_dernier_suivi_mission')} className={inputCls}/></Field>
           <Field label="N° commande"><input value={f.num_commande||''} onChange={s('num_commande')} className={inputCls} placeholder="5090-4210617888"/></Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
           <Field label="Début mission">
-            <div className="flex gap-1">
+            <div className="flex gap-2">
               <input type="date" value={f.date_debut_mission||''} onChange={s('date_debut_mission')} className={inputCls+' flex-1'}/>
-              {f.date_debut_mission && <input type="time" value={f.debut_time} onChange={e=>setF(v=>({...v,debut_time:e.target.value}))} className={inputCls+' w-24 text-xs'}/>}
+              {f.date_debut_mission && <input type="time" value={f.debut_time} onChange={e=>setF(v=>({...v,debut_time:e.target.value}))} className={inputCls+' w-28 text-xs'}/>}
             </div>
           </Field>
           <Field label="Fin mission">
-            <div className="flex gap-1">
+            <div className="flex gap-2">
               <input type="date" value={f.date_fin_mission||''} onChange={s('date_fin_mission')} className={inputCls+' flex-1'}/>
-              {f.date_fin_mission && <input type="time" value={f.fin_time} onChange={e=>setF(v=>({...v,fin_time:e.target.value}))} className={inputCls+' w-24 text-xs'}/>}
+              {f.date_fin_mission && <input type="time" value={f.fin_time} onChange={e=>setF(v=>({...v,fin_time:e.target.value}))} className={inputCls+' w-28 text-xs'}/>}
             </div>
           </Field>
         </div>
@@ -1673,7 +1675,7 @@ function DeleteTacheModal({ task, onClose, onDeleted }) {
 function TacheCard({ t, contact, besoinLabel, missionLabel, canEdit, onDetail, onComplete, onDelete, onEdit }) {
   return (
     <div onClick={()=>onDetail(t)} data-detail tabIndex="0"
-      className={`rounded-xl border p-3 cursor-pointer hover:border border-neutral-100 focus:border border-neutral-100 focus:outline-none focus:border-midnight transition-shadow flex flex-col gap-2 ${t.overdue?'bg-coral-100 border-coral-100':'bg-white border-neutral-200'}`}>
+      className={`border-2 p-3 cursor-pointer hover:border-midnight focus:outline-none focus:border-midnight transition-colors flex flex-col gap-2 ${t.overdue?'bg-coral-100 border-coral-100':'bg-white border-neutral-200'}`}>
       {/* Titre + actions */}
       <div className="flex items-start justify-between gap-2">
         <div className={`font-medium text-sm leading-snug flex-1 ${t.overdue?'text-white':'text-midnight'}`}>{t.titre}</div>
@@ -2574,7 +2576,7 @@ function TabBesoins({ contacts, besoins, besoinCandidats, historique, taches, mi
                     const ca=nbJ*(b.tjm_vente||0);
                     const marge=ca-nbJ*(b.cjm_achat||0);
                     return (
-                      <div key={b.id} onClick={()=>setSelected(b)} data-detail tabIndex="0" className="bg-white rounded-xl border border-neutral-100 p-3 sm:p-4 cursor-pointer hover:border-blue-200 focus:outline-none focus:border-midnight transition-colors">
+                      <div key={b.id} onClick={()=>setSelected(b)} data-detail tabIndex="0" className="bg-white border-2 border-neutral-200 p-3 sm:p-4 cursor-pointer hover:border-blue-200 focus:outline-none focus:border-midnight transition-colors">
                         <div className="flex items-start gap-3">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -2685,7 +2687,7 @@ function TabHistorique({ historique, contacts, taches, besoins, profile, allProf
       </div>
       <div className="text-xs text-neutral-300 mb-3">{filtered.length} action{filtered.length>1?'s':''}</div>
 
-      <div className="bg-white rounded-xl border border-neutral-100 overflow-hidden divide-y divide-gray-50">
+      <div className="bg-white border-2 border-neutral-200 overflow-hidden divide-y divide-gray-50">
         {filtered.length===0&&<div className="px-4 py-10 text-center"><div className="font-bold text-midnight mb-1">Aucune action trouvée</div><div className="text-sm text-neutral-300">Modifiez vos filtres pour voir plus de résultats.</div></div>}
         {filtered.slice(0,visibleCount).map((h,i)=>{
           const contact=h.id_prospect?contactMap[h.id_prospect]:null;
@@ -2886,22 +2888,22 @@ function TabPipe({ besoins, contacts, besoinCandidats, historique, taches, missi
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-neutral-100 p-4">
+        <div className="bg-white border-2 border-neutral-200 p-4">
           <div className="text-xs text-neutral-300 font-medium mb-1 uppercase tracking-wide">Pipe brut</div>
           <div className="text-3xl font-bold text-azure-100">{fmtCurrency(pipeBrut)}</div>
           <div className="text-xs text-slate mt-1">{filtered.length} besoin{filtered.length>1?'s':''} actif{filtered.length>1?'s':''}</div>
         </div>
-        <div className="bg-white rounded-xl border border-neutral-100 p-4">
+        <div className="bg-white border-2 border-neutral-200 p-4">
           <div className="text-xs text-neutral-300 font-medium mb-1 uppercase tracking-wide">Pipe pondéré</div>
           <div className="text-3xl font-bold text-green-700">{fmtCurrency(pipePondere)}</div>
           <div className="text-xs text-slate mt-1">Valeur × probabilité</div>
         </div>
-        <button onClick={()=>{setRiskFilter(!riskFilter);setDonutFilter('');}} className={`bg-white rounded-xl border p-4 text-left transition-colors ${riskFilter?'border-orange-400 bg-orange-50':'border-neutral-100 hover:border-orange-200'}`}>
+        <button onClick={()=>{setRiskFilter(!riskFilter);setDonutFilter('');}} className={`bg-white border-2 border-neutral-200 p-4 text-left transition-colors ${riskFilter?'border-orange-400 bg-orange-50':'border-neutral-100 hover:border-orange-200'}`}>
           <div className="text-xs text-neutral-300 font-medium mb-1 uppercase tracking-wide">À risque</div>
           <div className={`text-3xl font-bold ${aRisqueCount>0?'text-orange-600':'text-neutral-200'}`}>{fmtCurrency(aRisqueVal)}</div>
           <div className="text-xs text-slate mt-1">{aRisqueCount} besoin{aRisqueCount>1?'s':''} sans action &gt;10j</div>
         </button>
-        <div className="bg-white rounded-xl border border-neutral-100 p-4">
+        <div className="bg-white border-2 border-neutral-200 p-4">
           <div className="text-xs text-neutral-300 font-medium mb-1 uppercase tracking-wide">Gagné YTD</div>
           <div className="text-3xl font-bold text-emerald-700">{fmtCurrency(gagneYTD)}</div>
           <div className="text-xs text-slate mt-1">Besoins gagnés</div>
@@ -2911,7 +2913,7 @@ function TabPipe({ besoins, contacts, besoinCandidats, historique, taches, missi
       {/* Graphiques */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Funnel */}
-        <div className="bg-white rounded-xl border border-neutral-100 p-5">
+        <div className="bg-white border-2 border-neutral-200 p-5">
           <div className="text-sm font-semibold text-carbon mb-4">Funnel par statut</div>
           <div className="space-y-3">
             {funnel.map(f=>(
@@ -2937,7 +2939,7 @@ function TabPipe({ besoins, contacts, besoinCandidats, historique, taches, missi
         </div>
 
         {/* Ventilation (barres verticales) */}
-        <div className="bg-white rounded-xl border border-neutral-100 p-5">
+        <div className="bg-white border-2 border-neutral-200 p-5">
           <div className="text-sm font-semibold text-carbon mb-1">Pipe pondéré — {ventilation==='agence'?'par agence':'par responsable'}</div>
           <div className="text-xs text-neutral-300 mb-4">Total : {fmtCurrency(pipePondere)}</div>
           {ventilData.length>0?(
@@ -2959,7 +2961,7 @@ function TabPipe({ besoins, contacts, besoinCandidats, historique, taches, missi
       </div>
 
       {/* Tableau détail */}
-      <div className="bg-white rounded-xl border border-neutral-100 overflow-hidden">
+      <div className="bg-white border-2 border-neutral-200 overflow-hidden">
         <div className="px-4 py-3 border-b border-neutral-50 flex items-center gap-3">
           <span className="text-sm font-semibold text-carbon">Détail des besoins actifs — {sorted.length} résultat{sorted.length>1?'s':''}</span>
         </div>
@@ -3125,7 +3127,7 @@ function EditableJoursCell({ mission, moisKey, moisIdx, curMonthIdx, isDebut, is
               className={`w-2 h-2 rounded-full ${statutObj.dot} hover:ring-2 hover:ring-offset-1 hover:ring-gray-300 transition-all shrink-0`}
               title={`Statut : ${statutObj.label} — Cliquer pour changer`}/>
             {showStatut&&(
-              <div className="absolute top-4 right-0 z-50 bg-white border border-neutral-200 rounded-lg border-2 border-neutral-200 py-1 w-36" style={{fontSize:'12px'}}>
+              <div className="absolute top-4 right-0 z-50 bg-white border-2 border-neutral-200 py-1 w-36" style={{fontSize:'12px'}}>
                 {LIVRAISON_STATUTS.map(s=>(
                   <button key={s.label} onClick={e=>{e.stopPropagation();changeStatut(s.value);}}
                     className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-neutral-50 ${s.value===rec?'font-semibold bg-neutral-50':''}`}>
@@ -3259,7 +3261,7 @@ function EditableJoursGridCell({ mission, moisKey, moisIdx, onUpdate }) {
           className={`w-3 h-3 rounded-full ${statutObj.dot} hover:ring-2 hover:ring-offset-1 hover:ring-gray-300 transition-all mx-auto block`}
           title={`${statutObj.label} — Cliquer pour changer`}/>
         {showStatut&&(
-          <div className="absolute top-5 left-1/2 -translate-x-1/2 z-50 bg-white border border-neutral-200 rounded-lg border-2 border-neutral-200 py-1 w-36" style={{fontSize:'12px'}}>
+          <div className="absolute top-5 left-1/2 -translate-x-1/2 z-50 bg-white border-2 border-neutral-200 py-1 w-36" style={{fontSize:'12px'}}>
             {LIVRAISON_STATUTS.map(s=>(
               <button key={s.label} onClick={()=>changeStatut(s.value)}
                 className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-neutral-50 ${s.value===rec?'font-semibold bg-neutral-50':''}`}>
@@ -3364,7 +3366,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
       </div>
 
       {/* CA mensuel */}
-      <div className="bg-white rounded-xl border border-neutral-100 p-5">
+      <div className="bg-white border-2 border-neutral-200 p-5">
         <div className="text-sm font-semibold text-carbon mb-1">CA mensuel {new Date().getFullYear()}</div>
         <div className="text-xs text-neutral-300 mb-4">{isAdmin?'Total Lyon':'Mes missions'} · YTD : {fmtCurrency(caYTD)}</div>
         <div className="flex items-end gap-1.5 h-28">
@@ -3382,7 +3384,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
       </div>
 
       {/* Table missions — cliquer sur une ligne ouvre le détail */}
-      <div className="bg-white rounded-xl border border-neutral-100 overflow-hidden">
+      <div className="bg-white border-2 border-neutral-200 overflow-hidden">
         <div className="px-4 py-3 border-b border-neutral-50 flex items-center gap-3 flex-wrap">
           <span className="text-sm font-semibold text-carbon mr-auto">Missions — {missionsTri.length}/{missions.length} consultant{missions.length>1?'s':''}</span>
           <input type="text" placeholder="Consultant, client..." value={search} onChange={e=>setSearch(e.target.value)} className="px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:border-midnight w-44"/>
@@ -3434,19 +3436,19 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
           {missionsTri.length===0&&<div className="text-center py-8"><div className="font-bold text-midnight mb-1">Aucune mission</div><div className="text-sm text-neutral-300">Modifiez vos filtres pour voir plus de résultats.</div></div>}
         </div>
         {/* Vue tableau desktop */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="hidden md:block overflow-x-auto" style={{margin:'0 -8px',padding:'0 8px'}}>
+          <table className="w-full text-sm" style={{minWidth:'1000px'}}>
             <thead>
-              <tr className="bg-neutral-50 text-slate text-xs uppercase">
-                <th className="px-3 py-2 text-left font-medium">Consultant</th>
-                <th className="px-3 py-2 text-left font-medium">Client</th>
-                <th className="px-3 py-2 text-left font-medium hidden lg:table-cell">Projet</th>
-                <th className="px-3 py-2 text-right font-medium">TJM</th>
-                <th className="px-3 py-2 text-left font-medium">Statut</th>
+              <tr className="bg-neutral-50 text-[11px] font-bold uppercase tracking-[0.05em] text-slate">
+                <th className="px-2 py-2 text-left">Consultant</th>
+                <th className="px-2 py-2 text-left">Client</th>
+                <th className="px-2 py-2 text-left hidden lg:table-cell">Projet</th>
+                <th className="px-1 py-2 text-right">TJM</th>
+                <th className="px-1 py-2 text-left">Statut</th>
                 {MOIS_LABELS.map((m,i)=>(
-                  <th key={i} className={`px-2 py-2 text-right font-medium whitespace-nowrap ${i===curMonthIdx?'text-azure-100 bg-azure-20':''}`} style={{fontSize:'11px'}}>{m}</th>
+                  <th key={i} className={`px-1 py-2 text-right whitespace-nowrap ${i===curMonthIdx?'text-azure-100 bg-azure-20':''}`} style={{fontSize:'10px'}}>{m}</th>
                 ))}
-                <th className="px-3 py-2 text-right font-medium">CA Total</th>
+                <th className="px-2 py-2 text-right">CA</th>
               </tr>
             </thead>
             <tbody>
@@ -3477,27 +3479,27 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
                 return (
                   <tr key={m.id||idx} onClick={()=>setSelected(m)} data-detail tabIndex="0"
                     className={`border-t border-neutral-50 hover:bg-azure-20 focus:bg-azure-20 focus:outline-none cursor-pointer transition-colors ${m.statut==='Intercontrat'?'opacity-70':''}`}>
-                    <td className="px-3 py-2.5">
-                      <div className="font-medium text-midnight whitespace-nowrap flex items-center gap-1.5">
+                    <td className="px-2 py-2">
+                      <div className="font-medium text-midnight whitespace-nowrap flex items-center gap-1.5 text-xs">
                         {m.consultant}
-                        {suiviBadge&&<span title={suiviBadge.tip} className={`cursor-help ${suiviBadge.color}`} style={{fontSize:'12px'}}>{suiviBadge.icon}</span>}
+                        {suiviBadge&&<span title={suiviBadge.tip} className={`cursor-help ${suiviBadge.color}`} style={{fontSize:'11px'}}>{suiviBadge.icon}</span>}
                       </div>
                       <div className="flex items-center gap-1 mt-0.5">
-                        {m.type_contrat&&<span className="text-xs text-neutral-300">{m.type_contrat}</span>}
-                        {histCount>0&&<span className="text-xs bg-jade-20 text-jade-100 px-1.5 py-0.5 rounded-full font-medium">{histCount} action{histCount>1?'s':''}</span>}
+                        {m.type_contrat&&<span className="text-[10px] text-neutral-300">{m.type_contrat}</span>}
+                        {histCount>0&&<span className="text-[10px] bg-jade-20 text-jade-100 px-1 py-0 rounded-full font-medium">{histCount} action{histCount>1?'s':''}</span>}
                       </div>
                     </td>
-                    <td className="px-3 py-2.5 text-slate whitespace-nowrap">{m.client||'—'}</td>
-                    <td className="px-3 py-2.5 text-slate hidden lg:table-cell text-xs max-w-xs">
-                      <span title={m.projet||''}>{m.projet?(m.projet.length>45?m.projet.substring(0,45)+'…':m.projet):'—'}</span>
+                    <td className="px-2 py-2 text-slate whitespace-nowrap text-xs">{m.client||'—'}</td>
+                    <td className="px-2 py-2 text-slate hidden lg:table-cell text-[11px] max-w-[120px] truncate">
+                      <span title={m.projet||''}>{m.projet?(m.projet.length>30?m.projet.substring(0,30)+'…':m.projet):'—'}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono text-xs text-carbon whitespace-nowrap">{m.tjm>0?`${m.tjm}€`:'—'}</td>
-                    <td className="px-3 py-2.5 whitespace-nowrap"><MissionStatutBadge statut={m.statut}/></td>
+                    <td className="px-1 py-2 text-right font-mono text-[11px] text-carbon whitespace-nowrap">{m.tjm>0?`${m.tjm}€`:'—'}</td>
+                    <td className="px-1 py-2 whitespace-nowrap"><MissionStatutBadge statut={m.statut}/></td>
                     {MOIS_KEYS.map((k,i)=>(
                       <EditableJoursCell key={k} mission={m} moisKey={k} moisIdx={i} curMonthIdx={curMonthIdx}
                         isDebut={debutM===i} isFin={finM===i} finSoon={finSoon} onUpdate={forceUpdate}/>
                     ))}
-                    <td className="px-3 py-2.5 text-right font-semibold text-carbon whitespace-nowrap">{caTotal>0?fmtCurrency(caTotal):'—'}</td>
+                    <td className="px-2 py-2 text-right font-semibold text-carbon whitespace-nowrap text-xs">{caTotal>0?fmtCurrency(caTotal):'—'}</td>
                   </tr>
                 );
               })}
@@ -3619,7 +3621,7 @@ function TabSettings({ user, profile, taches, subTab, onSubTabChange, prefs, onS
 
       {subTab==='profil'&&(
         <div className="space-y-6">
-          <div className="bg-white rounded-xl border p-6">
+          <div className="bg-white border-2 border-neutral-200 p-6">
             <h3 className="font-semibold text-midnight mb-4">Informations du compte</h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-neutral-50 rounded-lg p-3"><div className="text-xs text-neutral-300 mb-1">Nom</div><div className="text-sm font-medium text-midnight">{profile.nom}</div></div>
@@ -3628,7 +3630,7 @@ function TabSettings({ user, profile, taches, subTab, onSubTabChange, prefs, onS
               <div className="bg-neutral-50 rounded-lg p-3"><div className="text-xs text-neutral-300 mb-1">Agence</div><div className="text-sm font-medium text-midnight">{profile.agence}</div></div>
             </div>
           </div>
-          <div className="bg-white rounded-xl border p-6">
+          <div className="bg-white border-2 border-neutral-200 p-6">
             <h3 className="font-semibold text-midnight mb-4">Sécurité — Changer le mot de passe</h3>
             {pwdOk&&<div className="text-sm text-green-700 bg-green-50 rounded-lg px-4 py-3 mb-4 flex items-center gap-2"><span>✅</span> Mot de passe mis à jour avec succès !</div>}
             <div className="space-y-3 max-w-sm">
@@ -3643,7 +3645,7 @@ function TabSettings({ user, profile, taches, subTab, onSubTabChange, prefs, onS
 
       {subTab==='calendrier'&&(
         <div className="space-y-6">
-          <div className="bg-white rounded-xl border p-6">
+          <div className="bg-white border-2 border-neutral-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="font-semibold text-midnight">Synchronisation calendrier</h3>
@@ -3736,7 +3738,7 @@ function PreferencesPanel({ prefs, onSave, profileNom }) {
   const selectStyle={appearance:'none',padding:'9px 36px 9px 12px',border:'1px solid #e2e8f0',borderRadius:9,fontSize:'13.5px',fontWeight:500,color:'#1e293b',background:'white url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath d=\'M3 4.5L6 7.5L9 4.5\' fill=\'none\' stroke=\'%2394a3b8\' stroke-width=\'1.5\' stroke-linecap=\'round\'/%3E%3C/svg%3E") no-repeat right 12px center',boxShadow:'0 1px 2px rgba(0,0,0,.04)',width:'100%',outline:'none'};
   const segGroup={display:'inline-flex',background:'#f1f5f9',borderRadius:10,padding:3,gap:2,border:'1px solid #e2e8f0'};
   const segBtn=(active)=>({padding:'6px 14px',borderRadius:8,fontSize:13,fontWeight:active?600:400,color:active?'#1d4ed8':'#64748b',background:active?'white':'transparent',boxShadow:active?'0 1px 3px rgba(0,0,0,.12), 0 0 0 1px rgba(0,0,0,.04)':'none',border:'none',cursor:'pointer',transition:'all .15s'});
-  const cardCls="bg-white rounded-xl border border border-neutral-100 p-5 sm:p-6";
+  const cardCls="bg-white border-2 border-neutral-100 p-5 sm:p-6";
 
   return (
     <div className="max-w-2xl mx-auto space-y-5 pb-24">
