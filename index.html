@@ -22,7 +22,7 @@ tailwind.config = {
         candy: { 100: '#FF78FD', 50: '#FFC2FE', 20: '#FFEEFF' },
         jade: { 100: '#0BA600', 50: '#85D380', 20: '#CEEDCC' },
         iris: { 100: '#823DE8', 50: '#C19EF3', 20: '#E6D8FA' },
-        coral: { 100: '#FF3E3E', 50: '#FF6161', 20: '#F5A1A6' },
+        coral: { 100: '#FF3D2E', 50: '#FF6161', 20: '#F5A1A6' },
         lemon: { 100: '#FFEA2F', 50: '#FFF597', 20: '#FFF9C0' },
         neutral: { 50: '#F4F4F5', 100: '#E4E4E6', 200: '#D2D2D5', 300: '#A4A6AB' }
       },
@@ -34,8 +34,21 @@ tailwind.config = {
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-  *, *::before, *::after { border-radius: 0 !important; }
-  body { font-family: 'Outfit', sans-serif; background: #FFFFFF; overflow-x: hidden; }
+  input, select, textarea, button, div, section, nav, header, main, aside, article, table, tr, td, th, .kanban-col, .kanban-card, .avatar-menu { border-radius: 0 !important; }
+  body { font-family: 'Outfit', sans-serif; font-size: 14px; line-height: 1.5; background: #FFFFFF; overflow-x: hidden; color: #1D202D; }
+  button { font-family: 'Outfit', sans-serif; }
+  *:focus-visible { outline: 3px solid #FFE500; outline-offset: 2px; }
+  ::selection { background: #FFE500; color: #0A0A0A; }
+  .btn-brutal { box-shadow: 3px 3px 0 #FF3D2E; transition: transform 80ms, box-shadow 80ms; }
+  .btn-brutal:hover { transform: translate(1px,1px); box-shadow: 2px 2px 0 #FF3D2E; }
+  .btn-brutal:active { transform: translate(3px,3px); box-shadow: 0 0 0 #FF3D2E; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #D2D2D5; }
+  ::-webkit-scrollbar-thumb:hover { background: #A4A6AB; }
+  html { scrollbar-width: thin; scrollbar-color: #D2D2D5 transparent; }
+  .skip-link { position: absolute; top: -100%; left: 16px; z-index: 9999; padding: 8px 16px; background: #FFE500; color: #0A0A0A; font-weight: 700; font-size: 14px; border: 2px solid #0A0A0A; text-decoration: none; }
+  .skip-link:focus { top: 8px; }
   .spin { animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   @media(max-width:767px){
@@ -52,8 +65,9 @@ tailwind.config = {
   .kanban-card:active{cursor:grabbing;}
   .kanban-card.dragging{opacity:0.5;transform:rotate(2deg);}
   .kanban-card:hover{border-color:#000000;}
-  @keyframes slideUp{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
-  .toast-in{animation:slideUp .25s ease-out;}
+  @keyframes slideUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes slideOut{from{opacity:1;transform:translateY(0);}to{opacity:0;transform:translateY(-8px);}}
+  .toast-in{animation:slideUp .3s cubic-bezier(.22,1,.36,1);}
   .avatar-menu{position:absolute;right:0;top:100%;margin-top:4px;min-width:220px;background:white;border:2px solid #000000;box-shadow:none;z-index:60;overflow:hidden;}
   .avatar-menu button,.avatar-menu a{display:flex;align-items:center;gap:8px;width:100%;padding:10px 16px;font-size:13px;color:#1D202D;text-align:left;transition:background .1s;}
   .avatar-menu button:hover,.avatar-menu a:hover{background:#F4F4F5;}
@@ -226,15 +240,15 @@ const STATUT_STYLE = {
 };
 function StatutBadge({ statut }) {
   const st = STATUT_STYLE[statut] || STATUT_STYLE['Prospect'];
-  return <span style={{ backgroundColor:st.bg, color:st.color, padding:'2px 8px', borderRadius:9999, fontSize:11, fontWeight:600, whiteSpace:'nowrap' }}>{statut||'Prospect'}</span>;
+  return <span style={{ backgroundColor:st.bg, color:st.color, padding:'2px 8px', borderRadius:9999, fontSize:11, fontWeight:600, whiteSpace:'nowrap', fontFamily:'Outfit,sans-serif' }}>{statut||'Prospect'}</span>;
 }
 function BesoinBadge({ statut }) {
   const c = ({ 'Besoin Gagné':{bg:'#dcfce7',color:'#166534'}, 'Profil proposé':{bg:'#e0f2fe',color:'#0369a1'}, 'Entretien programmé':{bg:'#fef9c3',color:'#92400e'}, 'Entretien passé':{bg:'#fef3c7',color:'#b45309'}, 'Besoin ouvert':{bg:'#f0fdf4',color:'#15803d'}, 'Opportunité':{bg:'#ede9fe',color:'#5b21b6'}, 'Besoin Perdu':{bg:'#fee2e2',color:'#991b1b'}, 'Push opportuniste':{bg:'#f3f4f6',color:'#6b7280'} })[statut] || {bg:'#f3f4f6',color:'#6b7280'};
-  return <span style={{ backgroundColor:c.bg, color:c.color, padding:'2px 8px', borderRadius:9999, fontSize:11, fontWeight:600 }}>{statut}</span>;
+  return <span style={{ backgroundColor:c.bg, color:c.color, padding:'2px 8px', borderRadius:9999, fontSize:11, fontWeight:600, fontFamily:'Outfit,sans-serif' }}>{statut}</span>;
 }
 function MissionStatutBadge({ statut }) {
   const s = ({ 'En cours':{bg:'#dcfce7',color:'#166534'}, 'Intercontrat':{bg:'#fef3c7',color:'#92400e'}, 'Terminée':{bg:'#f3f4f6',color:'#6b7280'}, 'New':{bg:'#e0f2fe',color:'#0369a1'} })[statut] || {bg:'#f3f4f6',color:'#6b7280'};
-  return <span style={{ backgroundColor:s.bg, color:s.color, padding:'2px 7px', borderRadius:9999, fontSize:11, fontWeight:600, whiteSpace:'nowrap' }}>{statut}</span>;
+  return <span style={{ backgroundColor:s.bg, color:s.color, padding:'2px 7px', borderRadius:9999, fontSize:11, fontWeight:600, whiteSpace:'nowrap', fontFamily:'Outfit,sans-serif' }}>{statut}</span>;
 }
 function Loader({ label }) {
   return <div className="flex flex-col items-center justify-center min-h-screen gap-4"><div className="spin text-4xl">⚡</div><div className="text-slate text-sm">{label}</div></div>;
@@ -353,9 +367,9 @@ function SidePanel({ title, badge, onClose, actions, children }) {
   );
 }
 function Field({ label, children }) {
-  return <div><label className="block text-xs font-medium text-slate mb-1">{label}</label>{children}</div>;
+  return <div><label className="block text-[11px] font-bold text-midnight mb-1.5 uppercase tracking-[0.12em]">{label}</label>{children}</div>;
 }
-const inputCls = "w-full px-3 py-2 border border-neutral-200 text-sm focus:outline-none focus:border-midnight transition-colors";
+const inputCls = "w-full px-3 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight font-[Outfit] transition-colors";
 // Renvoie les options allProfiles + éventuellement la valeur courante si absente (protection données legacy)
 function respOptions(allProfiles, current) {
   const list = allProfiles&&allProfiles.length>0 ? allProfiles : [];
@@ -388,7 +402,7 @@ function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
   };
   return (
     <Modal title={`✏️ Modifier — ${contact.prenom} ${contact.nom}`} onClose={onClose}
-      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-midnight text-white rounded-lg text-sm font-medium hover:bg-carbon disabled:opacity-50">{saving?'Enregistrement...':'Enregistrer'}</button></>}>
+      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon disabled:opacity-50 btn-brutal">{saving?'Enregistrement...':'Enregistrer'}</button></>}>
       {[['Groupe / Société','groupe','text'],['Rôle / Poste','role','text']].map(([l,k,t])=>(
         <Field key={k} label={l}><input type={t} value={f[k]} onChange={s(k)} className={inputCls}/></Field>
       ))}
@@ -707,7 +721,7 @@ function AddTacheModal({ contacts, besoins, missions, profile, allProfiles, onCl
 
   return (
     <Modal title="✅ Nouvelle tâche" onClose={onClose}
-      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving||!f.titre.trim()} className="px-4 py-2 bg-midnight text-white rounded-lg text-sm font-medium hover:bg-carbon disabled:opacity-50">{saving?'Enregistrement...':'+ Créer'}</button></>}>
+      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving||!f.titre.trim()} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon disabled:opacity-50 btn-brutal">{saving?'Enregistrement...':'+ Créer'}</button></>}>
       <Field label="Contact lié">
         <ContactPicker contacts={myContacts} value={f.contact_id} onChange={handleContactChange}/>
       </Field>
@@ -775,7 +789,7 @@ function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
   };
   return (
     <Modal title="👤 Nouveau contact" onClose={onClose}
-      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-midnight text-white rounded-lg text-sm font-medium hover:bg-carbon disabled:opacity-50">{saving?'Enregistrement...':'+ Créer'}</button></>}>
+      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon disabled:opacity-50 btn-brutal">{saving?'Enregistrement...':'+ Créer'}</button></>}>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Prénom"><input type="text" value={f.prenom} autoFocus onChange={sNorm('prenom',normPrenom)} className={inputCls} placeholder="ex: Jean-Pierre"/></Field>
         <Field label="Nom *"><input type="text" value={f.nom} onChange={sNorm('nom',normNom)} className={inputCls} placeholder="ex: DUPONT"/></Field>
@@ -969,7 +983,7 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, on
   };
   return (
     <Modal title={isEdit?`✏️ Modifier — ${mission.consultant}`:'➕ Nouvelle mission'} onClose={onClose}
-      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving||!f.contact_consultant_id} className="px-4 py-2 bg-midnight text-white rounded-lg text-sm font-medium hover:bg-carbon disabled:opacity-50">{saving?'Enregistrement...':(isEdit?'Enregistrer':'Créer')}</button></>}>
+      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving||!f.contact_consultant_id} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon disabled:opacity-50 btn-brutal">{saving?'Enregistrement...':(isEdit?'Enregistrer':'Créer')}</button></>}>
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Consultant *"><ContactSearchField contacts={contacts||[]} value={f.contact_consultant_id} onChange={(id,name)=>setF(v=>({...v,contact_consultant_id:id,consultant:name||v.consultant}))} statuts={['Consultant CDI','Freelance','Prestataire']} placeholder="Rechercher consultant CDI/freelance/prestataire..."/></Field>
@@ -1268,7 +1282,7 @@ function TabProspects({ contacts, historique, taches, missions, besoins, profile
     <div>
       <div className="flex items-center justify-between mb-3">
         <div/>
-        <button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-midnight text-white rounded-lg text-sm font-medium hover:bg-carbon">+ Nouveau contact</button>
+        <button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">+ Nouveau contact</button>
       </div>
       <div className="flex gap-2 sm:gap-3 mb-4 flex-wrap">
         <input type="text" placeholder="Rechercher..." value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-[140px] sm:min-w-64 px-3 sm:px-4 py-2 border rounded-lg text-sm focus:outline-none focus:border-midnight"/>
@@ -1295,11 +1309,11 @@ function TabProspects({ contacts, historique, taches, missions, besoins, profile
       {/* Vue cartes mobile */}
       <div className="md:hidden space-y-2">
         {filtered.map(c=>(
-          <div key={c.id} onClick={()=>setSelected(c)} data-detail tabIndex="0" className="bg-white rounded-xl border border-neutral-100 p-3 cursor-pointer active:bg-azure-20 focus:outline-none focus:border-midnight transition-colors">
+          <div key={c.id} onClick={()=>setSelected(c)} data-detail tabIndex="0" className="bg-white border-2 border-neutral-200 hover:border-midnight p-3 cursor-pointer active:bg-azure-20 focus:outline-none focus:border-midnight transition-colors">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <div className="font-semibold text-midnight text-sm">{c.prenom} {c.nom}</div>
-                {c.groupe&&<div className="text-xs text-slate mt-0.5">{c.groupe}</div>}
+                <div className="font-bold text-midnight text-sm">{c.prenom} {c.nom}</div>
+                {c.groupe&&<div className="text-xs font-medium text-slate mt-0.5">{c.groupe}</div>}
                 {c.role&&<div className="text-xs text-neutral-300">{c.role}</div>}
               </div>
               <StatutBadge statut={c.statut}/>
@@ -1312,9 +1326,9 @@ function TabProspects({ contacts, historique, taches, missions, besoins, profile
         ))}
       </div>
       {/* Vue tableau desktop */}
-      <div className="hidden md:block bg-white rounded-xl border border-neutral-100 overflow-hidden">
+      <div className="hidden md:block bg-white border-2 border-neutral-200 overflow-hidden">
         <table className="w-full text-sm">
-          <thead><tr className="bg-neutral-50 text-slate text-xs uppercase">
+          <thead><tr className="bg-neutral-50 text-[11px] font-bold uppercase tracking-[0.1em] text-slate">
             <th className={thCls} onClick={()=>toggleSort('nom')}>Contact<SortIcon col="nom"/></th>
             <th className={thCls} onClick={()=>toggleSort('groupe')}>Société<SortIcon col="groupe"/></th>
             <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('ville')}>Ville<SortIcon col="ville"/></th>
@@ -1323,7 +1337,7 @@ function TabProspects({ contacts, historique, taches, missions, besoins, profile
             <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('date_dernier')}>Dernier contact<SortIcon col="date_dernier"/></th>
           </tr></thead>
           <tbody>{filtered.map(c=>(
-            <tr key={c.id} onClick={()=>setSelected(c)} data-detail tabIndex="0" className="border-t border-neutral-50 hover:bg-azure-20 focus:bg-azure-20 focus:outline-none cursor-pointer transition-colors">
+            <tr key={c.id} onClick={()=>setSelected(c)} data-detail tabIndex="0" className={`border-t border-neutral-50 hover:bg-lemon-20 focus:bg-azure-20 focus:outline-none cursor-pointer transition-colors${selected&&selected.id===c.id?' bg-azure-20':''}`}>
               <td className="px-4 py-3"><div className="font-medium text-midnight">{c.prenom} {c.nom}</div>{c.role&&<div className="text-xs text-neutral-300">{c.role}</div>}</td>
               <td className="px-4 py-3 text-slate">{c.groupe}</td>
               <td className="px-4 py-3 text-slate hidden lg:table-cell">{c.ville}</td>
@@ -1454,7 +1468,7 @@ function EditTacheModal({ task, contacts, besoins, missions, profile, allProfile
   };
   return (
     <Modal title="✏️ Modifier la tâche" onClose={onClose}
-      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving||!f.titre.trim()} className="px-4 py-2 bg-midnight text-white rounded-lg text-sm font-medium hover:bg-carbon disabled:opacity-50">{saving?'Enregistrement...':'Enregistrer'}</button></>}>
+      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving||!f.titre.trim()} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon disabled:opacity-50 btn-brutal">{saving?'Enregistrement...':'Enregistrer'}</button></>}>
       <Field label="Titre *"><input type="text" value={f.titre} autoFocus onChange={e=>setF(v=>({...v,titre:e.target.value}))} className={inputCls}/></Field>
       <Field label="Échéance">
         <div className="flex gap-2">
@@ -1778,7 +1792,7 @@ function TabTaches({ taches, contacts, besoins, missions, historique, profile, a
     <div>
       <div className="flex items-center justify-between mb-3">
         <div/>
-        <button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-midnight text-white rounded-lg text-sm font-medium hover:bg-carbon">+ Nouvelle tâche</button>
+        <button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">+ Nouvelle tâche</button>
       </div>
       <div className="flex gap-3 mb-4 flex-wrap">
         <input type="text" placeholder="Rechercher une tâche..." value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-48 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:border-midnight"/>
@@ -1806,7 +1820,7 @@ function TabTaches({ taches, contacts, besoins, missions, historique, profile, a
           <TacheSection label="🗓 À venir"     taches={aVenir}    {...sectionProps}/>
           <TacheSection label="🔄 En cours"    taches={enCours}   {...sectionProps}/>
           <TacheSection label="📋 À faire"     taches={aFaire}    {...sectionProps}/>
-          {actives.length===0&&<div className="text-center py-16 text-neutral-300"><div className="text-4xl mb-3">✅</div><div className="font-medium">Aucune tâche</div></div>}
+          {actives.length===0&&<div className="text-center py-16"><div className="font-bold text-midnight text-lg mb-1">Aucune tâche</div><div className="text-sm text-neutral-300">Les tâches actives apparaîtront ici.</div></div>}
         </div>
       ):(
         <CalendarTaches taches={actives} contactMap={contactMap} profile={profile} isAdmin={isAdmin} onComplete={setCompletingModal}/>
@@ -2079,7 +2093,7 @@ function AddBesoinModal({ contacts, profile, allProfiles, onClose, onSaved }) {
   const myContacts=contacts;
   return (
     <Modal title="Nouveau besoin" onClose={onClose}
-      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-midnight text-white rounded-lg text-sm font-medium disabled:opacity-50">{saving?'...':'Créer'}</button></>}>
+      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-midnight text-white text-sm font-medium disabled:opacity-50 btn-brutal">{saving?'...':'Créer'}</button></>}>
       <Field label="Titre *"><input type="text" value={f.titre} onChange={e=>setF(v=>({...v,titre:e.target.value}))} placeholder="Ex : Développeur Java Senior" className={inputCls}/></Field>
       <Field label="Statut initial">
         <select value={f.statut} onChange={e=>setF(v=>({...v,statut:e.target.value}))} className={inputCls}>
@@ -2295,7 +2309,7 @@ function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, m
       )))}
 
       {/* Bouton sauvegarder */}
-      {editing&&<button onClick={saveEdit} disabled={saving} className="w-full py-2.5 bg-midnight text-white rounded-lg text-sm font-medium disabled:opacity-50">{saving?'Enregistrement...':'Sauvegarder'}</button>}
+      {editing&&<button onClick={saveEdit} disabled={saving} className="w-full py-2.5 bg-midnight text-white text-sm font-medium disabled:opacity-50 btn-brutal">{saving?'Enregistrement...':'Sauvegarder'}</button>}
 
       {/* Mission liée */}
       {(()=>{const m=(missions||[]).find(x=>String(x.besoin_id)===String(besoin.id));return m?<div><div className="text-xs text-neutral-300 font-semibold mb-2 uppercase tracking-wide">Mission liée</div><button onClick={()=>{if(onNavToMission){onClose();onNavToMission(m.id);}}} className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-100 cursor-pointer">💼 {m.consultant}{m.client?' · '+m.client:''}</button></div>:null;})()}
@@ -2338,7 +2352,7 @@ function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, m
             <p className="text-carbon">Ce besoin est gagné. Veux-tu créer une mission associée ?</p>
             <div className="flex gap-3 justify-center">
               <button onClick={()=>{setModal(null);onRefresh();}} className="px-4 py-2 text-sm text-slate border rounded-lg hover:bg-neutral-50">Plus tard</button>
-              <button onClick={()=>setModal('createMission')} className="px-4 py-2 bg-midnight text-white rounded-lg text-sm font-medium hover:bg-carbon">Créer la mission</button>
+              <button onClick={()=>setModal('createMission')} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">Créer la mission</button>
             </div>
           </div>
         </Modal>
@@ -2506,7 +2520,7 @@ function TabBesoins({ contacts, besoins, besoinCandidats, historique, taches, mi
     <div>
       <div className="flex items-center justify-between mb-3">
         <div/>
-        <button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-midnight text-white rounded-lg text-sm font-medium hover:bg-carbon">+ Nouveau besoin</button>
+        <button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">+ Nouveau besoin</button>
       </div>
       <div className="flex gap-2 sm:gap-3 mb-3 flex-wrap items-center">
         <input type="text" placeholder="Rechercher..." value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-[140px] sm:min-w-48 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:border-midnight"/>
@@ -2592,7 +2606,7 @@ function TabBesoins({ contacts, besoins, besoinCandidats, historique, taches, mi
                 </div>
               );
             })}
-            {sorted.length===0&&<div className="text-center py-16 text-neutral-300"><div className="text-4xl mb-3">📋</div><div className="font-medium">Aucun besoin</div></div>}
+            {sorted.length===0&&<div className="text-center py-16"><div className="font-bold text-midnight text-lg mb-1">Aucun besoin</div><div className="text-sm text-neutral-300">Les besoins actifs apparaîtront ici.</div></div>}
           </div>
         </>
       )}
@@ -2672,7 +2686,7 @@ function TabHistorique({ historique, contacts, taches, besoins, profile, allProf
       <div className="text-xs text-neutral-300 mb-3">{filtered.length} action{filtered.length>1?'s':''}</div>
 
       <div className="bg-white rounded-xl border border-neutral-100 overflow-hidden divide-y divide-gray-50">
-        {filtered.length===0&&<div className="px-4 py-10 text-center text-sm text-neutral-300 italic">Aucune action trouvée</div>}
+        {filtered.length===0&&<div className="px-4 py-10 text-center"><div className="font-bold text-midnight mb-1">Aucune action trouvée</div><div className="text-sm text-neutral-300">Modifiez vos filtres pour voir plus de résultats.</div></div>}
         {filtered.slice(0,visibleCount).map((h,i)=>{
           const contact=h.id_prospect?contactMap[h.id_prospect]:null;
           const s=TYPE_COLORS[h.type_action]||TYPE_COLORS['Autre'];
@@ -2918,7 +2932,7 @@ function TabPipe({ besoins, contacts, besoinCandidats, historique, taches, missi
                 </div>
               </div>
             ))}
-            {funnel.length===0&&<div className="text-center py-8 text-neutral-300 text-sm">Aucun besoin actif</div>}
+            {funnel.length===0&&<div className="text-center py-8"><div className="font-bold text-midnight text-sm mb-1">Aucun besoin actif</div><div className="text-xs text-neutral-300">Le funnel sera alimenté par les besoins en cours.</div></div>}
           </div>
         </div>
 
@@ -2940,7 +2954,7 @@ function TabPipe({ besoins, contacts, besoinCandidats, historique, taches, missi
                 );
               })}
             </div>
-          ):<div className="text-center py-8 text-neutral-300 text-sm">Aucune donnée</div>}
+          ):<div className="text-center py-8"><div className="font-bold text-midnight text-sm mb-1">Aucune donnée</div><div className="text-xs text-neutral-300">Pas de données pour cette ventilation.</div></div>}
         </div>
       </div>
 
@@ -2981,7 +2995,7 @@ function TabPipe({ besoins, contacts, besoinCandidats, historique, taches, missi
               </tr>
             ))}</tbody>
           </table>
-          {sorted.length===0&&<div className="text-center py-12 text-neutral-300"><div className="text-3xl mb-2">📊</div>Aucun besoin actif</div>}
+          {sorted.length===0&&<div className="text-center py-12"><div className="font-bold text-midnight mb-1">Aucun besoin actif</div><div className="text-sm text-neutral-300">Ajoutez des besoins pour les voir ici.</div></div>}
         </div>
         {/* Mobile */}
         <div className="md:hidden divide-y divide-gray-50">
@@ -3003,7 +3017,7 @@ function TabPipe({ besoins, contacts, besoinCandidats, historique, taches, missi
               </div>
             </div>
           ))}
-          {sorted.length===0&&<div className="text-center py-12 text-neutral-300"><div className="text-3xl mb-2">📊</div>Aucun besoin actif</div>}
+          {sorted.length===0&&<div className="text-center py-12"><div className="font-bold text-midnight mb-1">Aucun besoin actif</div><div className="text-sm text-neutral-300">Ajoutez des besoins pour les voir ici.</div></div>}
         </div>
       </div>
 
@@ -3312,10 +3326,9 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
   const missionsTri=[...missionsFiltrees].sort((a,b)=>{const d=(ORDRE_STATUT[a.statut]??9)-(ORDRE_STATUT[b.statut]??9);return d!==0?d:(a.consultant||'').localeCompare(b.consultant||'');});
 
   if(missions.length===0) return (
-    <div className="flex flex-col items-center justify-center py-20 text-neutral-300">
-      <div className="text-5xl mb-4">📊</div>
-      <div className="font-medium text-slate mb-2">Aucune mission chargée</div>
-      <div className="text-sm text-center max-w-sm">Lance <code className="bg-neutral-100 px-1.5 py-0.5 rounded text-xs font-mono">python3 supabase/populate_supabase.py</code> pour importer les missions.</div>
+    <div className="flex flex-col items-center justify-center py-20">
+      <div className="font-bold text-midnight text-lg mb-2">Aucune mission chargée</div>
+      <div className="text-sm text-neutral-300 text-center max-w-sm">Lance <code className="bg-neutral-100 px-1.5 py-0.5 text-xs font-mono">python3 supabase/populate_supabase.py</code> pour importer les missions.</div>
     </div>
   );
 
@@ -3324,29 +3337,29 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
       {/* Header + Nouveau */}
       <div className="flex items-center justify-between">
         <div/>
-        <button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-midnight text-white rounded-lg text-sm font-medium hover:bg-carbon">+ Nouvelle mission</button>
+        <button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">+ Nouvelle mission</button>
       </div>
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-neutral-100 p-4">
-          <div className="text-xs text-neutral-300 font-medium mb-1 uppercase tracking-wide">En mission</div>
-          <div className="text-3xl font-bold text-azure-100">{enMission.length}</div>
-          <div className="text-xs text-slate mt-1">consultant{enMission.length>1?'s':''} actif{enMission.length>1?'s':''}</div>
+        <div className="bg-white border-2 border-midnight p-4">
+          <div className="text-2xl font-black text-azure-100">{enMission.length}</div>
+          <div className="text-[11px] uppercase tracking-wider text-slate mt-1">En mission</div>
+          <div className="text-xs text-neutral-300 mt-0.5">consultant{enMission.length>1?'s':''} actif{enMission.length>1?'s':''}</div>
         </div>
-        <div className={`bg-white rounded-xl border p-4 ${intercontrat.length>0?'border-orange-200 bg-orange-50':'border-neutral-100'}`}>
-          <div className="text-xs text-neutral-300 font-medium mb-1 uppercase tracking-wide">Intercontrat</div>
-          <div className={`text-3xl font-bold ${intercontrat.length>0?'text-orange-600':'text-neutral-200'}`}>{intercontrat.length}</div>
-          <div className="text-xs text-slate mt-1 truncate">{intercontrat.length>0?intercontrat.map(m=>m.consultant.split(/\s+/)[0]).join(', '):'Aucun'}</div>
+        <div className={`bg-white border-2 p-4 ${intercontrat.length>0?'border-orange-600':'border-midnight'}`}>
+          <div className={`text-2xl font-black ${intercontrat.length>0?'text-orange-600':'text-neutral-200'}`}>{intercontrat.length}</div>
+          <div className="text-[11px] uppercase tracking-wider text-slate mt-1">Intercontrat</div>
+          <div className="text-xs text-neutral-300 mt-0.5 truncate">{intercontrat.length>0?intercontrat.map(m=>m.consultant.split(/\s+/)[0]).join(', '):'Aucun'}</div>
         </div>
-        <div className="bg-white rounded-xl border border-neutral-100 p-4">
-          <div className="text-xs text-neutral-300 font-medium mb-1 uppercase tracking-wide">CA YTD</div>
-          <div className="text-2xl font-bold text-green-700">{fmtCurrency(caYTD)}</div>
-          <div className="text-xs text-slate mt-1">{hasFilter?'sélection filtrée':'missions visibles'}</div>
+        <div className="bg-white border-2 border-midnight p-4">
+          <div className="text-2xl font-black text-green-700">{fmtCurrency(caYTD)}</div>
+          <div className="text-[11px] uppercase tracking-wider text-slate mt-1">CA YTD</div>
+          <div className="text-xs text-neutral-300 mt-0.5">{hasFilter?'sélection filtrée':'missions visibles'}</div>
         </div>
-        <div className="bg-white rounded-xl border border-neutral-100 p-4">
-          <div className="text-xs text-neutral-300 font-medium mb-1 uppercase tracking-wide">Marge YTD</div>
-          <div className="text-2xl font-bold text-purple-700">{fmtCurrency(margeYTD)}</div>
-          <div className="text-xs text-slate mt-1">{tauxMarge.toFixed(1)}% taux de marge</div>
+        <div className="bg-white border-2 border-midnight p-4">
+          <div className="text-2xl font-black text-purple-700">{fmtCurrency(margeYTD)}</div>
+          <div className="text-[11px] uppercase tracking-wider text-slate mt-1">Marge YTD</div>
+          <div className="text-xs text-neutral-300 mt-0.5">{tauxMarge.toFixed(1)}% taux de marge</div>
         </div>
       </div>
 
@@ -3401,11 +3414,11 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
             const caT=joursT*(parseFloat(m.tjm)||0);
             const margeT=joursT*((parseFloat(m.tjm)||0)-(parseFloat(m.cjm)||0));
             return (
-              <div key={m.id} onClick={()=>setSelected(m)} data-detail tabIndex="0" className="bg-white rounded-xl border border-neutral-100 p-3 cursor-pointer active:bg-azure-20 focus:outline-none focus:border-midnight transition-colors">
+              <div key={m.id} onClick={()=>setSelected(m)} data-detail tabIndex="0" className="bg-white border-2 border-neutral-200 hover:border-midnight p-3 cursor-pointer active:bg-azure-20 focus:outline-none focus:border-midnight transition-colors">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="font-semibold text-midnight text-sm">{m.consultant}</div>
-                    <div className="text-xs text-slate mt-0.5">{m.client||'—'}{m.projet?` · ${m.projet}`:''}</div>
+                    <div className="font-bold text-midnight text-sm">{m.consultant}</div>
+                    <div className="text-xs font-medium text-slate mt-0.5">{m.client||'—'}{m.projet?` · ${m.projet}`:''}</div>
                   </div>
                   <MissionStatutBadge statut={m.statut}/>
                 </div>
@@ -3418,7 +3431,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
               </div>
             );
           })}
-          {missionsTri.length===0&&<div className="text-center py-8 text-neutral-300 text-sm">Aucune mission</div>}
+          {missionsTri.length===0&&<div className="text-center py-8"><div className="font-bold text-midnight mb-1">Aucune mission</div><div className="text-sm text-neutral-300">Modifiez vos filtres pour voir plus de résultats.</div></div>}
         </div>
         {/* Vue tableau desktop */}
         <div className="hidden md:block overflow-x-auto">
@@ -3535,7 +3548,7 @@ function ChangePasswordModal({ onClose }) {
   return (
     <Modal title="🔑 Changer mon mot de passe" onClose={onClose}
       footer={ok ? <button onClick={onClose} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium">Fermer</button>
-                 : <><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving||!pwd||!pwd2} className="px-4 py-2 bg-midnight text-white rounded-lg text-sm font-medium hover:bg-carbon disabled:opacity-50">{saving?'Enregistrement...':'Enregistrer'}</button></>}>
+                 : <><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving||!pwd||!pwd2} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon disabled:opacity-50 btn-brutal">{saving?'Enregistrement...':'Enregistrer'}</button></>}>
       {ok
         ? <div className="text-center py-4"><div className="text-3xl mb-2">✅</div><div className="text-sm text-green-700 font-medium">Mot de passe mis à jour avec succès !</div></div>
         : <>
@@ -3622,7 +3635,7 @@ function TabSettings({ user, profile, taches, subTab, onSubTabChange, prefs, onS
               <Field label="Nouveau mot de passe"><input type="password" value={pwd} onChange={e=>setPwd(e.target.value)} placeholder="Min. 6 caractères" className={inputCls}/></Field>
               <Field label="Confirmer"><input type="password" value={pwd2} onChange={e=>setPwd2(e.target.value)} placeholder="Répéter le mot de passe" className={inputCls}/></Field>
               {pwdErr&&<div className="text-xs text-coral-100 bg-coral-20 rounded px-3 py-2">{pwdErr}</div>}
-              <button onClick={savePwd} disabled={pwdSaving||!pwd||!pwd2} className="px-4 py-2 bg-midnight text-white rounded-lg text-sm font-medium hover:bg-carbon disabled:opacity-50">{pwdSaving?'Enregistrement...':'Modifier le mot de passe'}</button>
+              <button onClick={savePwd} disabled={pwdSaving||!pwd||!pwd2} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon disabled:opacity-50 btn-brutal">{pwdSaving?'Enregistrement...':'Modifier le mot de passe'}</button>
             </div>
           </div>
         </div>
@@ -3845,7 +3858,7 @@ function PreferencesPanel({ prefs, onSave, profileNom }) {
               <>
                 <span className="text-neutral-200 text-sm">Modifications non sauvegardées</span>
                 <button onClick={handleCancel} className="px-3 py-1.5 text-sm font-medium text-neutral-200 hover:text-white rounded-lg hover:bg-white/10 transition-colors">Annuler</button>
-                <button onClick={handleSave} disabled={saving} className="px-4 py-1.5 text-sm font-semibold bg-midnight text-white rounded-lg hover:bg-azure-200 disabled:opacity-50 transition-colors">{saving?'...':'Sauvegarder →'}</button>
+                <button onClick={handleSave} disabled={saving} className="px-4 py-1.5 text-sm font-semibold bg-midnight text-white hover:bg-azure-200 disabled:opacity-50 transition-colors btn-brutal">{saving?'...':'Sauvegarder →'}</button>
               </>
             )}
           </div>
@@ -4021,6 +4034,7 @@ function App() {
 
   return (
     <div className="min-h-screen" style={{background:'#FFFFFF'}}>
+      <a href="#main-content" className="skip-link">Aller au contenu principal</a>
       <div className="bg-white sticky top-0 z-40 border-b-2" style={{borderColor:activeColor}}>
         <div className="max-w-7xl mx-auto px-2 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink-0">
@@ -4072,11 +4086,11 @@ function App() {
             </div>
           </div>
         </div>
-        <div ref={tabsRef} className="max-w-7xl mx-auto px-2 sm:px-4 flex gap-1 pb-0 mobile-tabs">
+        <div ref={tabsRef} role="tablist" aria-label="Navigation CRM" className="max-w-7xl mx-auto px-2 sm:px-4 flex gap-1 pb-0 mobile-tabs">
           {TABS.map((t,i)=>{
             const c=TAB_COLORS[t.id]||'#fff';
             const active=tab===t.id;
-            return <button key={t.id} data-active={active?'true':undefined} onClick={()=>setTab(t.id)} style={active?{background:c,color:c==='#FFEA2F'||c==='#FF78FD'?'#000':'#fff'}:{}} className={`px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap ${active?'':'text-slate hover:text-carbon'}`}>
+            return <button key={t.id} role="tab" aria-selected={active} data-active={active?'true':undefined} onClick={()=>setTab(t.id)} style={active?{background:c,color:c==='#FFEA2F'||c==='#FF78FD'?'#000':'#fff'}:{}} className={`px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap ${active?'':'text-slate hover:text-carbon'}`}>
               {t.label}<span className="hidden sm:inline text-xs opacity-40 ml-1">{i+1}</span>
             </button>;
           })}
@@ -4088,7 +4102,7 @@ function App() {
           <button onClick={()=>setViewAs(null)} className="bg-midnight text-white px-3 py-1 font-semibold hover:opacity-80 text-[10px] uppercase">Quitter</button>
         </div>
       )}
-      <div className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-6">
+      <div id="main-content" role="main" className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-6">
         {tab==='prospects'&&<TabProspects contacts={vContacts} historique={vHistorique} taches={vTaches} missions={vMissions} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navContactId={navContactId} navContactKey={navContactKey} onNavToBesoin={navToBesoin} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
         {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} besoins={vBesoins} missions={vMissions} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance} navTacheId={navTacheId} navTacheKey={navTacheKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToMission={navToMission} prefs={prefs}/>}
         {tab==='besoins'  &&<TabBesoins  contacts={vContacts} besoins={vBesoins} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navBesoinId={navBesoinId} navBesoinKey={navBesoinKey} onNavToContact={navToContact} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
