@@ -298,17 +298,18 @@ function StatutBadge({ statut }) {
   const st = STATUT_STYLE[statut] || STATUT_STYLE['Prospect'];
   return <span style={{ backgroundColor:st.bg, color:st.color, padding:'2px 8px', borderRadius:0, fontSize:11, fontWeight:700, whiteSpace:'nowrap', fontFamily:'Outfit,sans-serif', textTransform:'uppercase', letterSpacing:'0.04em' }}>{statut||'Prospect'}</span>;
 }
+const BESOIN_BADGE_COLORS_GLOBAL = {
+  'Besoin Gagné':        { bg:'#00C218', color:'#1C1F35' },
+  'Besoin ouvert':       { bg:'#4A7FE5', color:'#FFFFFF' },
+  'Opportunité':         { bg:'#FF66FF', color:'#1C1F35' },
+  'Push opportuniste':   { bg:'#FFE500', color:'#1C1F35' },
+  'Profil proposé':      { bg:'#1C1F35', color:'#FFFFFF' },
+  'Entretien programmé': { bg:'#FF3D2E', color:'#FFFFFF' },
+  'Entretien passé':     { bg:'#FF3D2E', color:'#FFFFFF' },
+  'Besoin Perdu':        { bg:'#E4E4E6', color:'#1C1F35' },
+};
 function BesoinBadge({ statut }) {
-  const c = ({
-    'Besoin Gagné':        { bg:'#00C218', color:'#1C1F35' },
-    'Besoin ouvert':       { bg:'#4A7FE5', color:'#FFFFFF' },
-    'Opportunité':         { bg:'#FF66FF', color:'#1C1F35' },
-    'Push opportuniste':   { bg:'#FFE500', color:'#1C1F35' },
-    'Profil proposé':      { bg:'#1C1F35', color:'#FFFFFF' },
-    'Entretien programmé': { bg:'#FF3D2E', color:'#FFFFFF' },
-    'Entretien passé':     { bg:'#FF3D2E', color:'#FFFFFF' },
-    'Besoin Perdu':        { bg:'#E4E4E6', color:'#1C1F35' },
-  })[statut] || { bg:'#E4E4E6', color:'#1C1F35' };
+  const c = BESOIN_BADGE_COLORS_GLOBAL[statut] || { bg:'#E4E4E6', color:'#1C1F35' };
   return <span style={{ backgroundColor:c.bg, color:c.color, padding:'2px 8px', borderRadius:0, fontSize:11, fontWeight:700, fontFamily:'Outfit,sans-serif', textTransform:'uppercase', letterSpacing:'0.04em', whiteSpace:'nowrap' }}>{statut}</span>;
 }
 function MissionStatutBadge({ statut }) {
@@ -2612,16 +2613,17 @@ function TabBesoins({ contacts, besoins, besoinCandidats, historique, taches, mi
   const hasFilter=search||filterStatut||filterResp||(isAdmin?filterAgence!=='':filterAgence!==profile.agence);
   const resetAll=()=>{setSearch('');setFilterStatut('');setFilterResp('');setFilterAgence(isAdmin?'':profile.agence);};
 
+  const BESOIN_BADGE_COLORS=BESOIN_BADGE_COLORS_GLOBAL;
   const STATUT_BTNS=[
-    {label:'Tous',value:'',icon:null},
-    {label:'Opportunité',value:'Opportunité',icon:<Icon d={ICONS.search} size={12}/>},
-    {label:'Push',value:'Push opportuniste',icon:null},
-    {label:'Besoin ouvert',value:'Besoin ouvert',icon:null},
-    {label:'Profil proposé',value:'Profil proposé',icon:null},
-    {label:'Entretien prog.',value:'Entretien programmé',icon:<Icon d={ICONS.calendar} size={12}/>},
-    {label:'Entretien passé',value:'Entretien passé',icon:<Icon d={ICONS.check} size={12}/>},
-    {label:'Gagné',value:'Besoin Gagné',icon:<Icon d={ICONS.star} size={12}/>},
-    {label:'Perdu',value:'Besoin Perdu',icon:<Icon d={ICONS.close} size={12}/>},
+    {label:'TOUS',value:''},
+    {label:'OPPORTUNITÉ',value:'Opportunité'},
+    {label:'PUSH',value:'Push opportuniste'},
+    {label:'OUVERT',value:'Besoin ouvert'},
+    {label:'PROFIL PROPOSÉ',value:'Profil proposé'},
+    {label:'ENTRETIEN PROG.',value:'Entretien programmé'},
+    {label:'ENTRETIEN PASSÉ',value:'Entretien passé'},
+    {label:'GAGNÉ',value:'Besoin Gagné'},
+    {label:'PERDU',value:'Besoin Perdu'},
   ];
 
   return (
@@ -2653,26 +2655,28 @@ function TabBesoins({ contacts, besoins, besoinCandidats, historique, taches, mi
       {viewMode==='list'&&(
         <>
           <div className="flex gap-1.5 flex-wrap mb-4">
-            {STATUT_BTNS.map(btn=>(
-              <button key={btn.value} onClick={()=>setFilterStatut(btn.value)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap
-                  ${filterStatut===btn.value?'bg-midnight text-white':'bg-white text-slate border-neutral-200 hover:border-neutral-400 hover:text-carbon'}`}>
-                {btn.icon&&<span className="mr-1">{btn.icon}</span>}{btn.label}
-              </button>
-            ))}
+            {STATUT_BTNS.map(btn=>{
+              const active=filterStatut===btn.value;
+              const bc=btn.value?BESOIN_BADGE_COLORS[btn.value]:null;
+              return <button key={btn.value} onClick={()=>setFilterStatut(btn.value)}
+                style={active&&bc?{backgroundColor:bc.bg,color:bc.color}:active?{backgroundColor:'#1C1F35',color:'#fff'}:{}}
+                className={`px-3 py-1.5 text-[11px] font-bold border-2 transition-colors whitespace-nowrap tracking-[0.04em]
+                  ${active?'border-transparent':'bg-white text-slate border-neutral-200 hover:border-midnight hover:text-midnight'}`}>
+                {btn.label}
+              </button>;
+            })}
           </div>
           <div className="text-xs text-neutral-300 mb-3">{sorted.length} besoin{sorted.length>1?'s':''}</div>
           <div className="space-y-6">
             {(filterStatut?[filterStatut]:BESOIN_STATUTS_ORDRE).map(statut=>{
               const items=sorted.filter(b=>b.statut===statut);
               if(items.length===0) return null;
-              const icon=STATUT_BTNS.find(x=>x.value===statut)?.icon||'';
+              const bc=BESOIN_BADGE_COLORS[statut]||{bg:'#E4E4E6',color:'#1C1F35'};
               return (
                 <div key={statut}>
                   <div className="flex items-center gap-2 mb-2">
-                    {icon&&<span>{icon}</span>}
-                    <span className="text-sm font-semibold text-carbon">{statut}</span>
-                    <span className="text-xs bg-neutral-100 text-slate px-2 py-0.5 rounded-full">{items.length}</span>
+                    <span style={{backgroundColor:bc.bg,color:bc.color,padding:'2px 8px',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em',whiteSpace:'nowrap'}}>{statut}</span>
+                    <span className="text-xs font-bold text-slate">{items.length}</span>
                   </div>
                   <div className="space-y-2">{items.map(b=>{
                     const contact=contactMap[b.contact_id];
@@ -3033,8 +3037,8 @@ function TabPipe({ besoins, contacts, besoinCandidats, historique, taches, missi
                     <span className="font-semibold text-green-700">{fmtCurrency(f.totalPond)}</span>
                   </div>
                 </div>
-                <div className="w-full bg-neutral-100 rounded-full h-2.5">
-                  <div className="bg-azure-200 h-2.5 rounded-full transition-all" style={{width:`${Math.max((f.totalBrut/maxFunnel)*100,2)}%`}}/>
+                <div className="w-full bg-neutral-100 h-2.5">
+                  <div className="h-2.5 transition-all" style={{width:`${Math.max((f.totalBrut/maxFunnel)*100,2)}%`,background:(BESOIN_BADGE_COLORS_GLOBAL[f.statut]||{bg:'#4A7FE5'}).bg}}/>
                 </div>
               </div>
             ))}
