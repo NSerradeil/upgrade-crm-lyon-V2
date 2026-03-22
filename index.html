@@ -3697,7 +3697,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
       })()}
 
       {/* Chart area — switches based on activeChart */}
-      <div style={{background:'#fff',border:'2px solid #E4E4E6',padding:'20px 24px 24px',borderRadius:0}}>
+      <div style={{background:'#fff',border:'2px solid #E4E4E6',borderLeft:`5px solid ${(CARDS.find(c=>c.id===activeChart)||{}).color||'#E4E4E6'}`,padding:'20px 24px 24px',borderRadius:0}}>
         {activeChart==='ca'&&<ChartCA caMensuel={caMensuel} caYTD={caYTD} curMonth={curMonthIdx}/>}
         {activeChart==='marge'&&<ChartMarge margeMensuel={margeMensuel} margeYTD={margeYTD} caMensuel={caMensuel} tauxMarge={tauxMarge} curMonth={curMonthIdx}/>}
         {activeChart==='inter'&&<ChartInter tauxM={tauxInterM} tauxAnn={tauxInterAnn} curMonth={curMonthIdx}/>}
