@@ -409,8 +409,8 @@ function SidePanel({ title, badge, onClose, actions, children }) {
   return (
     <div className="fixed inset-0 bg-midnight/80 z-50 flex justify-end" onClick={onClose}>
       <div className="w-full max-w-lg bg-white h-full overflow-y-auto border-l-2 border-midnight" style={{animation:'slideInRight 250ms ease-out'}} onClick={e=>e.stopPropagation()}>
-        <div className="sticky top-0 bg-white px-6 py-4 flex items-start justify-between z-10 border-b-4 border-black">
-          <div>
+        <div className="sticky top-0 bg-white px-6 py-4 flex items-start justify-between gap-3 z-10 border-b-4 border-black">
+          <div className="flex-1 min-w-0">
             <div className="font-bold text-lg text-midnight">{title}</div>
             {badge&&<div className="mt-1">{badge}</div>}
           </div>
@@ -2275,7 +2275,7 @@ function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, m
   );
 
   return (
-    <SidePanel title={editing?<input type="text" value={f.titre} onChange={e=>setF(v=>({...v,titre:e.target.value}))} className="font-bold text-lg border-b border-blue-300 focus:outline-none w-full"/>:besoin.titre}
+    <SidePanel title={editing?<input type="text" value={f.titre} onChange={e=>setF(v=>({...v,titre:e.target.value}))} className="font-bold text-lg border-b-2 border-midnight focus:outline-none focus:border-lemon-100 w-full bg-transparent transition-colors" style={{minWidth:0}}/>:besoin.titre}
       badge={<BesoinBadge statut={f.statut}/>} onClose={onClose} actions={actions}>
 
       {/* Stepper statut */}
@@ -3432,14 +3432,14 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
           <span className="text-sm font-semibold text-carbon">CA mensuel {new Date().getFullYear()}</span>
         </div>
         <div className="text-xs text-neutral-300 mb-4">{isAdmin?'Total Lyon':'Mes missions'} · YTD : {fmtCurrency(caYTD)}</div>
-        <div className="flex items-end gap-1.5 h-32" style={{backgroundImage:'linear-gradient(to bottom, rgba(0,0,0,0.02) 1px, transparent 1px)',backgroundSize:'100% 25%'}}>
+        <div className="flex items-end gap-2 h-48" style={{backgroundImage:'linear-gradient(to bottom, rgba(0,0,0,0.03) 1px, transparent 1px)',backgroundSize:'100% 20%'}}>
           {caMensuel.map((ca,i)=>{
-            const pct=maxCA>0?Math.max((ca/maxCA)*100,ca>0?4:0):0;
+            const pct=maxCA>0?Math.max((ca/maxCA)*100,ca>0?6:0):0;
             return (
-              <div key={i} className="flex-1 flex flex-col items-center gap-0.5 group">
-                {ca>0&&<div className="text-slate font-medium leading-tight mb-0.5 opacity-0 group-hover:opacity-100 transition-opacity" style={{fontSize:'10px'}}>{fmtCurrency(ca)}</div>}
-                <div className="w-full rounded-t-md transition-all" title={ca>0?fmtCurrency(ca):''} style={{height:`${pct}%`,minHeight:ca>0?'4px':'2px',background:i===curMonthIdx?'#5090FE':i<curMonthIdx?'#5090FE66':'#e5e5e5'}}/>
-                <div className={`font-semibold mt-0.5 ${i===curMonthIdx?'text-carbon':'text-neutral-300'}`} style={{fontSize:'10px'}}>{MOIS_LABELS[i]}</div>
+              <div key={i} className="flex-1 flex flex-col items-center gap-0.5 group" style={{minWidth:0}}>
+                {ca>0&&<div className="text-carbon font-bold leading-tight mb-0.5 truncate w-full text-center" style={{fontSize:'9px'}}>{(ca/1000).toFixed(0)}k</div>}
+                <div className="w-full transition-all" title={ca>0?fmtCurrency(ca):''} style={{height:`${pct}%`,minHeight:ca>0?'6px':'2px',background:i===curMonthIdx?'#5090FE':i<curMonthIdx?'#5090FE88':'#E4E4E6'}}/>
+                <div className={`font-semibold mt-1 ${i===curMonthIdx?'text-carbon':'text-neutral-300'}`} style={{fontSize:'10px'}}>{MOIS_LABELS[i]}</div>
               </div>
             );
           })}
