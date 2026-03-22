@@ -741,9 +741,9 @@ function AddTacheModal({ contacts, besoins, missions, profile, allProfiles, onCl
       </Field>
       <Field label="Titre *"><input type="text" value={f.titre} onChange={e=>setF(v=>({...v,titre:e.target.value}))} placeholder="Sélectionne un type ou saisis directement" className={inputCls}/></Field>
       <Field label="Échéance">
-        <div className="flex gap-2">
-          <input type="date" value={f.due_date} min={TODAY} onChange={e=>setF(v=>({...v,due_date:e.target.value}))} className={inputCls+' flex-1'}/>
-          {f.due_date && <input type="time" value={f.due_time} onChange={e=>setF(v=>({...v,due_time:e.target.value}))} className={inputCls+' w-28'}/>}
+        <div className="flex">
+          <input type="date" value={f.due_date} min={TODAY} onChange={e=>setF(v=>({...v,due_date:e.target.value}))} className="flex-1 px-3 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight transition-colors" style={{borderRight:f.due_date?'none':undefined}}/>
+          {f.due_date && <input type="time" value={f.due_time} onChange={e=>setF(v=>({...v,due_time:e.target.value}))} className="w-24 px-2 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight transition-colors"/>}
         </div>
       </Field>
       <Field label="Mission liée">
@@ -1017,15 +1017,15 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, on
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Début mission">
-            <div className="flex gap-2">
-              <input type="date" value={f.date_debut_mission||''} onChange={s('date_debut_mission')} className={inputCls+' flex-1'}/>
-              {f.date_debut_mission && <input type="time" value={f.debut_time} onChange={e=>setF(v=>({...v,debut_time:e.target.value}))} className={inputCls+' w-28 text-xs'}/>}
+            <div className="flex">
+              <input type="date" value={f.date_debut_mission||''} onChange={s('date_debut_mission')} className="flex-1 px-3 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight transition-colors" style={{borderRight:f.date_debut_mission?'none':undefined}}/>
+              {f.date_debut_mission && <input type="time" value={f.debut_time} onChange={e=>setF(v=>({...v,debut_time:e.target.value}))} className="w-24 px-2 py-2.5 border-2 border-neutral-200 text-xs focus:outline-none focus:border-midnight transition-colors"/>}
             </div>
           </Field>
           <Field label="Fin mission">
-            <div className="flex gap-2">
-              <input type="date" value={f.date_fin_mission||''} onChange={s('date_fin_mission')} className={inputCls+' flex-1'}/>
-              {f.date_fin_mission && <input type="time" value={f.fin_time} onChange={e=>setF(v=>({...v,fin_time:e.target.value}))} className={inputCls+' w-28 text-xs'}/>}
+            <div className="flex">
+              <input type="date" value={f.date_fin_mission||''} onChange={s('date_fin_mission')} className="flex-1 px-3 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight transition-colors" style={{borderRight:f.date_fin_mission?'none':undefined}}/>
+              {f.date_fin_mission && <input type="time" value={f.fin_time} onChange={e=>setF(v=>({...v,fin_time:e.target.value}))} className="w-24 px-2 py-2.5 border-2 border-neutral-200 text-xs focus:outline-none focus:border-midnight transition-colors"/>}
             </div>
           </Field>
         </div>
@@ -1439,10 +1439,10 @@ function CompleteTaskModal({ task, contact, profile, onClose, onSaved }) {
               ))}
             </div>
             {preset==='custom'&&(
-              <div className="flex gap-2 mt-2">
+              <div className="flex mt-2">
                 <input type="date" value={customDate} min={addDays(1)}
-                  onChange={e=>setCustomDate(e.target.value)} className={inputCls+' flex-1'}/>
-                <input type="time" value={relanceTime} onChange={e=>setRelanceTime(e.target.value)} className={inputCls+' w-28'}/>
+                  onChange={e=>setCustomDate(e.target.value)} className="flex-1 px-3 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight transition-colors" style={{borderRight:'none'}}/>
+                <input type="time" value={relanceTime} onChange={e=>setRelanceTime(e.target.value)} className="w-24 px-2 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight transition-colors"/>
               </div>
             )}
           </div>
@@ -1473,9 +1473,9 @@ function EditTacheModal({ task, contacts, besoins, missions, profile, allProfile
       footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving||!f.titre.trim()} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon disabled:opacity-50 btn-brutal">{saving?'Enregistrement...':'Enregistrer'}</button></>}>
       <Field label="Titre *"><input type="text" value={f.titre} autoFocus onChange={e=>setF(v=>({...v,titre:e.target.value}))} className={inputCls}/></Field>
       <Field label="Échéance">
-        <div className="flex gap-2">
-          <input type="date" value={f.due_date} min={TODAY} onChange={e=>setF(v=>({...v,due_date:e.target.value}))} className={inputCls+' flex-1'}/>
-          {f.due_date && <input type="time" value={f.due_time} onChange={e=>setF(v=>({...v,due_time:e.target.value}))} className={inputCls+' w-28'}/>}
+        <div className="flex">
+          <input type="date" value={f.due_date} min={TODAY} onChange={e=>setF(v=>({...v,due_date:e.target.value}))} className="flex-1 px-3 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight transition-colors" style={{borderRight:f.due_date?'none':undefined}}/>
+          {f.due_date && <input type="time" value={f.due_time} onChange={e=>setF(v=>({...v,due_time:e.target.value}))} className="w-24 px-2 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight transition-colors"/>}
         </div>
       </Field>
       {isAdmin&&<Field label="Responsable"><select value={f.responsable} onChange={e=>setF(v=>({...v,responsable:e.target.value}))} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>}
