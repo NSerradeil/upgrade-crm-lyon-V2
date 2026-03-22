@@ -4164,12 +4164,12 @@ function App() {
   // ── Mode "Voir comme" ──────────────────────────────────
   const activeProfile = viewAs || profile;
   const activeIsAdmin = activeProfile.role==='admin';
-  const contactAgenceMap = useMemo(()=>Object.fromEntries(contacts.map(c=>[String(c.id),c.agence])),[contacts]);
+  const contactAgenceMap = Object.fromEntries(contacts.map(c=>[String(c.id),c.agence]));
   const vContacts   = contacts; // tous voient tous les contacts
-  const vHistorique = useMemo(()=>activeIsAdmin ? historique : historique.filter(h=>h.responsable===activeProfile.nom),[activeIsAdmin,historique,activeProfile.nom]);
-  const vTaches     = useMemo(()=>activeIsAdmin ? taches : taches.filter(t=>t.responsable===activeProfile.nom),[activeIsAdmin,taches,activeProfile.nom]);
-  const vMissions   = useMemo(()=>activeIsAdmin ? missions : missions.filter(m=>m.responsable===activeProfile.nom),[activeIsAdmin,missions,activeProfile.nom]);
-  const vBesoins    = useMemo(()=>activeIsAdmin ? besoins : besoins.filter(b=>contactAgenceMap[String(b.contact_id)]===activeProfile.agence||b.agence===activeProfile.agence),[activeIsAdmin,besoins,contactAgenceMap,activeProfile.agence]);
+  const vHistorique = activeIsAdmin ? historique : historique.filter(h=>h.responsable===activeProfile.nom);
+  const vTaches     = activeIsAdmin ? taches     : taches.filter(t=>t.responsable===activeProfile.nom);
+  const vMissions   = activeIsAdmin ? missions   : missions.filter(m=>m.responsable===activeProfile.nom);
+  const vBesoins    = activeIsAdmin ? besoins    : besoins.filter(b=>contactAgenceMap[String(b.contact_id)]===activeProfile.agence||b.agence===activeProfile.agence);
   const vHistMiss   = histMissions; // filtré par missions déjà
 
   const tachesActives=vTaches.filter(t=>t.statut!=='fait'&&t.statut!=='annule');
