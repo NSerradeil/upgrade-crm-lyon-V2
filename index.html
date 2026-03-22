@@ -3683,10 +3683,10 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
         {KPI_CARDS.map(c=>{
           const active = activeChart===c.id;
           return (
-            <div key={c.id} onClick={()=>setActiveChart(c.id)} style={{cursor:'pointer',background:active?'#1C1F35':'#fff',borderTop:`2px solid ${active?'#1C1F35':'#E4E4E6'}`,borderRight:`2px solid ${active?'#1C1F35':'#E4E4E6'}`,borderBottom:`2px solid ${active?'#1C1F35':'#E4E4E6'}`,borderLeft:`5px solid ${c.color}`,padding:'14px 16px',borderRadius:0,transition:'all 120ms ease',boxShadow:active?`4px 4px 0 ${c.color}`:'none',transform:active?'translate(-2px,-2px)':'none'}}>
+            <div key={c.id} onClick={()=>setActiveChart(c.id)} style={{cursor:'pointer',position:'relative',background:active?'#1C1F35':'#fff',borderTop:'2px solid #E4E4E6',borderRight:'2px solid #E4E4E6',borderBottom:'2px solid #E4E4E6',borderLeft:`5px solid ${c.color}`,padding:'16px 14px',borderRadius:0,transition:'all 120ms ease',boxShadow:active?`4px 4px 0 ${c.color}`:'none',transform:active?'translate(-2px,-2px)':'none'}}>
               <div style={{fontSize:28,fontWeight:900,color:active?'#fff':'#1C1F35',fontFamily:'Outfit,sans-serif',lineHeight:1}}>{c.value}</div>
               <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',color:active?c.color:'#999',marginTop:4}}>{c.label}</div>
-              <div style={{fontSize:11,color:active?'#ffffff66':'#bbb',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.sub}</div>
+              <div style={{fontSize:11,color:active?'#777':'#ccc',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.sub}</div>
               {c.badge&&<div style={{fontSize:10,fontWeight:800,color:c.badgeColor,marginTop:4,textTransform:'uppercase'}}>{c.badge}</div>}
             </div>
           );
