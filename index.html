@@ -3580,7 +3580,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
   const [filterResp,setFilterResp] = useState('');
   const [tick,setTick] = useState(0); // force re-render on optimistic update
   const forceUpdate=useCallback(()=>setTick(t=>t+1),[]);
-  const [activeChart, setActiveChart] = useState('ca');
+  const [activeChart, setActiveChart] = useState(prefs?.tdb_default_chart||'ca');
   const isAdmin = profile.role==='admin';
   const curMonthIdx = new Date().getMonth();
 
@@ -3697,7 +3697,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
       })()}
 
       {/* Chart area — switches based on activeChart */}
-      <div style={{background:'#fff',border:'2px solid #1C1F35',padding:'20px 24px 24px',borderRadius:0}}>
+      <div style={{background:'#fff',border:'2px solid #E4E4E6',padding:'20px 24px 24px',borderRadius:0}}>
         {activeChart==='ca'&&<ChartCA caMensuel={caMensuel} caYTD={caYTD} curMonth={curMonthIdx}/>}
         {activeChart==='marge'&&<ChartMarge margeMensuel={margeMensuel} margeYTD={margeYTD} caMensuel={caMensuel} tauxMarge={tauxMarge} curMonth={curMonthIdx}/>}
         {activeChart==='inter'&&<ChartInter tauxM={tauxInterM} tauxAnn={tauxInterAnn} curMonth={curMonthIdx}/>}
@@ -4031,6 +4031,7 @@ function PreferencesPanel({ prefs, onSave, profileNom }) {
   const [tachesView,setTachesView]=useState(prefs.taches_view||'list');
   const [besoinsView,setBesoinsView]=useState(prefs.besoins_view||'list');
   const [pipeVent,setPipeVent]=useState(prefs.pipe_ventilation||'agence');
+  const [tdbChart,setTdbChart]=useState(prefs.tdb_default_chart||'ca');
   const [filtResp,setFiltResp]=useState(prefs.filter_responsable===undefined?'moi':prefs.filter_responsable);
   const [filtBesAgence,setFiltBesAgence]=useState(prefs.besoins_filter_agence||'');
   const [filtMisAgence,setFiltMisAgence]=useState(prefs.missions_filter_agence||'');
@@ -4038,8 +4039,8 @@ function PreferencesPanel({ prefs, onSave, profileNom }) {
   const [saving,setSaving]=useState(false);
   const [saved,setSaved]=useState(false);
 
-  const buildPrefs=()=>({default_tab:defaultTab,taches_view:tachesView,besoins_view:besoinsView,pipe_ventilation:pipeVent,filter_responsable:filtResp,besoins_filter_agence:filtBesAgence,missions_filter_agence:filtMisAgence,missions_filter_statut:filtMisStatut});
-  const origPrefs=()=>({default_tab:prefs.default_tab||'taches',taches_view:prefs.taches_view||'list',besoins_view:prefs.besoins_view||'list',pipe_ventilation:prefs.pipe_ventilation||'agence',filter_responsable:prefs.filter_responsable===undefined?'moi':prefs.filter_responsable,besoins_filter_agence:prefs.besoins_filter_agence||'',missions_filter_agence:prefs.missions_filter_agence||'',missions_filter_statut:prefs.missions_filter_statut||''});
+  const buildPrefs=()=>({default_tab:defaultTab,taches_view:tachesView,besoins_view:besoinsView,pipe_ventilation:pipeVent,tdb_default_chart:tdbChart,filter_responsable:filtResp,besoins_filter_agence:filtBesAgence,missions_filter_agence:filtMisAgence,missions_filter_statut:filtMisStatut});
+  const origPrefs=()=>({default_tab:prefs.default_tab||'taches',taches_view:prefs.taches_view||'list',besoins_view:prefs.besoins_view||'list',pipe_ventilation:prefs.pipe_ventilation||'agence',tdb_default_chart:prefs.tdb_default_chart||'ca',filter_responsable:prefs.filter_responsable===undefined?'moi':prefs.filter_responsable,besoins_filter_agence:prefs.besoins_filter_agence||'',missions_filter_agence:prefs.missions_filter_agence||'',missions_filter_statut:prefs.missions_filter_statut||''});
   const hasChanges=JSON.stringify(buildPrefs())!==JSON.stringify(origPrefs());
 
   const handleSave=async()=>{
@@ -4050,7 +4051,7 @@ function PreferencesPanel({ prefs, onSave, profileNom }) {
   };
   const handleCancel=()=>{
     const o=origPrefs();
-    setDefaultTab(o.default_tab);setTachesView(o.taches_view);setBesoinsView(o.besoins_view);setPipeVent(o.pipe_ventilation);
+    setDefaultTab(o.default_tab);setTachesView(o.taches_view);setBesoinsView(o.besoins_view);setPipeVent(o.pipe_ventilation);setTdbChart(o.tdb_default_chart);
     setFiltResp(o.filter_responsable);setFiltBesAgence(o.besoins_filter_agence);setFiltMisAgence(o.missions_filter_agence);setFiltMisStatut(o.missions_filter_statut);
   };
 
@@ -4108,6 +4109,15 @@ function PreferencesPanel({ prefs, onSave, profileNom }) {
             <div style={segGroup}>
               <button onClick={()=>setBesoinsView('list')} style={segBtn(besoinsView==='list')}><Icon d={ICONS.list} size={12}/> Liste</button>
               <button onClick={()=>setBesoinsView('kanban')} style={segBtn(besoinsView==='kanban')}>⬛ Kanban</button>
+            </div>
+          </div>
+          <div className="flex items-center justify-between py-3">
+            <span className="text-sm text-carbon font-medium">Missions — KPI</span>
+            <div style={segGroup}>
+              <button onClick={()=>setTdbChart('ca')} style={segBtn(tdbChart==='ca')}>CA</button>
+              <button onClick={()=>setTdbChart('marge')} style={segBtn(tdbChart==='marge')}>Marge</button>
+              <button onClick={()=>setTdbChart('inter')} style={segBtn(tdbChart==='inter')}>Inter.</button>
+              <button onClick={()=>setTdbChart('missions')} style={segBtn(tdbChart==='missions')}>Missions</button>
             </div>
           </div>
           <div className="flex items-center justify-between py-3">
