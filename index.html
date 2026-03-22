@@ -882,13 +882,13 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
         {hist.length===0
           ? <div className="text-sm text-neutral-300 italic">Aucune action enregistrée</div>
           : <div className="space-y-2">{hist.map((h,i)=>(
-              <div key={i} className="flex gap-3 text-sm border-l-2 border-neutral-100 pl-3">
-                <div className="text-neutral-300 shrink-0 w-14">{fmtDateParis(h.date)}</div>
-                <div>
+              <div key={i} className="text-sm border-l-2 border-neutral-100 pl-3">
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-[11px] text-neutral-300 tabular-nums whitespace-nowrap">{fmtDateParis(h.date)}</span>
                   <span className="font-medium text-carbon">{h.type_action}</span>
-                  {h.responsable&&h.responsable!==contact.responsable&&<span className="ml-1 text-xs text-neutral-300">({h.responsable})</span>}
-                  {h.details&&<div className="text-slate text-xs mt-0.5">{h.details}</div>}
+                  {h.responsable&&h.responsable!==contact.responsable&&<span className="text-xs text-neutral-300">({h.responsable})</span>}
                 </div>
+                {h.details&&<div className="text-slate text-xs mt-0.5">{h.details}</div>}
               </div>
             ))}</div>
         }
@@ -1196,13 +1196,13 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
             ? <div className="text-sm text-neutral-300 italic">Aucune action enregistrée.</div>
             : <div className="space-y-2">
                 {hist.map((h,i)=>(
-                  <div key={i} className="flex gap-3 text-sm border-l-2 border-neutral-100 pl-3">
-                    <div className="text-neutral-300 shrink-0 w-14">{h.date||'—'}</div>
-                    <div>
+                  <div key={i} className="text-sm border-l-2 border-neutral-100 pl-3">
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="text-[11px] text-neutral-300 tabular-nums whitespace-nowrap">{h.date||'—'}</span>
                       <span className="font-medium text-carbon">{h.type_action}</span>
-                      {h.responsable&&<span className="ml-1 text-xs text-neutral-300">({h.responsable})</span>}
-                      {h.details&&<div className="text-slate text-xs mt-0.5">{h.details}</div>}
+                      {h.responsable&&<span className="text-xs text-neutral-300">({h.responsable})</span>}
                     </div>
+                    {h.details&&<div className="text-slate text-xs mt-0.5">{h.details}</div>}
                   </div>
                 ))}
               </div>
@@ -2694,24 +2694,22 @@ function TabHistorique({ historique, contacts, taches, besoins, profile, allProf
           const s=TYPE_COLORS[h.type_action]||TYPE_COLORS['Autre'];
           return (
             <div key={i} className="px-4 py-3 hover:bg-neutral-50 transition-colors">
-              <div className="flex gap-3 items-start">
-                <div className="shrink-0 w-20 text-xs text-neutral-300 pt-1 tabular-nums">{fmtDateParis(h.date)}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                    <span style={{backgroundColor:s.bg,color:s.color,padding:'2px 8px',borderRadius:9999,fontSize:11,fontWeight:600,whiteSpace:'nowrap'}}>{h.type_action}</span>
-                    {contact&&(
-                      <button onClick={()=>{if(onNavToContact)onNavToContact(contact.id);else setSelected(contact);}} className="text-sm font-semibold text-midnight underline decoration-2 decoration-lemon-100 underline-offset-2 hover:bg-lemon-20 cursor-pointer transition-colors">
-                        {contact.prenom} {contact.nom}
-                        {contact.groupe&&<span className="ml-1 text-xs font-normal text-neutral-300">· {contact.groupe}</span>}
-                      </button>
-                    )}
-                    {h.tache_id&&(()=>{const tache=(taches||[]).find(t=>t.id===h.tache_id);return tache?<button onClick={()=>onNavToTache&&onNavToTache(tache.id)} className="px-2.5 py-1 bg-lemon-20 text-midnight text-xs font-semibold hover:bg-lemon-100 cursor-pointer transition-colors">✅ {tache.titre}</button>:null;})()}
-                    {h.besoin_id&&(()=>{const b=(besoins||[]).find(x=>String(x.id)===String(h.besoin_id));return b?<button onClick={()=>onNavToBesoin&&onNavToBesoin(b.id)} className="px-2.5 py-1 bg-lemon-20 text-midnight text-xs font-semibold hover:bg-lemon-100 cursor-pointer transition-colors">🎯 {b.titre||'Besoin'}</button>:null;})()}
-                  </div>
-                  {h.details&&<div className="text-sm text-slate line-clamp-2" title={h.details}>{h.details}</div>}
-                </div>
-                {h.responsable&&<span className="shrink-0 text-xs bg-carbon text-white px-2 py-0.5 rounded-full font-medium whitespace-nowrap">{h.responsable}</span>}
+              <div className="flex items-baseline gap-2 mb-1 flex-wrap">
+                <span className="text-[11px] text-neutral-300 tabular-nums whitespace-nowrap">{fmtDateParis(h.date)}</span>
+                <span style={{backgroundColor:s.bg,color:s.color,padding:'2px 8px',borderRadius:9999,fontSize:11,fontWeight:600,whiteSpace:'nowrap'}}>{h.type_action}</span>
+                {contact&&(
+                  <button onClick={()=>{if(onNavToContact)onNavToContact(contact.id);else setSelected(contact);}} className="text-sm font-semibold text-midnight underline decoration-2 decoration-lemon-100 underline-offset-2 hover:bg-lemon-20 cursor-pointer transition-colors">
+                    {contact.prenom} {contact.nom}
+                    {contact.groupe&&<span className="ml-1 text-xs font-normal text-neutral-300">· {contact.groupe}</span>}
+                  </button>
+                )}
+                {h.responsable&&<span className="text-xs bg-carbon text-white px-2 py-0.5 rounded-full font-medium whitespace-nowrap ml-auto">{h.responsable}</span>}
               </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {h.tache_id&&(()=>{const tache=(taches||[]).find(t=>t.id===h.tache_id);return tache?<button onClick={()=>onNavToTache&&onNavToTache(tache.id)} className="px-2.5 py-1 bg-lemon-20 text-midnight text-xs font-semibold hover:bg-lemon-100 cursor-pointer transition-colors">✅ {tache.titre}</button>:null;})()}
+                {h.besoin_id&&(()=>{const b=(besoins||[]).find(x=>String(x.id)===String(h.besoin_id));return b?<button onClick={()=>onNavToBesoin&&onNavToBesoin(b.id)} className="px-2.5 py-1 bg-lemon-20 text-midnight text-xs font-semibold hover:bg-lemon-100 cursor-pointer transition-colors">🎯 {b.titre||'Besoin'}</button>:null;})()}
+              </div>
+              {h.details&&<div className="text-sm text-slate line-clamp-2 mt-1" title={h.details}>{h.details}</div>}
             </div>
           );
         })}
