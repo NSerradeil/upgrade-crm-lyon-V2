@@ -66,23 +66,17 @@ tailwind.config = {
   .kanban-card.dragging{opacity:0.5;transform:rotate(2deg);}
   .kanban-card:hover{border-color:#000000;}
   @keyframes slideUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
-  @keyframes slideOut{from{opacity:1;transform:translateY(0);}to{opacity:0;transform:translateY(-8px);}}
   .avatar-menu{position:absolute;right:0;top:100%;margin-top:4px;min-width:220px;background:white;border:2px solid #000000;box-shadow:none;z-index:60;overflow:hidden;}
   .avatar-menu button,.avatar-menu a{display:flex;align-items:center;gap:8px;width:100%;padding:10px 16px;font-size:13px;color:#1D202D;text-align:left;transition:background .1s;}
   .avatar-menu button:hover,.avatar-menu a:hover{background:#F4F4F5;}
 
-  /* ── Micro-interactions & animations ──────────────────────────── */
-
-  /* 1. Tab content fade-in */
   @keyframes contentIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
   .tab-content { animation: contentIn 250ms ease-out; }
 
-  /* 2. Card hover lift */
   [data-detail] { transition: transform 120ms ease, box-shadow 120ms ease; }
   [data-detail]:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
   [data-detail]:active { transform: translateY(0); }
 
-  /* 3. Staggered list animation */
   @keyframes cardIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
   .kanban-card, [data-detail] { animation: cardIn 200ms ease-out backwards; }
   [data-detail]:nth-child(1) { animation-delay: 0ms; }
@@ -96,36 +90,26 @@ tailwind.config = {
   [data-detail]:nth-child(9) { animation-delay: 240ms; }
   [data-detail]:nth-child(10) { animation-delay: 270ms; }
 
-  /* 4. Button press effect */
   button:active:not(:disabled) { transform: scale(0.97); }
 
-  /* 5. Smooth page transitions */
   html { scroll-behavior: smooth; }
 
-  /* 6. Kanban card drag improvements (enhance existing) */
   .kanban-card:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.06); border-color: #0A0A0A; }
 
-  /* 7. Input focus animation — yellow glow */
   input:focus-visible, select:focus-visible, textarea:focus-visible {
     border-color: #0A0A0A;
     box-shadow: 0 0 0 3px rgba(255,229,0,0.3);
   }
 
-  /* 8. Toast improved animation — snappier slide + bounce */
   .toast-in { animation: slideUp .25s cubic-bezier(.34,1.56,.64,1); }
 
-  /* 9. Avatar menu animation */
   .avatar-menu { animation: menuIn 150ms ease-out; transform-origin: top right; }
   @keyframes menuIn { from { opacity:0; transform: scale(0.95) translateY(-4px); } to { opacity:1; transform: scale(1) translateY(0); } }
 
-  /* 10. SidePanel slide-in from right */
   @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
 
-  /* 11. Colored left border accent on table rows on hover */
   tr[data-detail]:hover { box-shadow: inset 3px 0 0 #FFE500; }
 
-  /* 12. Badge pulse for overdue tasks */
-  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   }
@@ -144,7 +128,10 @@ const TZ='Europe/Paris';
 function getToday() { return new Date().toLocaleDateString('sv-SE',{timeZone:TZ}); }
 const TODAY = getToday();
 
-// ── Helpers datetime ─────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+
 // Extrait la partie date (YYYY-MM-DD) d'un datetime ISO ou date simple — conversion UTC→Europe/Paris
 function extractDate(dt) {
   if(!dt) return '';
@@ -194,11 +181,6 @@ function fmtDT(dt, defaultTime) {
   const dateFmt=dd&&m&&y?`${dd}/${m}/${y}`:(d||'—');
   if(!t || t===defaultTime) return dateFmt;
   return `${dateFmt} · ${t}`;
-}
-// Vérifie si un datetime a une heure non-default
-function hasCustomTime(dt, defaultTime) {
-  const t=extractTime(dt);
-  return t && t!==defaultTime;
 }
 const DEFAULT_TASK_TIME='09:00';
 const DEFAULT_MISSION_START_TIME='09:00';
@@ -264,7 +246,7 @@ function ToastContainer(){
   },[]);
   if(!items.length)return null;
   return(<div className="fixed bottom-4 right-4 z-[100] space-y-2">{items.map(t=>(
-    <div key={t.id} className={`toast-in px-4 py-3 rounded-xl border-2 border-neutral-200 text-sm font-medium ${t.type==='error'?'bg-coral-100 text-white':'bg-carbon text-white'}`}>
+    <div key={t.id} className={`toast-in px-4 py-3 border-2 border-neutral-200 text-sm font-medium ${t.type==='error'?'bg-coral-100 text-white':'bg-carbon text-white'}`}>
       {t.type==='error'?'✕ ':'✓ '}{t.msg}
     </div>
   ))}</div>);
@@ -286,6 +268,10 @@ function fmtCurrency(n) {
   return `${Math.round(n)}€`;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
 const STATUT_STYLE = {
   'Consultant CDI': { bg:'#1C1F35', color:'#FFFFFF' },
   'CDI':            { bg:'#1C1F35', color:'#FFFFFF' },
@@ -297,6 +283,10 @@ const STATUT_STYLE = {
   'À définir':      { bg:'#E4E4E6', color:'#1C1F35' },
 };
 const BADGE_STYLE = { padding:'2px 8px', borderRadius:0, fontSize:11, fontWeight:700, whiteSpace:'nowrap', fontFamily:'Outfit,sans-serif', textTransform:'uppercase', letterSpacing:'0.04em' };
+// ═══════════════════════════════════════════════════════════════════════════════
+// SHARED COMPONENTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
 function ColorBadge({ label, bg, color }) {
   return <span style={{ ...BADGE_STYLE, backgroundColor:bg, color }}>{label}</span>;
 }
@@ -327,7 +317,10 @@ function MissionStatutBadge({ statut }) {
   })[statut] || { bg:'#E4E4E6', color:'#1C1F35' };
   return <ColorBadge label={statut} bg={s.bg} color={s.color}/>;
 }
-// ── Icon System (Material Symbols — weight 200, optical 24dp) ─────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// ICON SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════════
+
 const Icon = ({d, size=16, className=''}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 -960 960 960" className={className} style={{display:'inline-block',verticalAlign:'middle',fill:'currentColor'}}><path d={d}/></svg>;
 const ICONS = {
   check: 'M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z',
@@ -511,7 +504,10 @@ function respOptions(allProfiles, current) {
   return [...extra, ...list];
 }
 
-// ── Modals Contacts ───────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODALS
+// ═══════════════════════════════════════════════════════════════════════════════
+
 function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
   const isAdmin=profile.role==='admin';
   const [f,setF] = useState({ telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', responsable:contact.responsable||'', linkedin:contact.linkedin||'', ats:contact.ats||'' });
@@ -949,7 +945,10 @@ function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
   );
 }
 
-// ── Panel : Détail contact ────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// DETAIL PANELS
+// ═══════════════════════════════════════════════════════════════════════════════
+
 function ContactDetail({ contact, historique, taches, missions, besoins, profile, allProfiles, onClose, onRefresh, onNavToBesoin, onNavToMission, onNavToTache }) {
   const [modal,setModal] = useState(null);
   const [deleting,setDeleting] = useState(false);
@@ -1254,15 +1253,15 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
 
         {/* KPI mini */}
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-neutral-50 rounded-xl p-3 text-center">
+          <div className="bg-neutral-50 p-3 text-center">
             <div className="text-[11px] text-slate uppercase tracking-wide mb-0.5">Jours YTD</div>
             <div className="text-xl font-bold text-carbon">{joursTotal%1===0?joursTotal.toFixed(0):joursTotal.toFixed(1)}</div>
           </div>
-          <div className="bg-neutral-50 rounded-xl p-3 text-center">
+          <div className="bg-neutral-50 p-3 text-center">
             <div className="text-[11px] text-slate uppercase tracking-wide mb-0.5">CA YTD</div>
             <div className="text-xl font-bold text-jade-100">{fmtCurrency(caTotal)}</div>
           </div>
-          <div className="bg-neutral-50 rounded-xl p-3 text-center">
+          <div className="bg-neutral-50 p-3 text-center">
             <div className="text-[11px] text-slate uppercase tracking-wide mb-0.5">Taux marge</div>
             <div className={`text-xl font-bold ${tauxMarge>=30?'text-jade-100':tauxMarge>=20?'text-coral-50':'text-coral-100'}`}>{tauxMarge.toFixed(1)}%</div>
           </div>
@@ -1350,7 +1349,7 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
 }
 
 // ── Onglet Prospects ──────────────────────────────────────────────────────────
-function TabProspects({ contacts, contactMap, historique, taches, missions, besoins, profile, allProfiles, onRefresh, navContactId, navContactKey, onNavToBesoin, onNavToMission, onNavToTache, prefs }) {
+function TabProspects({ contacts, contactMap, historique, taches, missions, besoins, profile, allProfiles, commerciauxParAgence, onRefresh, navContactId, navContactKey, onNavToBesoin, onNavToMission, onNavToTache, prefs }) {
   const prefResp=prefs?.filter_responsable==='moi'?profile.nom:(prefs?.filter_responsable||'');
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
   const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState(prefResp);
@@ -1361,10 +1360,6 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
   const isAdmin=profile.role==='admin';
   const statuts=useMemo(()=>[...new Set(contacts.map(c=>c.statut).filter(Boolean))].sort(),[contacts]);
   const agences=useMemo(()=>[...new Set(allProfiles.map(p=>p.agence).filter(Boolean))].sort(),[allProfiles]);
-  const commerciauxParAgence=useMemo(()=>{
-    const map={};allProfiles.forEach(p=>{if(p.agence&&p.nom){if(!map[p.agence])map[p.agence]=[];map[p.agence].push(p.nom);}});
-    Object.values(map).forEach(arr=>arr.sort());return map;
-  },[allProfiles]);
   const responsablesVisibles=useMemo(()=>{
     if(!filterAgence) return [...new Set(allProfiles.map(p=>p.nom).filter(Boolean))].sort();
     return commerciauxParAgence[filterAgence]||[];
@@ -1557,7 +1552,7 @@ function CompleteTaskModal({ task, contact, profile, onClose, onSaved }) {
         </label>
       </div>
       {createRelance&&(
-        <div className="space-y-3 bg-azure-20 rounded-xl p-4 border border-blue-100">
+        <div className="space-y-3 bg-azure-20 p-4 border border-blue-100">
           <div>
             <div className="text-xs font-medium text-slate mb-2">Échéance</div>
             <div className="flex gap-2 flex-wrap">
@@ -1653,7 +1648,7 @@ function CalendarTaches({ taches, contactMap, profile, isAdmin, onComplete }) {
         </div>
         <button onClick={nextMonth} className="p-2 hover:bg-neutral-100 rounded-lg text-slate font-medium">Suiv. →</button>
       </div>
-      <div className="grid grid-cols-7 gap-px bg-neutral-200 rounded-xl overflow-hidden border border-neutral-200">
+      <div className="grid grid-cols-7 gap-px bg-neutral-200 overflow-hidden border border-neutral-200">
         {JOURS_COURT.map(j=>(
           <div key={j} className="bg-neutral-50 text-center text-xs font-semibold text-slate py-2">{j}</div>
         ))}
@@ -1857,6 +1852,10 @@ function TacheSection({ label, taches, contactMap, besoinMap, missionMap, profil
     </div>
   );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════════════════════════════════════
 
 function TabTaches({ taches, contacts, contactMap, besoins, missions, historique, profile, allProfiles, onRefresh, navKey, navEcheance, navTacheId, navTacheKey, onNavToContact, onNavToBesoin, onNavToMission, prefs }) {
   const tPrefResp=prefs?.filter_responsable==='moi'?profile.nom:(prefs?.filter_responsable||profile.nom);
@@ -2621,7 +2620,7 @@ function KanbanBesoins({ besoins, contacts, contactMap, besoinCandidats, onSelec
 }
 
 // ── Onglet Pipeline V2 ──────────────────────────────────────────────────────
-function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique, taches, missions, profile, allProfiles, onRefresh, navBesoinId, navBesoinKey, onNavToContact, onNavToMission, onNavToTache, prefs }) {
+function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique, taches, missions, profile, allProfiles, commerciauxParAgence, onRefresh, navBesoinId, navBesoinKey, onNavToContact, onNavToMission, onNavToTache, prefs }) {
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
   const [filterResp,setFilterResp]=useState('');
   const [filterAgence,setFilterAgence]=useState(prefs?.besoins_filter_agence||(profile.role==='admin'?'':profile.agence));
@@ -2631,15 +2630,7 @@ function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique
   const [viewMode,setViewMode]=useState(prefs?.besoins_view||'list');
   const isAdmin=profile.role==='admin';
 
-  // Mapping agence → commerciaux depuis allProfiles (configurable via table profiles)
   const agences=useMemo(()=>[...new Set(allProfiles.map(p=>p.agence).filter(Boolean))].sort(),[allProfiles]);
-  const commerciauxParAgence=useMemo(()=>{
-    const map={};
-    allProfiles.forEach(p=>{if(p.agence&&p.nom) {if(!map[p.agence])map[p.agence]=[];map[p.agence].push(p.nom);}});
-    Object.values(map).forEach(arr=>arr.sort());
-    return map;
-  },[allProfiles]);
-  // Liste des responsables visibles selon le filtre agence actif
   const responsablesVisibles=useMemo(()=>{
     if(isAdmin&&!filterAgence) return [...new Set(allProfiles.map(p=>p.nom).filter(Boolean))].sort();
     const ag=filterAgence||profile.agence;
@@ -3437,7 +3428,7 @@ function EditableJoursGridCell({ mission, moisKey, moisIdx, onUpdate }) {
 }
 
 // ── Onglet TDB Missions ───────────────────────────────────────────────────────
-function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, allProfiles, onRefresh, navMissionId, navMissionKey, onNavToContact, onNavToBesoin, onNavToTache, prefs }) {
+function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, allProfiles, commerciauxParAgence, onRefresh, navMissionId, navMissionKey, onNavToContact, onNavToBesoin, onNavToTache, prefs }) {
   const [selected,setSelected] = useState(null); const [showAdd,setShowAdd]=useState(false);
   useEffect(()=>{ if(navMissionId){ const m=missions.find(x=>String(x.id)===String(navMissionId)); if(m) setSelected(m); } },[navMissionKey]);
   const [search,setSearch] = useState(''); const [filterStatut,setFilterStatut] = useState(prefs?.missions_filter_statut||'');
@@ -3448,14 +3439,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
   const isAdmin = profile.role==='admin';
   const curMonthIdx = new Date().getMonth();
 
-  // Agences depuis allProfiles (pas hardcodé)
   const agences=useMemo(()=>[...new Set(allProfiles.map(p=>p.agence).filter(Boolean))].sort(),[allProfiles]);
-  const commerciauxParAgence=useMemo(()=>{
-    const map={};
-    allProfiles.forEach(p=>{if(p.agence&&p.nom){if(!map[p.agence])map[p.agence]=[];map[p.agence].push(p.nom);}});
-    Object.values(map).forEach(arr=>arr.sort());
-    return map;
-  },[allProfiles]);
   const responsablesVisibles=useMemo(()=>{
     if(isAdmin&&!filterAgence) return [...new Set(allProfiles.map(p=>p.nom).filter(Boolean))].sort();
     const ag=filterAgence||profile.agence;
@@ -4037,6 +4021,10 @@ function PreferencesPanel({ prefs, onSave, profileNom }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// APP
+// ═══════════════════════════════════════════════════════════════════════════════
+
 function App() {
   const [user,setUser]=useState(undefined); const [profile,setProfile]=useState(null);
   const [prefs,setPrefs]=useState({});
@@ -4170,10 +4158,13 @@ function App() {
   if(user===undefined) return <Loader label="Vérification de la session..."/>;
   if(!user) return <LoginScreen/>;
   if(!data||!profile) return <Loader label="Chargement depuis Supabase..."/>;
-  if(error) return <div className="flex items-center justify-center min-h-screen"><div className="bg-coral-20 border border-coral-20 rounded-xl p-6 max-w-md text-center"><div className="text-3xl mb-3">❌</div><div className="font-semibold text-coral-100">Erreur Supabase</div><div className="text-sm text-coral-100 mt-2 font-mono">{error}</div><button onClick={fetchAll} className="mt-4 px-4 py-2 bg-coral-100 text-white rounded-lg text-sm">Réessayer</button></div></div>;
+  if(error) return <div className="flex items-center justify-center min-h-screen"><div className="bg-coral-20 border border-coral-20 p-6 max-w-md text-center"><div className="text-3xl mb-3">❌</div><div className="font-semibold text-coral-100">Erreur Supabase</div><div className="text-sm text-coral-100 mt-2 font-mono">{error}</div><button onClick={fetchAll} className="mt-4 px-4 py-2 bg-coral-100 text-white rounded-lg text-sm">Réessayer</button></div></div>;
 
   const {contacts,historique,taches,besoins,missions,histMissions,besoinCandidats}=data;
   const contactMap = Object.fromEntries(contacts.map(c=>[String(c.id),c]));
+  const commerciauxParAgence={};
+  allProfiles.forEach(p=>{if(p.agence&&p.nom){if(!commerciauxParAgence[p.agence])commerciauxParAgence[p.agence]=[];commerciauxParAgence[p.agence].push(p.nom);}});
+  Object.values(commerciauxParAgence).forEach(arr=>arr.sort());
   const isAdmin=profile.role==='admin';
 
   // ── Mode "Voir comme" ──────────────────────────────────
@@ -4272,12 +4263,12 @@ function App() {
         </div>
       )}
       <div id="main-content" role="main" className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-6">
-        {tab==='prospects'&&<TabProspects contacts={vContacts} contactMap={contactMap} historique={vHistorique} taches={vTaches} missions={vMissions} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navContactId={navContactId} navContactKey={navContactKey} onNavToBesoin={navToBesoin} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
+        {tab==='prospects'&&<TabProspects contacts={vContacts} contactMap={contactMap} historique={vHistorique} taches={vTaches} missions={vMissions} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navContactId={navContactId} navContactKey={navContactKey} onNavToBesoin={navToBesoin} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
         {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} contactMap={contactMap} besoins={vBesoins} missions={vMissions} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance} navTacheId={navTacheId} navTacheKey={navTacheKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToMission={navToMission} prefs={prefs}/>}
-        {tab==='besoins'  &&<TabBesoins  contacts={vContacts} contactMap={contactMap} besoins={vBesoins} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navBesoinId={navBesoinId} navBesoinKey={navBesoinKey} onNavToContact={navToContact} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
+        {tab==='besoins'  &&<TabBesoins  contacts={vContacts} contactMap={contactMap} besoins={vBesoins} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navBesoinId={navBesoinId} navBesoinKey={navBesoinKey} onNavToContact={navToContact} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
         {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} prefs={prefs}/>}
         {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} contactMap={contactMap} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache}/>}
-        {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navMissionId={navMissionId} navMissionKey={navMissionKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache} prefs={prefs}/>}
+        {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navMissionId={navMissionId} navMissionKey={navMissionKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache} prefs={prefs}/>}
         {tab==='settings' &&<TabSettings user={user} profile={profile} taches={vTaches} subTab={settingsSubTab} onSubTabChange={setSettingsSubTab} prefs={prefs} onSavePrefs={savePrefs}/>}
       </div>
       {/* Shortcuts modal */}
