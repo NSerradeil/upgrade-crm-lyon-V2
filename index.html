@@ -67,7 +67,6 @@ tailwind.config = {
   .kanban-card:hover{border-color:#000000;}
   @keyframes slideUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
   @keyframes slideOut{from{opacity:1;transform:translateY(0);}to{opacity:0;transform:translateY(-8px);}}
-  .toast-in{animation:slideUp .3s cubic-bezier(.22,1,.36,1);}
   .avatar-menu{position:absolute;right:0;top:100%;margin-top:4px;min-width:220px;background:white;border:2px solid #000000;box-shadow:none;z-index:60;overflow:hidden;}
   .avatar-menu button,.avatar-menu a{display:flex;align-items:center;gap:8px;width:100%;padding:10px 16px;font-size:13px;color:#1D202D;text-align:left;transition:background .1s;}
   .avatar-menu button:hover,.avatar-menu a:hover{background:#F4F4F5;}
@@ -127,6 +126,9 @@ tailwind.config = {
 
   /* 12. Badge pulse for overdue tasks */
   @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
 </style>
 </head>
 <body>
@@ -294,9 +296,10 @@ const STATUT_STYLE = {
   'Prospect':       { bg:'#FFE500', color:'#1C1F35' },
   'À définir':      { bg:'#E4E4E6', color:'#1C1F35' },
 };
+const BADGE_STYLE = { padding:'2px 8px', borderRadius:0, fontSize:11, fontWeight:700, whiteSpace:'nowrap', fontFamily:'Outfit,sans-serif', textTransform:'uppercase', letterSpacing:'0.04em' };
 function StatutBadge({ statut }) {
   const st = STATUT_STYLE[statut] || STATUT_STYLE['Prospect'];
-  return <span style={{ backgroundColor:st.bg, color:st.color, padding:'2px 8px', borderRadius:0, fontSize:11, fontWeight:700, whiteSpace:'nowrap', fontFamily:'Outfit,sans-serif', textTransform:'uppercase', letterSpacing:'0.04em' }}>{statut||'Prospect'}</span>;
+  return <span style={{ ...BADGE_STYLE, backgroundColor:st.bg, color:st.color }}>{statut||'Prospect'}</span>;
 }
 const BESOIN_BADGE_COLORS_GLOBAL = {
   'Besoin Gagné':        { bg:'#00C218', color:'#1C1F35' },
@@ -310,7 +313,7 @@ const BESOIN_BADGE_COLORS_GLOBAL = {
 };
 function BesoinBadge({ statut }) {
   const c = BESOIN_BADGE_COLORS_GLOBAL[statut] || { bg:'#E4E4E6', color:'#1C1F35' };
-  return <span style={{ backgroundColor:c.bg, color:c.color, padding:'2px 8px', borderRadius:0, fontSize:11, fontWeight:700, fontFamily:'Outfit,sans-serif', textTransform:'uppercase', letterSpacing:'0.04em', whiteSpace:'nowrap' }}>{statut}</span>;
+  return <span style={{ ...BADGE_STYLE, backgroundColor:c.bg, color:c.color }}>{statut}</span>;
 }
 function MissionStatutBadge({ statut }) {
   const s = ({
@@ -319,7 +322,7 @@ function MissionStatutBadge({ statut }) {
     'Intercontrat': { bg:'#FF3D2E', color:'#FFFFFF' },
     'Terminée':     { bg:'#E4E4E6', color:'#1C1F35' },
   })[statut] || { bg:'#E4E4E6', color:'#1C1F35' };
-  return <span style={{ backgroundColor:s.bg, color:s.color, padding:'2px 7px', borderRadius:0, fontSize:11, fontWeight:700, whiteSpace:'nowrap', fontFamily:'Outfit,sans-serif', textTransform:'uppercase', letterSpacing:'0.04em' }}>{statut}</span>;
+  return <span style={{ ...BADGE_STYLE, backgroundColor:s.bg, color:s.color }}>{statut}</span>;
 }
 // ── Icon System (Material Symbols — weight 200, optical 24dp) ─────────────
 const Icon = ({d, size=16, className=''}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 -960 960 960" className={className} style={{display:'inline-block',verticalAlign:'middle',fill:'currentColor'}}><path d={d}/></svg>;
@@ -538,7 +541,7 @@ function AddHistoriqueModal({ contact, profile, onClose, onSaved }) {
   };
   return (
     <Modal title={<><Icon d={ICONS.add} size={14}/> Action — {contact.prenom} {contact.nom}</>} onClose={onClose}
-      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-jade-100 text-white rounded-lg text-sm font-medium hover:bg-jade-100 disabled:opacity-50">{saving?'Enregistrement...':'+ Ajouter'}</button></>}>
+      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-jade-100 text-white text-sm font-medium hover:opacity-80 disabled:opacity-50">{saving?'Enregistrement...':'+ Ajouter'}</button></>}>
       {isEntretienStatut(contact?.statut)&&(
         <div className="text-xs bg-iris-20 text-iris-100 border border-purple-100 rounded-lg px-3 py-2 font-medium">
           <Icon d={ICONS.calendar} size={12}/> {contact.statut} — le type <strong>Entretien</strong> est disponible
@@ -571,7 +574,7 @@ function AddBesoinActionModal({ besoin, contact, profile, onClose, onSaved }) {
   const title = contact ? <><Icon d={ICONS.add} size={14}/> Action — {contact.prenom} {contact.nom}</> : <><Icon d={ICONS.add} size={14}/> Action — {besoin.titre}</>;
   return (
     <Modal title={title} onClose={onClose}
-      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-jade-100 text-white rounded-lg text-sm font-medium hover:bg-jade-100 disabled:opacity-50">{saving?'Enregistrement...':'+ Ajouter'}</button></>}>
+      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-jade-100 text-white text-sm font-medium hover:opacity-80 disabled:opacity-50">{saving?'Enregistrement...':'+ Ajouter'}</button></>}>
       {!contact&&<div className="text-xs bg-lemon-20 text-midnight border border-lemon-50 rounded-lg px-3 py-2 font-medium"><Icon d={ICONS.warning} size={14}/> Aucun contact lié à ce besoin — l'action sera visible uniquement dans l'historique du besoin.</div>}
       {contact&&isEntretienStatut(contact?.statut)&&(
         <div className="text-xs bg-iris-20 text-iris-100 border border-purple-100 rounded-lg px-3 py-2 font-medium">
@@ -1034,7 +1037,7 @@ function AddHistMissionModal({ mission, profile, onClose, onSaved }) {
   };
   return (
     <Modal title={<><Icon d={ICONS.add} size={14}/> Action — {mission.consultant}</>} onClose={onClose}
-      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-jade-100 text-white rounded-lg text-sm font-medium hover:bg-jade-100 disabled:opacity-50">{saving?'Enregistrement...':'+ Ajouter'}</button></>}>
+      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-jade-100 text-white text-sm font-medium hover:opacity-80 disabled:opacity-50">{saving?'Enregistrement...':'+ Ajouter'}</button></>}>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Date"><input type="date" value={f.date} max={TODAY} onChange={e=>setF(v=>({...v,date:e.target.value}))} className={inputCls}/></Field>
         <Field label="Type"><select value={f.type_action} onChange={e=>setF(v=>({...v,type_action:e.target.value}))} className={inputCls}>{TYPES_HIST_MISS.map(x=><option key={x} value={x}>{x}</option>)}</select></Field>
@@ -1516,7 +1519,7 @@ function CompleteTaskModal({ task, contact, profile, onClose, onSaved }) {
       footer={<>
         <button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button>
         <button onClick={save} disabled={saving||(createRelance&&!relanceDate)}
-          className="px-4 py-2 bg-jade-100 text-white rounded-lg text-sm font-medium hover:bg-jade-100 disabled:opacity-50">
+          className="px-4 py-2 bg-jade-100 text-white text-sm font-medium hover:opacity-80 disabled:opacity-50">
           {saving?'Enregistrement...':'✓ Marquer comme fait'}
         </button>
       </>}>
@@ -1683,7 +1686,7 @@ function AddActionFromTaskModal({ task, contact, profile, onClose, onSaved }) {
   };
   return (
     <Modal title={<><Icon d={ICONS.add} size={14}/> Action — {task.titre}</>} onClose={onClose}
-      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-jade-100 text-white rounded-lg text-sm font-medium hover:bg-jade-100 disabled:opacity-50">{saving?'Enregistrement...':'+ Ajouter'}</button></>}>
+      footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving} className="px-4 py-2 bg-jade-100 text-white text-sm font-medium hover:opacity-80 disabled:opacity-50">{saving?'Enregistrement...':'+ Ajouter'}</button></>}>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Date"><input type="date" value={f.date} max={TODAY} onChange={e=>setF(v=>({...v,date:e.target.value}))} className={inputCls}/></Field>
         <Field label="Type">
@@ -1914,7 +1917,7 @@ function TabTaches({ taches, contacts, besoins, missions, historique, profile, a
         <div className="text-sm text-slate self-center flex items-center gap-2 flex-wrap">
           <span>{actives.length} tâche{actives.length>1?'s':''}</span>
           {overdue>0&&<button onClick={()=>setFilterEcheance(filterEcheance==='retard'?'':'retard')} className={`text-xs px-2 py-0.5 rounded-full font-medium ${filterEcheance==='retard'?'bg-coral-100 text-white':'bg-red-100 text-coral-100 hover:bg-red-200'}`}><Icon d={ICONS.warning} size={14}/> {overdue} en retard</button>}
-          {today_t>0&&<button onClick={()=>setFilterEcheance(filterEcheance==='today'?'':'today')} className={`text-xs px-2 py-0.5 rounded-full font-medium ${filterEcheance==='today'?'bg-lemon-200 text-white':'bg-lemon-20 text-coral-50 hover:bg-lemon-50'}`}><Icon d={ICONS.location} size={14}/> {today_t} aujourd'hui</button>}
+          {today_t>0&&<button onClick={()=>setFilterEcheance(filterEcheance==='today'?'':'today')} className={`text-xs px-2 py-0.5 rounded-full font-medium ${filterEcheance==='today'?'bg-lemon-100 text-white':'bg-lemon-20 text-coral-50 hover:bg-lemon-50'}`}><Icon d={ICONS.location} size={14}/> {today_t} aujourd'hui</button>}
           {thisWeek_t>0&&<button onClick={()=>setFilterEcheance(filterEcheance==='semaine'?'':'semaine')} className={`text-xs px-2 py-0.5 rounded-full font-medium ${filterEcheance==='semaine'?'bg-midnight text-white':'bg-azure-20 text-azure-100 hover:bg-azure-20'}`}><Icon d={ICONS.calendar} size={14}/> {thisWeek_t} cette semaine</button>}
         </div>
         <div className="flex border rounded-lg overflow-hidden text-sm">
@@ -2649,7 +2652,6 @@ function TabBesoins({ contacts, besoins, besoinCandidats, historique, taches, mi
   const hasFilter=search||filterStatut||filterResp||(isAdmin?filterAgence!=='':filterAgence!==profile.agence);
   const resetAll=()=>{setSearch('');setFilterStatut('');setFilterResp('');setFilterAgence(isAdmin?'':profile.agence);};
 
-  const BESOIN_BADGE_COLORS=BESOIN_BADGE_COLORS_GLOBAL;
   const STATUT_BTNS=[
     {label:'TOUS',value:''},
     {label:'OPPORTUNITÉ',value:'Opportunité'},
@@ -2693,7 +2695,7 @@ function TabBesoins({ contacts, besoins, besoinCandidats, historique, taches, mi
           <div className="flex gap-1.5 flex-wrap mb-4">
             {STATUT_BTNS.map(btn=>{
               const active=filterStatut===btn.value;
-              const bc=btn.value?BESOIN_BADGE_COLORS[btn.value]:null;
+              const bc=btn.value?BESOIN_BADGE_COLORS_GLOBAL[btn.value]:null;
               return <button key={btn.value} onClick={()=>setFilterStatut(btn.value)}
                 style={active&&bc?{backgroundColor:bc.bg,color:bc.color}:active?{backgroundColor:'#1C1F35',color:'#fff'}:{}}
                 className={`px-3 py-1.5 text-[11px] font-bold border-2 transition-colors whitespace-nowrap tracking-[0.04em]
@@ -2707,7 +2709,7 @@ function TabBesoins({ contacts, besoins, besoinCandidats, historique, taches, mi
             {(filterStatut?[filterStatut]:BESOIN_STATUTS_ORDRE).map(statut=>{
               const items=sorted.filter(b=>b.statut===statut);
               if(items.length===0) return null;
-              const bc=BESOIN_BADGE_COLORS[statut]||{bg:'#E4E4E6',color:'#1C1F35'};
+              const bc=BESOIN_BADGE_COLORS_GLOBAL[statut]||{bg:'#E4E4E6',color:'#1C1F35'};
               return (
                 <div key={statut}>
                   <div className="flex items-center gap-2 mb-2">
@@ -3699,7 +3701,7 @@ function ChangePasswordModal({ onClose }) {
   };
   return (
     <Modal title={<><Icon d={ICONS.key} size={14}/> Changer mon mot de passe</>} onClose={onClose}
-      footer={ok ? <button onClick={onClose} className="px-4 py-2 bg-jade-100 text-white rounded-lg text-sm font-medium">Fermer</button>
+      footer={ok ? <button onClick={onClose} className="px-4 py-2 bg-jade-100 text-white text-sm font-medium hover:opacity-80">Fermer</button>
                  : <><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving||!pwd||!pwd2} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon disabled:opacity-50 btn-brutal">{saving?'Enregistrement...':'Enregistrer'}</button></>}>
       {ok
         ? <div className="text-center py-4"><div className="text-3xl mb-2"><Icon d={ICONS.check} size={32}/></div><div className="text-sm text-jade-100 font-medium">Mot de passe mis à jour avec succès !</div></div>
@@ -4162,12 +4164,12 @@ function App() {
   // ── Mode "Voir comme" ──────────────────────────────────
   const activeProfile = viewAs || profile;
   const activeIsAdmin = activeProfile.role==='admin';
-  const contactAgenceMap = Object.fromEntries(contacts.map(c=>[String(c.id),c.agence]));
+  const contactAgenceMap = useMemo(()=>Object.fromEntries(contacts.map(c=>[String(c.id),c.agence])),[contacts]);
   const vContacts   = contacts; // tous voient tous les contacts
-  const vHistorique = activeIsAdmin ? historique : historique.filter(h=>h.responsable===activeProfile.nom);
-  const vTaches     = activeIsAdmin ? taches     : taches.filter(t=>t.responsable===activeProfile.nom);
-  const vMissions   = activeIsAdmin ? missions   : missions.filter(m=>m.responsable===activeProfile.nom);
-  const vBesoins    = activeIsAdmin ? besoins    : besoins.filter(b=>contactAgenceMap[String(b.contact_id)]===activeProfile.agence||b.agence===activeProfile.agence);
+  const vHistorique = useMemo(()=>activeIsAdmin ? historique : historique.filter(h=>h.responsable===activeProfile.nom),[activeIsAdmin,historique,activeProfile.nom]);
+  const vTaches     = useMemo(()=>activeIsAdmin ? taches : taches.filter(t=>t.responsable===activeProfile.nom),[activeIsAdmin,taches,activeProfile.nom]);
+  const vMissions   = useMemo(()=>activeIsAdmin ? missions : missions.filter(m=>m.responsable===activeProfile.nom),[activeIsAdmin,missions,activeProfile.nom]);
+  const vBesoins    = useMemo(()=>activeIsAdmin ? besoins : besoins.filter(b=>contactAgenceMap[String(b.contact_id)]===activeProfile.agence||b.agence===activeProfile.agence),[activeIsAdmin,besoins,contactAgenceMap,activeProfile.agence]);
   const vHistMiss   = histMissions; // filtré par missions déjà
 
   const tachesActives=vTaches.filter(t=>t.statut!=='fait'&&t.statut!=='annule');
@@ -4221,7 +4223,7 @@ function App() {
                     <button onClick={()=>{setTab('settings');setSettingsSubTab('profil');setShowMenu(false);}}><Icon d={ICONS.settings} size={14}/> Paramètres</button>
                     <button onClick={()=>{setTab('settings');setSettingsSubTab('calendrier');setShowMenu(false);}}><Icon d={ICONS.calendar} size={14}/> Synchronisation calendrier</button>
                     <button onClick={()=>{setTab('settings');setSettingsSubTab('preferences');setShowMenu(false);}}><Icon d={ICONS.filter} size={14}/> Préférences</button>
-                    <button onClick={()=>{setShowShortcuts(!showShortcuts);setShowMenu(false);}}><span>⌨️</span> Raccourcis clavier</button>
+                    <button onClick={()=>{setShowShortcuts(!showShortcuts);setShowMenu(false);}}><Icon d={ICONS.keyboard} size={14}/> Raccourcis clavier</button>
                   </div>
                   {isAdmin&&<div className="border-b border-neutral-100 py-1">
                     <div className="px-4 py-1.5 text-[10px] text-slate font-medium uppercase tracking-wider">Voir comme</div>
