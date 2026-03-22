@@ -861,8 +861,8 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
         <div>
           <div className="text-xs text-neutral-300 font-semibold mb-2 uppercase tracking-wide">Objets liés</div>
           <div className="flex flex-wrap gap-2">
-            {besoinsContact.map(b=><button key={b.id} onClick={()=>{if(onNavToBesoin){onClose();onNavToBesoin(b.id);}}} className="px-3 py-1.5 bg-orange-50 text-orange-700 rounded-lg text-xs font-medium hover:bg-orange-100 cursor-pointer">🎯 {b.titre||b.poste||'Besoin'}{b.compte?' · '+b.compte:''}</button>)}
-            {missionsContact.map(m=><button key={m.id} onClick={()=>{if(onNavToMission){onClose();onNavToMission(m.id);}}} className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-100 cursor-pointer">💼 {m.client||'Mission'}{m.projet?' · '+m.projet:''}</button>)}
+            {besoinsContact.map(b=><button key={b.id} onClick={()=>{if(onNavToBesoin){onClose();onNavToBesoin(b.id);}}} className="px-2.5 py-1 bg-lemon-20 text-midnight text-xs font-semibold hover:bg-lemon-100 cursor-pointer transition-colors">🎯 {b.titre||b.poste||'Besoin'}{b.compte?' · '+b.compte:''}</button>)}
+            {missionsContact.map(m=><button key={m.id} onClick={()=>{if(onNavToMission){onClose();onNavToMission(m.id);}}} className="px-2.5 py-1 bg-lemon-20 text-midnight text-xs font-semibold hover:bg-lemon-100 cursor-pointer transition-colors">💼 {m.client||'Mission'}{m.projet?' · '+m.projet:''}</button>)}
           </div>
         </div>
       )}
@@ -870,9 +870,9 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
         <div>
           <div className="text-xs text-neutral-300 font-semibold mb-2 uppercase tracking-wide">Tâches actives</div>
           <div className="space-y-2">{tachesContact.map(t=>(
-            <div key={t.id} onClick={()=>{if(onNavToTache){onClose();onNavToTache(t.id);}}} className={`flex items-start gap-2 bg-azure-20 rounded-lg p-3 ${onNavToTache?'cursor-pointer hover:bg-azure-20 transition-colors':''}`}>
-              <span className="text-azure-50 mt-0.5">◆</span>
-              <div><div className="text-sm font-medium text-midnight">{t.titre}</div>{t.due_date&&<div className="text-xs text-azure-100">Échéance : {fmtDT(t.due_date,DEFAULT_TASK_TIME)}</div>}</div>
+            <div key={t.id} onClick={()=>{if(onNavToTache){onClose();onNavToTache(t.id);}}} className={`flex items-start gap-2 bg-lemon-20 p-3 ${onNavToTache?'cursor-pointer hover:bg-lemon-100 transition-colors':''}`}>
+              <span className="text-midnight mt-0.5">◆</span>
+              <div><div className="text-sm font-medium text-midnight">{t.titre}</div>{t.due_date&&<div className="text-xs text-slate">Échéance : {fmtDT(t.due_date,DEFAULT_TASK_TIME)}</div>}</div>
             </div>
           ))}</div>
         </div>
@@ -1139,19 +1139,19 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
 
         {/* Infos mission */}
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <div><span className="text-neutral-300 text-xs">Consultant</span><br/>{consultantContact?<span className="text-azure-100 cursor-pointer hover:underline font-medium" onClick={()=>{if(onNavToContact){onClose();onNavToContact(consultantContact.id);}else setViewContact(consultantContact);}}>{mission.consultant} ↗</span>:<span className="text-carbon">{mission.consultant||'—'}</span>}</div>
+          <div><span className="text-neutral-300 text-xs">Consultant</span><br/>{consultantContact?<span className="text-midnight font-medium underline decoration-2 decoration-lemon-100 underline-offset-2 hover:decoration-lemon-100 hover:bg-lemon-20 cursor-pointer transition-colors" onClick={()=>{if(onNavToContact){onClose();onNavToContact(consultantContact.id);}else setViewContact(consultantContact);}}>{mission.consultant} ↗</span>:<span className="text-carbon">{mission.consultant||'—'}</span>}</div>
           <div><span className="text-neutral-300 text-xs">Client</span><br/><span className="text-carbon font-medium">{mission.client||'—'}</span></div>
           <div><span className="text-neutral-300 text-xs">TJM vente</span><br/><span className="font-mono font-semibold text-carbon">{mission.tjm>0?`${mission.tjm}€`:'—'}</span></div>
           <div><span className="text-neutral-300 text-xs">TJM achat</span><br/><span className="font-mono text-slate">{mission.cjm>0?`${mission.cjm}€`:'—'}</span></div>
           <div><span className="text-neutral-300 text-xs">Responsable</span><br/><span className="text-carbon">{mission.responsable||'—'}</span></div>
-          <div><span className="text-neutral-300 text-xs">Référent client</span><br/>{mission.referent?(referentContact?<span className="text-azure-100 cursor-pointer hover:underline" onClick={()=>{if(onNavToContact){onClose();onNavToContact(referentContact.id);}else setViewContact(referentContact);}}>{mission.referent}</span>:<span className="text-carbon">{mission.referent}</span>):<span className="text-neutral-200">—</span>}</div>
+          <div><span className="text-neutral-300 text-xs">Référent client</span><br/>{mission.referent?(referentContact?<span className="text-midnight font-medium underline decoration-2 decoration-lemon-100 underline-offset-2 hover:decoration-lemon-100 hover:bg-lemon-20 cursor-pointer transition-colors" onClick={()=>{if(onNavToContact){onClose();onNavToContact(referentContact.id);}else setViewContact(referentContact);}}>{mission.referent}</span>:<span className="text-carbon">{mission.referent}</span>):<span className="text-neutral-200">—</span>}</div>
           <div><span className="text-neutral-300 text-xs">Marge</span><br/><span className="text-purple-700 font-medium">{fmtCurrency(margeTotal)} ({tauxMarge.toFixed(1)}%)</span></div>
           {mission.num_commande&&<div><span className="text-neutral-300 text-xs">N° commande</span><br/><span className="text-carbon font-mono text-xs">{mission.num_commande}</span></div>}
           {(mission.date_debut_mission||mission.date_fin_mission)&&<div><span className="text-neutral-300 text-xs">Période mission</span><br/><span className="text-carbon">{fmtDT(mission.date_debut_mission,DEFAULT_MISSION_START_TIME)||'?'} → {fmtDT(mission.date_fin_mission,DEFAULT_MISSION_END_TIME)||'?'}</span></div>}
           {mission.date_demarrage_initiale&&<div><span className="text-neutral-300 text-xs">Démarrage initial</span><br/><span className="text-carbon">{new Date(mission.date_demarrage_initiale).toLocaleDateString('fr-FR')}</span></div>}
           {(()=>{const ds=mission.date_dernier_suivi_mission;const j=daysSince(ds);const dot=ds?(j<30?'🟢':j<=60?'🟡':'🔴'):'🔴';return <div><span className="text-neutral-300 text-xs">Dernier suivi mission</span><br/><span className="text-carbon">{ds?`${new Date(ds).toLocaleDateString('fr-FR')} — ${dot} ${j}j`:`${dot} Non renseigné`}</span></div>;})()}
         </div>
-        {mission.besoin_id&&(()=>{const b=(besoins||[]).find(x=>String(x.id)===String(mission.besoin_id));return b?<div><div className="text-xs text-neutral-300 font-semibold mb-2 uppercase tracking-wide">Besoin lié</div><button onClick={()=>{if(onNavToBesoin){onClose();onNavToBesoin(b.id);}}} className="px-3 py-1.5 bg-orange-50 text-orange-700 rounded-lg text-xs font-medium hover:bg-orange-100 cursor-pointer">🎯 {b.titre||b.poste||'Besoin'}{b.compte?' · '+b.compte:''}</button></div>:null;})()}
+        {mission.besoin_id&&(()=>{const b=(besoins||[]).find(x=>String(x.id)===String(mission.besoin_id));return b?<div><div className="text-xs text-neutral-300 font-semibold mb-2 uppercase tracking-wide">Besoin lié</div><button onClick={()=>{if(onNavToBesoin){onClose();onNavToBesoin(b.id);}}} className="px-2.5 py-1 bg-lemon-20 text-midnight text-xs font-semibold hover:bg-lemon-100 cursor-pointer transition-colors">🎯 {b.titre||b.poste||'Besoin'}{b.compte?' · '+b.compte:''}</button></div>:null;})()}
 
         {/* Jours par mois — éditable */}
         {canEdit
@@ -1179,9 +1179,9 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
           <div>
             <div className="text-xs text-neutral-300 font-semibold mb-2 uppercase tracking-wide">Tâches actives ({missionTaches.length})</div>
             <div className="space-y-2">{missionTaches.map(t=>(
-              <div key={t.id} onClick={()=>{if(onNavToTache){onClose();onNavToTache(t.id);}}} className={`flex items-start gap-2 bg-orange-50 rounded-lg p-3 ${onNavToTache?'cursor-pointer hover:bg-orange-100 transition-colors':''}`}>
-                <span className="text-orange-400 mt-0.5">◆</span>
-                <div><div className="text-sm font-medium text-orange-900">{t.titre}</div>{t.due_date&&<div className="text-xs text-orange-600">Échéance : {fmtDT(t.due_date,DEFAULT_TASK_TIME)}</div>}</div>
+              <div key={t.id} onClick={()=>{if(onNavToTache){onClose();onNavToTache(t.id);}}} className={`flex items-start gap-2 bg-lemon-20 p-3 ${onNavToTache?'cursor-pointer hover:bg-lemon-100 transition-colors':''}`}>
+                <span className="text-midnight mt-0.5">◆</span>
+                <div><div className="text-sm font-medium text-midnight">{t.titre}</div>{t.due_date&&<div className="text-xs text-slate">Échéance : {fmtDT(t.due_date,DEFAULT_TASK_TIME)}</div>}</div>
               </div>
             ))}</div>
           </div>
@@ -1615,15 +1615,15 @@ function TacheDetailPanel({ task, contact, besoinLabel, mission, besoin, histori
           <div className="text-xs text-neutral-300 font-semibold mb-2 uppercase tracking-wide">Objets liés</div>
           <div className="space-y-2">
             {contact&&<div>
-              <button onClick={()=>onViewContact&&onViewContact(contact)} className="px-3 py-1.5 bg-azure-20 text-azure-100 rounded-lg text-xs font-medium hover:bg-azure-20 cursor-pointer">👤 {contact.prenom} {contact.nom}{contact.groupe?` · ${contact.groupe}`:''}</button>
+              <button onClick={()=>onViewContact&&onViewContact(contact)} className="px-2.5 py-1 bg-lemon-20 text-midnight text-xs font-semibold hover:bg-lemon-100 cursor-pointer transition-colors">👤 {contact.prenom} {contact.nom}{contact.groupe?` · ${contact.groupe}`:''}</button>
               {(contact.telephone||contact.email)&&<div className="ml-3 mt-1 space-y-0.5">
                 {contact.telephone&&<div><a href={`tel:${contact.telephone}`} className="text-xs text-slate hover:text-azure-100" onClick={e=>e.stopPropagation()}>📞 {contact.telephone}</a></div>}
                 {contact.email&&<div><a href={`mailto:${contact.email}`} className="text-xs text-slate hover:text-azure-100" onClick={e=>e.stopPropagation()}>✉️ {contact.email}</a></div>}
               </div>}
             </div>}
             <div className="flex flex-wrap gap-2">
-              {mission&&<button onClick={()=>onViewMission&&onViewMission(mission)} className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-100 cursor-pointer">💼 {mission.consultant}{mission.client?` · ${mission.client}`:''}</button>}
-              {besoin&&<button onClick={()=>onViewBesoin&&onViewBesoin(besoin)} className="px-3 py-1.5 bg-orange-50 text-orange-700 rounded-lg text-xs font-medium hover:bg-orange-100 cursor-pointer">🎯 {besoin.titre||besoinLabel}</button>}
+              {mission&&<button onClick={()=>onViewMission&&onViewMission(mission)} className="px-2.5 py-1 bg-lemon-20 text-midnight text-xs font-semibold hover:bg-lemon-100 cursor-pointer transition-colors">💼 {mission.consultant}{mission.client?` · ${mission.client}`:''}</button>}
+              {besoin&&<button onClick={()=>onViewBesoin&&onViewBesoin(besoin)} className="px-2.5 py-1 bg-lemon-20 text-midnight text-xs font-semibold hover:bg-lemon-100 cursor-pointer transition-colors">🎯 {besoin.titre||besoinLabel}</button>}
             </div>
           </div>
         </div>
@@ -1963,7 +1963,7 @@ function BesoinCandidatsList({ besoinId, candidats, contacts, profile, readOnly,
         <div className="flex items-center gap-2 bg-orange-50 rounded-lg px-3 py-2 mb-2">
           <div className="w-2 h-2 rounded-full shrink-0 bg-orange-400"/>
           <div className="flex-1 min-w-0">
-            {onNavToContact?<button onClick={()=>{onClose?.();onNavToContact(legacyContact.id);}} className="text-sm font-medium text-azure-100 hover:underline truncate text-left cursor-pointer">{legacyContact.prenom} {legacyContact.nom}</button>:<div className="text-sm font-medium text-midnight truncate">{legacyContact.prenom} {legacyContact.nom}</div>}
+            {onNavToContact?<button onClick={()=>{onClose?.();onNavToContact(legacyContact.id);}} className="text-sm font-medium text-midnight underline decoration-2 decoration-lemon-100 underline-offset-2 hover:bg-lemon-20 truncate text-left cursor-pointer transition-colors">{legacyContact.prenom} {legacyContact.nom}</button>:<div className="text-sm font-medium text-midnight truncate">{legacyContact.prenom} {legacyContact.nom}</div>}
             {legacyContact.groupe&&<div className="text-xs text-neutral-300 truncate">{legacyContact.groupe}</div>}
           </div>
           {!readOnly&&(
@@ -1985,7 +1985,7 @@ function BesoinCandidatsList({ besoinId, candidats, contacts, profile, readOnly,
               <div key={bc.id} className="flex items-center gap-2 bg-neutral-50 rounded-lg px-3 py-2 flex-wrap">
                 <div className={`w-2 h-2 rounded-full shrink-0 ${st.dot}`}/>
                 <div className="flex-1 min-w-0">
-                  {onNavToContact?<button onClick={()=>{onClose?.();onNavToContact(c.id);}} className="text-sm font-medium text-azure-100 hover:underline truncate text-left cursor-pointer">{c.prenom} {c.nom}</button>:<div className="text-sm font-medium text-midnight truncate">{c.prenom} {c.nom}</div>}
+                  {onNavToContact?<button onClick={()=>{onClose?.();onNavToContact(c.id);}} className="text-sm font-medium text-midnight underline decoration-2 decoration-lemon-100 underline-offset-2 hover:bg-lemon-20 truncate text-left cursor-pointer transition-colors">{c.prenom} {c.nom}</button>:<div className="text-sm font-medium text-midnight truncate">{c.prenom} {c.nom}</div>}
                   {c.groupe&&<div className="text-xs text-neutral-300 truncate">{c.groupe}</div>}
                 </div>
                 {!readOnly?(
@@ -2229,7 +2229,7 @@ function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, m
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div><span className="text-neutral-300">Responsable</span><br/>{editing&&isAdmin?<select value={f.responsable} onChange={e=>setF(v=>({...v,responsable:e.target.value}))} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select>:<span>{besoin.responsable}</span>}</div>
         <div><span className="text-neutral-300">Compte</span><br/>{editing?<CompteSearchField contacts={contacts} value={f.compte||''} onChange={compte=>setF(v=>({...v,compte}))}/>:<span>{besoin.compte||'—'}</span>}</div>
-        {contact&&<div className="col-span-2"><span className="text-neutral-300">Contact</span><br/>{onNavToContact?<button onClick={()=>{onClose();onNavToContact(contact.id);}} className="text-azure-100 hover:underline cursor-pointer font-medium">{contact.prenom} {contact.nom} — {contact.groupe}</button>:<span>{contact.prenom} {contact.nom} — {contact.groupe}</span>}</div>}
+        {contact&&<div className="col-span-2"><span className="text-neutral-300">Contact</span><br/>{onNavToContact?<button onClick={()=>{onClose();onNavToContact(contact.id);}} className="text-midnight font-medium underline decoration-2 decoration-lemon-100 underline-offset-2 hover:decoration-lemon-100 hover:bg-lemon-20 cursor-pointer transition-colors">{contact.prenom} {contact.nom} — {contact.groupe}</button>:<span>{contact.prenom} {contact.nom} — {contact.groupe}</span>}</div>}
         {besoin.lien&&!editing&&<div className="col-span-2"><span className="text-neutral-300">Lien</span><br/><a href={besoin.lien} target="_blank" className="text-azure-100 hover:underline text-xs">{besoin.lien}</a></div>}
         {editing&&<div className="col-span-2"><Field label="Lien"><input type="url" value={f.lien||''} onChange={e=>setF(v=>({...v,lien:e.target.value}))} className={inputCls}/></Field></div>}
       </div>
@@ -2314,16 +2314,16 @@ function BesoinDetail({ besoin, contacts, besoinCandidats, historique, taches, m
       {editing&&<button onClick={saveEdit} disabled={saving} className="w-full py-2.5 bg-midnight text-white text-sm font-medium disabled:opacity-50 btn-brutal">{saving?'Enregistrement...':'Sauvegarder'}</button>}
 
       {/* Mission liée */}
-      {(()=>{const m=(missions||[]).find(x=>String(x.besoin_id)===String(besoin.id));return m?<div><div className="text-xs text-neutral-300 font-semibold mb-2 uppercase tracking-wide">Mission liée</div><button onClick={()=>{if(onNavToMission){onClose();onNavToMission(m.id);}}} className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-100 cursor-pointer">💼 {m.consultant}{m.client?' · '+m.client:''}</button></div>:null;})()}
+      {(()=>{const m=(missions||[]).find(x=>String(x.besoin_id)===String(besoin.id));return m?<div><div className="text-xs text-neutral-300 font-semibold mb-2 uppercase tracking-wide">Mission liée</div><button onClick={()=>{if(onNavToMission){onClose();onNavToMission(m.id);}}} className="px-2.5 py-1 bg-lemon-20 text-midnight text-xs font-semibold hover:bg-lemon-100 cursor-pointer transition-colors">💼 {m.consultant}{m.client?' · '+m.client:''}</button></div>:null;})()}
 
       {/* Tâches liées */}
       {besoinTaches.length>0&&(
         <div>
           <div className="text-xs text-neutral-300 font-semibold mb-2 uppercase tracking-wide">Tâches actives</div>
           <div className="space-y-2">{besoinTaches.map(t=>(
-            <div key={t.id} onClick={()=>{if(onNavToTache){onClose();onNavToTache(t.id);}}} className={`flex items-start gap-2 bg-azure-20 rounded-lg p-3 ${onNavToTache?'cursor-pointer hover:bg-azure-20 transition-colors':''}`}>
-              <span className="text-azure-50 mt-0.5">◆</span>
-              <div><div className="text-sm font-medium text-midnight">{t.titre}</div>{t.due_date&&<div className="text-xs text-azure-100">Échéance : {fmtDT(t.due_date,DEFAULT_TASK_TIME)}</div>}</div>
+            <div key={t.id} onClick={()=>{if(onNavToTache){onClose();onNavToTache(t.id);}}} className={`flex items-start gap-2 bg-lemon-20 p-3 ${onNavToTache?'cursor-pointer hover:bg-lemon-100 transition-colors':''}`}>
+              <span className="text-midnight mt-0.5">◆</span>
+              <div><div className="text-sm font-medium text-midnight">{t.titre}</div>{t.due_date&&<div className="text-xs text-slate">Échéance : {fmtDT(t.due_date,DEFAULT_TASK_TIME)}</div>}</div>
             </div>
           ))}</div>
         </div>
@@ -2700,13 +2700,13 @@ function TabHistorique({ historique, contacts, taches, besoins, profile, allProf
                   <div className="flex items-center gap-2 flex-wrap mb-0.5">
                     <span style={{backgroundColor:s.bg,color:s.color,padding:'2px 8px',borderRadius:9999,fontSize:11,fontWeight:600,whiteSpace:'nowrap'}}>{h.type_action}</span>
                     {contact&&(
-                      <button onClick={()=>{if(onNavToContact)onNavToContact(contact.id);else setSelected(contact);}} className="text-sm font-semibold text-azure-100 hover:underline">
+                      <button onClick={()=>{if(onNavToContact)onNavToContact(contact.id);else setSelected(contact);}} className="text-sm font-semibold text-midnight underline decoration-2 decoration-lemon-100 underline-offset-2 hover:bg-lemon-20 cursor-pointer transition-colors">
                         {contact.prenom} {contact.nom}
                         {contact.groupe&&<span className="ml-1 text-xs font-normal text-neutral-300">· {contact.groupe}</span>}
                       </button>
                     )}
-                    {h.tache_id&&(()=>{const tache=(taches||[]).find(t=>t.id===h.tache_id);return tache?<button onClick={()=>onNavToTache&&onNavToTache(tache.id)} className="text-xs bg-lemon-20 text-midnight px-2 py-0.5 rounded-full font-medium hover:bg-orange-200 cursor-pointer">✅ {tache.titre}</button>:null;})()}
-                    {h.besoin_id&&(()=>{const b=(besoins||[]).find(x=>String(x.id)===String(h.besoin_id));return b?<button onClick={()=>onNavToBesoin&&onNavToBesoin(b.id)} className="text-xs bg-iris-20 text-iris-100 px-2 py-0.5 rounded-full font-medium hover:bg-purple-200 cursor-pointer">🎯 {b.titre||'Besoin'}</button>:null;})()}
+                    {h.tache_id&&(()=>{const tache=(taches||[]).find(t=>t.id===h.tache_id);return tache?<button onClick={()=>onNavToTache&&onNavToTache(tache.id)} className="px-2.5 py-1 bg-lemon-20 text-midnight text-xs font-semibold hover:bg-lemon-100 cursor-pointer transition-colors">✅ {tache.titre}</button>:null;})()}
+                    {h.besoin_id&&(()=>{const b=(besoins||[]).find(x=>String(x.id)===String(h.besoin_id));return b?<button onClick={()=>onNavToBesoin&&onNavToBesoin(b.id)} className="px-2.5 py-1 bg-lemon-20 text-midnight text-xs font-semibold hover:bg-lemon-100 cursor-pointer transition-colors">🎯 {b.titre||'Besoin'}</button>:null;})()}
                   </div>
                   {h.details&&<div className="text-sm text-slate line-clamp-2" title={h.details}>{h.details}</div>}
                 </div>
