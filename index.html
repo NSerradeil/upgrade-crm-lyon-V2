@@ -2374,36 +2374,42 @@ function BesoinCandidatsList({ besoinId, candidats, contacts, contactMap, profil
             if(!c) return null;
             const st=statutObj(bc.statut);
             return (
-              <div key={bc.id} className="flex items-center gap-2 bg-neutral-50 rounded-lg px-3 py-2 flex-wrap" style={{...(bc.statut==='entretien'?{background:'#FFFDE7',borderLeft:'3px solid #FFE500'}:{}),borderRadius:0}}>
-                <div className={`w-2 h-2 rounded-full shrink-0 ${st.dot}`}/>
-                <div className="flex-1 min-w-0">
-                  {onNavToContact?<button onClick={()=>{onClose?.();onNavToContact(c.id);}} className="text-sm font-medium text-midnight underline decoration-2 decoration-lemon-100 underline-offset-2 hover:bg-lemon-20 truncate text-left cursor-pointer transition-colors">{c.prenom} {c.nom}</button>:<div className="text-sm font-medium text-midnight truncate">{c.prenom} {c.nom}</div>}
-                  {c.groupe&&<div className="text-xs text-neutral-300 truncate">{c.groupe}</div>}
+              <div key={bc.id}>
+                <div className="flex items-center gap-2 bg-neutral-50 px-3 py-2 flex-wrap" style={{...(bc.statut==='entretien'?{background:'#FFFDE7',borderLeft:'3px solid #FFE500'}:{}),borderRadius:0}}>
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${st.dot}`}/>
+                  <div className="flex-1 min-w-0">
+                    {onNavToContact?<button onClick={()=>{onClose?.();onNavToContact(c.id);}} className="text-sm font-medium text-midnight underline decoration-2 decoration-lemon-100 underline-offset-2 hover:bg-lemon-20 truncate text-left cursor-pointer transition-colors">{c.prenom} {c.nom}</button>:<div className="text-sm font-medium text-midnight truncate">{c.prenom} {c.nom}</div>}
+                    {c.groupe&&<div className="text-xs text-neutral-300 truncate">{c.groupe}</div>}
+                  </div>
+                  {!readOnly?(
+                    <input type="number" placeholder="TJM" defaultValue={bc.tjm_propose||''} onBlur={e=>updateTjm(bc.id,e.target.value)}
+                      className="w-16 text-xs px-1.5 py-1 border text-right" style={{borderRadius:0}} title="TJM proposé (€/j)"/>
+                  ):(
+                    bc.tjm_propose>0&&<span className="text-xs text-jade-100 font-medium">{bc.tjm_propose}€/j</span>
+                  )}
+                  {!readOnly?(
+                    <select value={bc.statut} onChange={e=>updateStatut(bc.id,e.target.value)}
+                      style={{fontSize:11,padding:'3px 8px',fontWeight:700,borderRadius:0,border:'2px solid #E4E4E6',background:'#fff',cursor:'pointer'}}>
+                      {CANDIDAT_STATUTS.map(s=><option key={s.value} value={s.value}>{s.label}</option>)}
+                    </select>
+                  ):(
+                    <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:0}} className={st.color}>{st.label}</span>
+                  )}
+                  {!readOnly&&<button onClick={()=>removeCandidat(bc.id)} style={{fontSize:10,fontWeight:700,color:'#FF3D2E',background:'none',border:'1px solid #FF3D2E',padding:'1px 6px',borderRadius:0,cursor:'pointer',opacity:0.5}} onMouseEnter={e=>{e.currentTarget.style.opacity=1;}} onMouseLeave={e=>{e.currentTarget.style.opacity=0.5;}} title="Retirer ce candidat">retirer</button>}
                 </div>
-                {!readOnly?(
-                  <input type="number" placeholder="TJM" defaultValue={bc.tjm_propose||''} onBlur={e=>updateTjm(bc.id,e.target.value)}
-                    className="w-16 text-xs px-1.5 py-1 border rounded text-right" title="TJM proposé (€/j)"/>
-                ):(
-                  bc.tjm_propose>0&&<span className="text-xs text-jade-100 font-medium">{bc.tjm_propose}€/j</span>
-                )}
-                {!readOnly?(
-                  <select value={bc.statut} onChange={e=>updateStatut(bc.id,e.target.value)}
-                    style={{fontSize:11,padding:'3px 8px',fontWeight:700,borderRadius:0,border:'2px solid #E4E4E6',background:'#fff',cursor:'pointer'}}>
-                    {CANDIDAT_STATUTS.map(s=><option key={s.value} value={s.value}>{s.label}</option>)}
-                  </select>
-                ):(
-                  <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:0}} className={st.color}>{st.label}</span>
-                )}
                 {bc.statut==='entretien'&&!readOnly&&(
-                  <input type="datetime-local" value={bc.date_entretien?String(bc.date_entretien).slice(0,16):''} onChange={e=>updateEntretien(bc.id,e.target.value||null)}
-                    style={{fontSize:11,padding:'3px 6px',border:'2px solid #FFE500',borderRadius:0,background:'#fff',color:'#1C1F35',fontFamily:'Outfit,sans-serif'}}/>
+                  <div style={{marginLeft:16,padding:'6px 0',display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:10,fontWeight:700,color:'#92400e',textTransform:'uppercase',letterSpacing:'0.05em'}}>Entretien :</span>
+                    <input type="datetime-local" value={bc.date_entretien?String(bc.date_entretien).slice(0,16):''} onChange={e=>updateEntretien(bc.id,e.target.value||null)}
+                      style={{fontSize:12,padding:'4px 8px',border:'2px solid #FFE500',borderRadius:0,background:'#FFFDE7',color:'#1C1F35',fontFamily:'Outfit,sans-serif'}}/>
+                    {bc.date_entretien&&<span style={{fontSize:10,color:'#0BA600',fontWeight:700}}>Sauvegardé</span>}
+                  </div>
                 )}
                 {bc.statut==='entretien'&&readOnly&&bc.date_entretien&&(
-                  <span style={{fontSize:11,color:'#92400e',fontWeight:700}}>
-                    {new Date(bc.date_entretien).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
-                  </span>
+                  <div style={{marginLeft:16,padding:'4px 0',fontSize:11,color:'#92400e',fontWeight:700}}>
+                    Entretien : {new Date(bc.date_entretien).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
+                  </div>
                 )}
-                {!readOnly&&<button onClick={()=>removeCandidat(bc.id)} className="text-neutral-200 hover:text-red-500 text-sm shrink-0" title="Retirer">×</button>}
               </div>
             );
           })}
