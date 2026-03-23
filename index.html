@@ -4991,7 +4991,7 @@ function App() {
   const tachesActives=vTaches.filter(t=>t.statut!=='fait'&&t.statut!=='annule');
   const tachesRetard=tachesActives.filter(t=>t.due_date&&extractDate(t.due_date)<TODAY);
   const besoinsPipeActifs=vBesoins.filter(b=>b.statut!=='Besoin Perdu');
-  const TAB_COLORS={taches:'#0BA600',prospects:'#5090FE',prospection:'#FFE500',besoins:'#FFEA2F',pipe:'#823DE8',tdb:'#FF78FD',historique:'#565861',settings:'#A4A6AB'};
+  const TAB_COLORS={taches:'#0BA600',prospects:'#5090FE',prospection:'#FF3D2E',besoins:'#FFEA2F',pipe:'#823DE8',tdb:'#FF78FD',historique:'#565861',settings:'#A4A6AB'};
   const activeColor=TAB_COLORS[tab]||'#5090FE';
   const TABS=[
     {id:'taches',     label:<><Icon d={ICONS.check} size={14}/> Tâches ({tachesActives.length}){tachesRetard.length>0&&<span className="w-2 h-2 bg-coral-100 rounded-full inline-block ml-1"/>}</>},
