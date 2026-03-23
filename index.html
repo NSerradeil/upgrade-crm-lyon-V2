@@ -3680,7 +3680,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
         <button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">+ Nouvelle mission</button>
       </div>
       {/* KPI cards — clickable */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:12}}>
         {KPI_CARDS.map(c=>{
           const active = activeChart===c.id;
           return (
