@@ -4513,7 +4513,8 @@ function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact }
   );
 }
 
-function ProspectionList({ sessions, loading, onNew, onDetail }) {
+function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelete }) {
+  const [confirmDel, setConfirmDel] = useState(null);
   return (
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
@@ -4546,7 +4547,14 @@ function ProspectionList({ sessions, loading, onNew, onDetail }) {
             <div style={{display:'flex',gap:8,alignItems:'center'}}>
               {(s.nb_interesses||0)>0&&<span style={{fontSize:10,fontWeight:700,background:'#EDFFF1',color:'#00C218',padding:'2px 8px',borderRadius:0}}>{s.nb_interesses} interesses</span>}
               {(s.nb_relances||0)>0&&<span style={{fontSize:10,fontWeight:700,background:'#FFF9C0',color:'#1C1F35',padding:'2px 8px',borderRadius:0}}>{s.nb_relances} relances</span>}
-              {s.statut==='active'&&<span style={{fontSize:10,fontWeight:700,background:'#FF3D2E',color:'#fff',padding:'2px 8px',borderRadius:0}}>EN COURS</span>}
+              {s.statut==='active'&&<>
+                <span style={{fontSize:10,fontWeight:700,background:'#FF3D2E',color:'#fff',padding:'2px 8px',borderRadius:0}}>EN COURS</span>
+                <button onClick={function(e){e.stopPropagation();onResume(s);}} style={{fontSize:10,fontWeight:700,padding:'3px 10px',background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'3px 3px 0 #00C218',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>Reprendre</button>
+                {confirmDel===s.id
+                  ? <ConfirmDelete onConfirm={function(){onDelete(s);setConfirmDel(null);}} onCancel={function(){setConfirmDel(null);}} loading={false}/>
+                  : <button onClick={function(e){e.stopPropagation();setConfirmDel(s.id);}} style={{fontSize:10,fontWeight:700,padding:'3px 10px',background:'#fff',color:'#FF3D2E',border:'2px solid #FF3D2E',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>Supprimer</button>
+                }
+              </>}
             </div>
           </div>
         );})}
@@ -4647,10 +4655,22 @@ function ProspectionNew({ contacts, profile, onStart, onBack }) {
 }
 
 function ProspectionActive({ session, contacts, contactMap, profile, onDone, onBack }) {
+  var spcMap = {};
+  (session.spcRows||[]).forEach(function(r){ spcMap[r.contact_id]=r; });
   var sessionContacts = useMemo(function(){
-    return (session.contactIds||[]).map(function(id){return contactMap[id];}).filter(Boolean).map(function(c){return {
-      ...c, status:'none', notes:'', wantRelance:false, relanceDate:'', relanceNote:'',
-      editTel:c.telephone||'', editEmail:c.email||'', editLinkedin:c.linkedin||'',
+    return (session.contactIds||[]).map(function(id){return contactMap[id];}).filter(Boolean).map(function(c){
+      var saved = spcMap[c.id];
+      return {
+      ...c,
+      spc_id: saved?saved.id:null,
+      status: saved?saved.statut:'none',
+      notes: saved?saved.notes||'':'',
+      wantRelance: saved?!!saved.want_relance:false,
+      relanceDate: saved?saved.relance_date||'':'',
+      relanceNote: saved?saved.relance_note||'':'',
+      editTel: saved&&saved.tel_saisi?saved.tel_saisi:(c.telephone||''),
+      editEmail: saved&&saved.email_saisi?saved.email_saisi:(c.email||''),
+      editLinkedin: saved&&saved.linkedin_saisi?saved.linkedin_saisi:(c.linkedin||''),
       editVille:c.ville||'', editRole:c.role||'', editAts:c.ats||c.recruitee||'',
     };});
   }, [session.contactIds, contactMap]);
@@ -4786,9 +4806,23 @@ function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onN
   };
   useEffect(function(){ loadSessions(); }, []);
 
+  var handleResume = async function(session) {
+    var result = await sb.from('session_prospection_contacts').select('*').eq('session_id', session.id);
+    var spcRows = result.data || [];
+    var contactIds = spcRows.map(function(r){return r.contact_id;});
+    setActiveSession({...session, contactIds:contactIds, spcRows:spcRows});
+    setScreen('active');
+  };
+  var handleDeleteSession = async function(session) {
+    await sb.from('session_prospection_contacts').delete().eq('session_id', session.id);
+    await sb.from('sessions_prospection').delete().eq('id', session.id);
+    toast('Session supprimée');
+    loadSessions();
+  };
+
   return (
     <div className="tab-content">
-      {screen === 'list' && <ProspectionList sessions={sessions} loading={loading} onNew={function(){setScreen('new');}} onDetail={setDetailSession}/>}
+      {screen === 'list' && <ProspectionList sessions={sessions} loading={loading} onNew={function(){setScreen('new');}} onDetail={setDetailSession} onResume={handleResume} onDelete={handleDeleteSession}/>}
       {screen === 'new' && <ProspectionNew contacts={contacts} profile={profile} onStart={function(s){setActiveSession(s);setScreen('active');}} onBack={function(){setScreen('list');}}/>}
       {screen === 'active' && activeSession && <ProspectionActive session={activeSession} contacts={contacts} contactMap={contactMap} profile={profile} onDone={function(){setScreen('list');loadSessions();onRefresh();}} onBack={function(){setScreen('list');}}/>}
       {detailSession && <ProspectionDetailPanel session={detailSession} contactMap={contactMap} onClose={function(){setDetailSession(null);}} onNavToContact={onNavToContact}/>}
