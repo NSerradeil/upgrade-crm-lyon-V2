@@ -336,6 +336,7 @@ function BtnAction({ onClick, icon, label, variant='primary', disabled=false }) 
     edit:    {background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #4A7FE5'},
     danger:  {background:'#fff',color:'#FF3D2E',border:'2px solid #FF3D2E',boxShadow:'4px 4px 0 #FF3D2E'},
     success: {background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #00C218'},
+    close:   {background:'#1C1F35',color:'#E4E4E6',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #E4E4E6'},
   };
   const s = V[variant]||V.primary;
   return <button onClick={onClick} disabled={disabled} style={{...s,padding:'6px 12px',fontSize:12,fontWeight:700,fontFamily:'Outfit,sans-serif',letterSpacing:'0.03em',cursor:disabled?'not-allowed':'pointer',opacity:disabled?0.5:1,display:'inline-flex',alignItems:'center',gap:5,borderRadius:0,transition:'all 80ms ease',textTransform:'uppercase'}}
@@ -555,6 +556,7 @@ const ICONS = {
   building: 'M120-120v-720h320v-120h320v840H120Zm80-80h80v-80h-80v80Zm0-160h80v-80h-80v80Zm0-160h80v-80h-80v80Zm0-160h80v-80h-80v80Zm160 480h80v-80h-80v80Zm0-160h80v-80h-80v80Zm0-160h80v-80h-80v80Zm0-160h80v-80h-80v80Zm160 480h160v-640H520v80h80v80h-80v80h80v80h-80v80h80v80h-80v160Zm80-320v-80h80v80h-80Zm0 160v-80h80v80h-80Z',
   list: 'M280-600v-80h560v80H280Zm0 160v-80h560v80H280Zm0 160v-80h560v80H280ZM160-600q-17 0-28.5-11.5T120-640q0-17 11.5-28.5T160-680q17 0 28.5 11.5T200-640q0 17-11.5 28.5T160-600Zm0 160q-17 0-28.5-11.5T120-480q0-17 11.5-28.5T160-520q17 0 28.5 11.5T200-480q0 17-11.5 28.5T160-440Zm0 160q-17 0-28.5-11.5T120-320q0-17 11.5-28.5T160-360q17 0 28.5 11.5T200-320q0 17-11.5 28.5T160-280Z',
   keyboard: 'M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h640q33 0 56.5 23.5T880-720v480q0 33-23.5 56.5T800-160H160Zm0-80h640v-480H160v480Zm160-80h320v-80H320v80Z',
+  stop: 'M240-240v-480h480v480H240Z',
 };
 
 function Loader({ label }) {
@@ -1411,6 +1413,33 @@ function DeleteMissionModal({ mission, onClose, onDeleted }) {
   );
 }
 
+function TerminerMissionModal({ mission, profile, onClose, onSaved }) {
+  const defaultDate = mission.date_fin_mission ? extractDate(mission.date_fin_mission) : getToday();
+  const [dateFin, setDateFin] = useState(defaultDate);
+  const [saving, setSaving] = useState(false);
+  const handleTerminer = async () => {
+    setSaving(true);
+    const {error} = await sb.from('missions').update({date_fin_mission: dateFin, statut: 'Terminée'}).eq('id', mission.id);
+    if(error){toast('Erreur: '+error.message,'error');setSaving(false);return;}
+    await sb.from('historique_missions').insert({mission_id:mission.id,date:getToday(),type_action:'Mission terminée',details:`Mission terminée le ${dateFin}`,responsable:profile.nom});
+    toast('Mission terminée');
+    setSaving(false);
+    onSaved?.();
+  };
+  return (
+    <Modal title={<><Icon d={ICONS.stop} size={14}/> Terminer la mission</>} onClose={onClose} footer={<>
+      <button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button>
+      <BtnAction variant="close" label={saving?'...':'Terminer la mission'} onClick={handleTerminer} disabled={saving||!dateFin}/>
+    </>}>
+      <div className="text-sm font-bold text-midnight mb-3">{mission.consultant} — {mission.client||'Sans client'}</div>
+      <Field label="Date de fin effective">
+        <input type="date" value={dateFin} onChange={e=>setDateFin(e.target.value)} className={inputCls}/>
+      </Field>
+      <p className="text-xs text-neutral-300 mt-2">Le statut passera automatiquement à "Terminée"</p>
+    </Modal>
+  );
+}
+
 // ── Panel : Détail mission ────────────────────────────────────────────────────
 function MissionDetail({ mission, histMissions, contacts, taches, missions, besoins, profile, allProfiles, onClose, onRefresh, onNavToContact, onNavToBesoin, onNavToTache }) {
   const [showAdd,setShowAdd] = useState(false);
@@ -1454,6 +1483,8 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
       <BtnAction variant="primary" icon={ICONS.add} label="+ Action" onClick={()=>setShowAdd(true)}/>
       <BtnAction variant="task" icon={ICONS.check} label="Tâche" onClick={()=>setModal('tache')}/>
       <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setModal('edit')}/>
+      {mission.statut==='Terminée'&&<span style={{fontSize:11,fontWeight:700,background:'#E4E4E6',color:'#1C1F35',padding:'4px 10px',borderRadius:0,textTransform:'uppercase',letterSpacing:'0.05em'}}>Mission terminée</span>}
+      {mission.statut!=='Terminée'&&<BtnAction variant="close" icon={ICONS.stop} label="Terminer" onClick={()=>setModal('terminer')}/>}
       {modal!=='confirmDel'
         ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
         : <ConfirmDelete onConfirm={handleDelete} onCancel={()=>setModal(null)} loading={deleting}/>}
@@ -1463,6 +1494,12 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
   return (
     <SidePanel title={consultantContact?<span className="cursor-pointer text-azure-100 hover:underline" onClick={()=>{if(onNavToContact){onClose();onNavToContact(consultantContact.id);}else setViewContact(consultantContact);}}>{mission.consultant}</span>:mission.consultant} badge={<div className="flex gap-2 flex-wrap"><MissionStatutBadge statut={mission.statut}/>{mission.agence&&<span className="text-xs bg-azure-20 text-azure-100 px-2 py-0.5 rounded-full font-medium">{mission.agence}</span>}{mission.type_contrat&&<span className="text-xs bg-neutral-100 text-slate px-2 py-0.5 rounded-full">{mission.type_contrat}</span>}</div>} onClose={onClose} actions={actions}>
       <div className="space-y-6">
+        {mission.statut==='Terminée'&&mission.date_fin_mission&&(
+          <div style={{background:'#F3F4F6',border:'2px solid #E4E4E6',padding:'6px 14px',marginBottom:12,fontSize:12,color:'#666',display:'flex',alignItems:'center',gap:8,borderRadius:0}}>
+            <span style={{fontWeight:800,color:'#1C1F35',textTransform:'uppercase',fontSize:10,letterSpacing:'0.06em'}}>Terminée le</span>
+            <span style={{fontWeight:700,color:'#1C1F35'}}>{new Date(mission.date_fin_mission).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'})}</span>
+          </div>
+        )}
         <div className="text-sm text-slate">{mission.client}{mission.projet?` · ${mission.projet.substring(0,60)}`:''}</div>
 
         {/* KPI mini */}
@@ -1556,6 +1593,7 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
       {showAdd&&<AddHistMissionModal mission={mission} profile={profile} onClose={()=>setShowAdd(false)} onSaved={saved}/>}
       {modal==='edit'&&<MissionFormModal mission={mission} profile={profile} allProfiles={allProfiles} contacts={contacts} besoins={besoins} onClose={()=>setModal(null)} onSaved={saved}/>}
       {modal==='tache'&&<AddTacheModal contacts={contacts} besoins={besoins||[]} missions={missions||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved} defaultMissionId={mission.id}/>}
+      {modal==='terminer'&&<TerminerMissionModal mission={mission} profile={profile} onClose={()=>setModal(null)} onSaved={()=>{setModal(null);onRefresh();onClose();}}/>}
       {viewContact&&<ContactDetail contact={viewContact} historique={[]} taches={[]} profile={profile} allProfiles={allProfiles} onClose={()=>setViewContact(null)} onRefresh={()=>{setViewContact(null);onRefresh();}}/>}
     </SidePanel>
   );
