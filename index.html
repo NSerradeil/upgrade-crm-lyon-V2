@@ -4416,11 +4416,11 @@ function ProspectionContactCard({ sc, idx, updateItem, expanded }) {
             <input value={sc.editLinkedin} onChange={function(e){updateItem(idx,{editLinkedin:e.target.value});}} placeholder="LinkedIn URL"
               style={{width:'100%',fontSize:11,padding:'4px 6px',border:'2px solid #E4E4E6',borderRadius:0}}/>
           </div>
-          <div>
+          {['Candidat','Consultant CDI','Freelance','Prestataire'].includes(sc.statut)&&<div>
             <label style={{fontSize:9,fontWeight:700,color:'#999',textTransform:'uppercase',letterSpacing:'0.05em'}}>ATS (RECRUITEE)</label>
             <input value={sc.editAts} onChange={function(e){updateItem(idx,{editAts:e.target.value});}} placeholder="Lien ATS"
               style={{width:'100%',fontSize:11,padding:'4px 6px',border:'2px solid #E4E4E6',borderRadius:0}}/>
-          </div>
+          </div>}
         </div>
       )}
       {sc.status!=='none'&&(
