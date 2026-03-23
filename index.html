@@ -4870,7 +4870,7 @@ function ProspectionNew({ contacts, profile, onStart, onBack }) {
   );
 }
 
-function ProspectionActive({ session, contacts, contactMap, profile, onDone, onBack, onEditContacts }) {
+function ProspectionActive({ session, contacts, contactMap, profile, onDone, onBack }) {
   var spcMap = {};
   (session.spcRows||[]).forEach(function(r){ spcMap[r.contact_id]=r; });
   var sessionContacts = useMemo(function(){
@@ -4977,9 +4977,6 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
           <button onClick={function(){setView(view==='list'?'focus':'list');}} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:'2px solid #E4E4E6',background:'#fff',cursor:'pointer',borderRadius:0,textTransform:'uppercase'}}>
             {view==='list'?'Vue focus':'Vue liste'}
           </button>
-          {onEditContacts&&<button onClick={function(){onEditContacts(session);}} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:'2px solid #4A7FE5',color:'#4A7FE5',background:'#fff',cursor:'pointer',borderRadius:0,textTransform:'uppercase'}}>
-            <Icon d={ICONS.edit} size={12}/> Contacts
-          </button>}
           <button onClick={handleTerminer} disabled={saving||stats.done===0} style={{background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #00C218',padding:'8px 16px',fontWeight:900,fontSize:12,textTransform:'uppercase',letterSpacing:'0.04em',cursor:stats.done===0?'not-allowed':'pointer',borderRadius:0,opacity:stats.done===0?0.4:1}}>
             {saving?'Enregistrement...':'Terminer la session'}
           </button>
@@ -5012,25 +5009,40 @@ function ProspectionEditContacts({ session, contacts, profile, onSaved, onBack }
   var existingIds = session.existingContactIds || [];
   var [selected, setSelected] = useState(function(){return new Set(existingIds);});
   var [search, setSearch] = useState('');
+  var [agence, setAgence] = useState('');
+  var [delai, setDelai] = useState(0);
   var [saving, setSaving] = useState(false);
+  var today = new Date();
 
-  var filtered = useMemo(function(){
+  // Contacts filtrés pour l'ajout (recherche + filtres)
+  var searchResults = useMemo(function(){
+    if (!search && !agence && !delai) return [];
     return contacts.filter(function(c){
+      if (selected.has(c.id)) return false;
       if (c.statut === 'Consultant CDI' || c.statut === 'Freelance') return false;
+      if (agence && c.agence !== agence) return false;
+      if (delai > 0) {
+        var lastDate = c.date_dernier || c.updated_at;
+        if (lastDate) { var diff = (today - new Date(lastDate)) / (1000*60*60*24); if (diff < delai) return false; }
+      }
       if (search) {
         var s = search.toLowerCase();
         if (![c.prenom,c.nom,c.groupe,c.ville].some(function(v){return (v||'').toLowerCase().indexOf(s)>=0;})) return false;
       }
       return true;
-    });
-  }, [contacts, search]);
+    }).slice(0, 20);
+  }, [contacts, search, agence, delai, selected]);
+
+  // Contacts déjà sélectionnés
+  var selectedContacts = useMemo(function(){
+    return [...selected].map(function(id){return contacts.find(function(c){return c.id===id;});}).filter(Boolean);
+  }, [selected, contacts]);
 
   var handleSave = async function() {
     setSaving(true);
     var currentIds = [...selected];
     var toAdd = currentIds.filter(function(id){return existingIds.indexOf(id)<0;});
     var toRemove = existingIds.filter(function(id){return currentIds.indexOf(id)<0;});
-
     if (toAdd.length > 0) {
       await sb.from('session_prospection_contacts').insert(toAdd.map(function(id){return {session_id:session.id, contact_id:id, statut:'none'};}));
     }
@@ -5039,33 +5051,27 @@ function ProspectionEditContacts({ session, contacts, profile, onSaved, onBack }
         await sb.from('session_prospection_contacts').delete().eq('session_id',session.id).eq('contact_id',toRemove[i]);
       }
     }
-
-    toast((toAdd.length>0?'+'+toAdd.length+' ajouté'+(toAdd.length>1?'s':''):'')+
-          (toAdd.length>0&&toRemove.length>0?' · ':'')+
-          (toRemove.length>0?toRemove.length+' retiré'+(toRemove.length>1?'s':''):'') || 'Aucune modification');
+    var msg = [];
+    if (toAdd.length>0) msg.push('+'+toAdd.length+' ajouté'+(toAdd.length>1?'s':''));
+    if (toRemove.length>0) msg.push(toRemove.length+' retiré'+(toRemove.length>1?'s':''));
+    toast(msg.join(' · ')||'Aucune modification');
     setSaving(false);
     onSaved();
   };
 
-  var toggle = function(id) {
-    var s = new Set(selected);
-    if (s.has(id)) s.delete(id); else s.add(id);
-    setSelected(s);
-  };
+  var addContact = function(id) { var s = new Set(selected); s.add(id); setSelected(s); };
+  var removeContact = function(id) { var s = new Set(selected); s.delete(id); setSelected(s); };
 
   var added = [...selected].filter(function(id){return existingIds.indexOf(id)<0;}).length;
   var removed = existingIds.filter(function(id){return !selected.has(id);}).length;
 
   return (
     <div>
+      {/* Header */}
       <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
         <button onClick={onBack} style={{background:'none',border:'none',cursor:'pointer',fontSize:14,color:'#999'}}><Icon d={ICONS.back} size={16}/> Retour</button>
         <span style={{fontSize:16,fontWeight:900,color:'#1C1F35',textTransform:'uppercase'}}>Modifier : {session.nom}</span>
-      </div>
-
-      <div style={{display:'flex',gap:12,alignItems:'center',marginBottom:12}}>
-        <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Rechercher un contact..." className={inputCls} style={{flex:1}}/>
-        <span style={{fontSize:11,fontWeight:700,color:'#999'}}>{selected.size} sélectionnés</span>
+        <span style={{fontSize:11,fontWeight:700,color:'#999',marginLeft:'auto'}}>{selected.size} contacts</span>
         {(added>0||removed>0)&&<span style={{fontSize:11,fontWeight:700}}>
           {added>0&&<span style={{color:'#00C218'}}>+{added}</span>}
           {added>0&&removed>0&&' '}
@@ -5073,31 +5079,60 @@ function ProspectionEditContacts({ session, contacts, profile, onSaved, onBack }
         </span>}
       </div>
 
-      <div style={{border:'2px solid #E4E4E6',maxHeight:400,overflowY:'auto',marginBottom:16}}>
-        {filtered.map(function(c){
-          var sel = selected.has(c.id);
-          var wasExisting = existingIds.indexOf(c.id)>=0;
-          return (
-            <div key={c.id} onClick={function(){toggle(c.id);}}
-              style={{padding:'10px 14px',borderBottom:'1px solid #E4E4E6',display:'flex',alignItems:'center',gap:10,cursor:'pointer',background:sel?'#FFFDE7':'#fff',transition:'background 80ms'}}>
-              <div style={{width:18,height:18,border:'2px solid '+(sel?'#1C1F35':'#E4E4E6'),background:sel?'#1C1F35':'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                {sel&&<Icon d={ICONS.check} size={12} className="text-white"/>}
-              </div>
-              <div style={{flex:1}}>
-                <span style={{fontWeight:700,fontSize:13,color:'#1C1F35'}}>{c.prenom} {c.nom}</span>
-                {c.groupe&&<span style={{fontSize:11,color:'#999',marginLeft:8}}>{c.groupe}</span>}
-              </div>
-              {wasExisting&&sel&&<span style={{fontSize:9,fontWeight:700,color:'#999',textTransform:'uppercase'}}>existant</span>}
-              {wasExisting&&!sel&&<span style={{fontSize:9,fontWeight:700,color:'#FF3D2E',textTransform:'uppercase'}}>retiré</span>}
-              {!wasExisting&&sel&&<span style={{fontSize:9,fontWeight:700,color:'#00C218',textTransform:'uppercase'}}>nouveau</span>}
-              <span style={{fontSize:10,color:'#ccc'}}>{c.agence}</span>
+      {/* Recherche + filtres pour ajouter */}
+      <div style={{border:'2px solid #E4E4E6',padding:16,marginBottom:16}}>
+        <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',color:'#999',marginBottom:10}}>Ajouter des contacts</div>
+        <div style={{display:'flex',gap:10,marginBottom:10,flexWrap:'wrap'}}>
+          <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Rechercher par nom, société, ville..." style={{flex:1,minWidth:180,padding:'8px 12px',border:'2px solid #E4E4E6',borderRadius:0,fontSize:13,fontFamily:'Outfit,sans-serif'}}/>
+          <select value={agence} onChange={function(e){setAgence(e.target.value);}} style={{padding:'8px 12px',border:'2px solid #E4E4E6',borderRadius:0,fontSize:13,fontFamily:'Outfit,sans-serif'}}>
+            <option value="">Toutes agences</option><option value="Lyon">Lyon</option><option value="Paris">Paris</option><option value="Bordeaux">Bordeaux</option>
+          </select>
+          <select value={delai} onChange={function(e){setDelai(+e.target.value);}} style={{padding:'8px 12px',border:'2px solid #E4E4E6',borderRadius:0,fontSize:13,fontFamily:'Outfit,sans-serif'}}>
+            <option value={0}>Tous</option><option value={14}>{'>'} 14 jours</option><option value={30}>{'>'} 30 jours</option><option value={60}>{'>'} 60 jours</option><option value={90}>{'>'} 90 jours</option>
+          </select>
+        </div>
+        {searchResults.length>0&&<div style={{border:'1px solid #E4E4E6',maxHeight:200,overflowY:'auto'}}>
+          {searchResults.map(function(c){return(
+            <div key={c.id} onClick={function(){addContact(c.id);}} style={{padding:'8px 12px',borderBottom:'1px solid #E4E4E6',display:'flex',alignItems:'center',gap:8,cursor:'pointer',transition:'background 80ms'}}
+              onMouseEnter={function(e){e.currentTarget.style.background='#FFFDE7';}} onMouseLeave={function(e){e.currentTarget.style.background='#fff';}}>
+              <Icon d={ICONS.add} size={12} className="text-jade-100"/>
+              <span style={{fontWeight:700,fontSize:12,color:'#1C1F35'}}>{c.prenom} {c.nom}</span>
+              {c.groupe&&<span style={{fontSize:10,color:'#999'}}>{c.groupe}</span>}
+              <span style={{fontSize:10,color:'#ccc',marginLeft:'auto'}}>{c.agence}</span>
             </div>
-          );
-        })}
+          );})}
+        </div>}
+        {search&&searchResults.length===0&&<div style={{fontSize:11,color:'#999',padding:8}}>Aucun résultat</div>}
+        {!search&&!agence&&!delai&&<div style={{fontSize:11,color:'#ccc',padding:4}}>Tapez pour rechercher ou utilisez les filtres</div>}
       </div>
 
+      {/* Liste des contacts sélectionnés */}
+      <div style={{border:'2px solid #E4E4E6',marginBottom:16}}>
+        <div style={{background:'#1C1F35',padding:'8px 16px',display:'flex',justifyContent:'space-between'}}>
+          <span style={{color:'#fff',fontWeight:800,fontSize:11,textTransform:'uppercase',letterSpacing:'0.08em'}}>Contacts de la session ({selected.size})</span>
+        </div>
+        <div style={{maxHeight:350,overflowY:'auto'}}>
+          {selectedContacts.map(function(c){
+            var wasExisting = existingIds.indexOf(c.id)>=0;
+            return (
+              <div key={c.id} style={{padding:'10px 14px',borderBottom:'1px solid #E4E4E6',display:'flex',alignItems:'center',gap:10}}>
+                <div style={{flex:1}}>
+                  <span style={{fontWeight:700,fontSize:13,color:'#1C1F35'}}>{c.prenom} {c.nom}</span>
+                  {c.groupe&&<span style={{fontSize:11,color:'#999',marginLeft:8}}>{c.groupe}</span>}
+                </div>
+                {!wasExisting&&<span style={{fontSize:9,fontWeight:700,color:'#00C218',textTransform:'uppercase'}}>nouveau</span>}
+                <span style={{fontSize:10,color:'#ccc'}}>{c.agence}</span>
+                <button onClick={function(){removeContact(c.id);}} style={{fontSize:10,fontWeight:700,color:'#FF3D2E',background:'none',border:'1px solid #FF3D2E',padding:'2px 8px',borderRadius:0,cursor:'pointer',opacity:0.6}} onMouseEnter={function(e){e.currentTarget.style.opacity=1;}} onMouseLeave={function(e){e.currentTarget.style.opacity=0.6;}}>retirer</button>
+              </div>
+            );
+          })}
+          {selectedContacts.length===0&&<div style={{padding:20,textAlign:'center',fontSize:12,color:'#ccc'}}>Aucun contact</div>}
+        </div>
+      </div>
+
+      {/* Actions */}
       <div style={{display:'flex',gap:8}}>
-        <BtnAction variant="edit" label={saving?'...':'Sauvegarder les modifications'} onClick={handleSave} disabled={saving||(added===0&&removed===0)}/>
+        <BtnAction variant="edit" label={saving?'...':'Sauvegarder'} onClick={handleSave} disabled={saving||(added===0&&removed===0)}/>
         <button onClick={onBack} style={{fontSize:11,color:'#999',background:'none',border:'none',cursor:'pointer',textTransform:'uppercase'}}>Annuler</button>
       </div>
     </div>
@@ -5145,7 +5180,7 @@ function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onN
     <div className="tab-content">
       {screen === 'list' && <ProspectionList sessions={sessions} loading={loading} onNew={function(){setScreen('new');}} onDetail={setDetailSession} onResume={handleResume} onEdit={handleEdit} onDelete={handleDeleteSession} contactMap={contactMap} onNavToContact={onNavToContact} isAdmin={isAdmin} allProfiles={allProfiles} profile={profile}/>}
       {screen === 'new' && <ProspectionNew contacts={contacts} profile={profile} onStart={function(s){setActiveSession(s);setScreen('active');}} onBack={function(){setScreen('list');}}/>}
-      {screen === 'active' && activeSession && <ProspectionActive session={activeSession} contacts={contacts} contactMap={contactMap} profile={profile} onDone={function(){setScreen('list');loadSessions();onRefresh();}} onBack={function(){setScreen('list');}} onEditContacts={function(s){handleEdit(s);}}/>}
+      {screen === 'active' && activeSession && <ProspectionActive session={activeSession} contacts={contacts} contactMap={contactMap} profile={profile} onDone={function(){setScreen('list');loadSessions();onRefresh();}} onBack={function(){setScreen('list');}}/>}
       {screen === 'edit' && activeSession && <ProspectionEditContacts session={activeSession} contacts={contacts} profile={profile} onSaved={function(){setScreen('list');loadSessions();}} onBack={function(){setScreen('list');}}/>}
       {detailSession && <ProspectionDetailPanel session={detailSession} contactMap={contactMap} onClose={function(){setDetailSession(null);}} onNavToContact={onNavToContact}/>}
     </div>
