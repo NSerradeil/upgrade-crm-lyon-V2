@@ -4870,7 +4870,7 @@ function ProspectionNew({ contacts, profile, onStart, onBack }) {
   );
 }
 
-function ProspectionActive({ session, contacts, contactMap, profile, onDone, onBack }) {
+function ProspectionActive({ session, contacts, contactMap, profile, onDone, onBack, onEditContacts }) {
   var spcMap = {};
   (session.spcRows||[]).forEach(function(r){ spcMap[r.contact_id]=r; });
   var sessionContacts = useMemo(function(){
@@ -4977,6 +4977,9 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
           <button onClick={function(){setView(view==='list'?'focus':'list');}} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:'2px solid #E4E4E6',background:'#fff',cursor:'pointer',borderRadius:0,textTransform:'uppercase'}}>
             {view==='list'?'Vue focus':'Vue liste'}
           </button>
+          {onEditContacts&&<button onClick={function(){onEditContacts(session);}} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:'2px solid #4A7FE5',color:'#4A7FE5',background:'#fff',cursor:'pointer',borderRadius:0,textTransform:'uppercase'}}>
+            <Icon d={ICONS.edit} size={12}/> Contacts
+          </button>}
           <button onClick={handleTerminer} disabled={saving||stats.done===0} style={{background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #00C218',padding:'8px 16px',fontWeight:900,fontSize:12,textTransform:'uppercase',letterSpacing:'0.04em',cursor:stats.done===0?'not-allowed':'pointer',borderRadius:0,opacity:stats.done===0?0.4:1}}>
             {saving?'Enregistrement...':'Terminer la session'}
           </button>
@@ -5142,7 +5145,7 @@ function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onN
     <div className="tab-content">
       {screen === 'list' && <ProspectionList sessions={sessions} loading={loading} onNew={function(){setScreen('new');}} onDetail={setDetailSession} onResume={handleResume} onEdit={handleEdit} onDelete={handleDeleteSession} contactMap={contactMap} onNavToContact={onNavToContact} isAdmin={isAdmin} allProfiles={allProfiles} profile={profile}/>}
       {screen === 'new' && <ProspectionNew contacts={contacts} profile={profile} onStart={function(s){setActiveSession(s);setScreen('active');}} onBack={function(){setScreen('list');}}/>}
-      {screen === 'active' && activeSession && <ProspectionActive session={activeSession} contacts={contacts} contactMap={contactMap} profile={profile} onDone={function(){setScreen('list');loadSessions();onRefresh();}} onBack={function(){setScreen('list');}}/>}
+      {screen === 'active' && activeSession && <ProspectionActive session={activeSession} contacts={contacts} contactMap={contactMap} profile={profile} onDone={function(){setScreen('list');loadSessions();onRefresh();}} onBack={function(){setScreen('list');}} onEditContacts={function(s){handleEdit(s);}}/>}
       {screen === 'edit' && activeSession && <ProspectionEditContacts session={activeSession} contacts={contacts} profile={profile} onSaved={function(){setScreen('list');loadSessions();}} onBack={function(){setScreen('list');}}/>}
       {detailSession && <ProspectionDetailPanel session={detailSession} contactMap={contactMap} onClose={function(){setDetailSession(null);}} onNavToContact={onNavToContact}/>}
     </div>
