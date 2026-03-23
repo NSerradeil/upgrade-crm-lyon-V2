@@ -4430,7 +4430,7 @@ function ProspectionContactCard({ sc, idx, updateItem, expanded }) {
             <span style={{fontWeight:700,color:'#1C1F35'}}>{sc.statut||'Prospect'}</span>
             {sc.groupe&&<span> · {sc.groupe}</span>}
             {sc.ville&&<span> · {sc.ville}</span>}
-            {sc.date_dernier_contact&&<span> · Dernier contact : {new Date(sc.date_dernier_contact).toLocaleDateString('fr-FR')}</span>}
+            {sc.date_dernier&&<span> · Dernier contact : {new Date(sc.date_dernier).toLocaleDateString('fr-FR')}</span>}
           </div>
           {sc.commentaires&&<div style={{fontSize:11,color:'#999',marginTop:4,fontStyle:'italic'}}>{sc.commentaires}</div>}
         </div>
@@ -4567,10 +4567,13 @@ function ProspectionNew({ contacts, profile, onStart, onBack }) {
   var filtered = useMemo(function(){return contacts.filter(function(c){
     if (agence && c.agence !== agence) return false;
     if (c.statut === 'Consultant CDI' || c.statut === 'Freelance') return false;
-    if (delai > 0 && c.date_dernier_contact) {
-      var last = new Date(c.date_dernier_contact);
-      var diff = (today - last) / (1000*60*60*24);
-      if (diff < delai) return false;
+    if (delai > 0) {
+      var lastDate = c.date_dernier || c.updated_at;
+      if (lastDate) {
+        var last = new Date(lastDate);
+        var diff = (today - last) / (1000*60*60*24);
+        if (diff < delai) return false;
+      }
     }
     if (search) {
       var s = search.toLowerCase();
