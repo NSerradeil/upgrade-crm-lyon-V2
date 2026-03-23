@@ -4542,7 +4542,8 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
       var r3 = await sb.from('session_prospection_contacts').select('*, sessions_prospection(nom)').eq('statut','unreachable').order('created_at',{ascending:false}).limit(30);
       data = r3.data || [];
     } else if (id === 'total') {
-      var r4 = await sb.from('sessions_prospection').select('*').eq('statut','done').order('date_session',{ascending:false});
+      var annee = new Date().getFullYear();
+      var r4 = await sb.from('sessions_prospection').select('date_session, nb_contacts, nb_interesses, nb_injoignables').eq('statut','done').gte('date_session', annee+'-01-01').lte('date_session', annee+'-12-31').order('date_session',{ascending:true});
       data = r4.data || [];
     }
     setKpiData(data);
@@ -4607,45 +4608,65 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
             );
           })}
 
-          {activeKpi==='total' && kpiData.map(function(s) {
-            var total = s.nb_contacts || 1;
-            var nbPasInt = Math.max(0, (s.nb_contacts||0) - (s.nb_interesses||0) - (s.nb_injoignables||0));
-            var tauxInt = Math.round(((s.nb_interesses||0) / total) * 100);
-            var urgColor = tauxInt >= 25 ? '#00C218' : tauxInt >= 10 ? '#FFE500' : '#FF3D2E';
-            var bars = [
-              {w: Math.round(((s.nb_interesses||0)/total)*100), color:'#00C218', label:(s.nb_interesses||0)+' Intéressés'},
-              {w: Math.round(((s.nb_injoignables||0)/total)*100), color:'#bbb', label:(s.nb_injoignables||0)+' Injoignables'},
-              {w: Math.round((nbPasInt/total)*100), color:'#eee', label:nbPasInt+' Pas intéressés'},
-            ];
-            return (
-              <div key={s.id} onClick={function(){onDetail(s);}} style={{padding:'14px 18px',borderBottom:'1px solid #E4E4E6',cursor:'pointer',transition:'background 80ms'}}
-                onMouseEnter={function(e){e.currentTarget.style.background='#f9f9f9';}}
-                onMouseLeave={function(e){e.currentTarget.style.background='#fff';}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,flexWrap:'wrap',gap:4}}>
-                  <div>
-                    <div style={{fontWeight:800,fontSize:13,color:'#1C1F35'}}>{s.nom}</div>
-                    <div style={{fontSize:10,color:'#bbb',marginTop:1}}>
-                      {new Date(s.date_session).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'})}
-                      {' · '}{s.nb_contacts||0} contact{(s.nb_contacts||0)>1?'s':''} appelés
-                    </div>
-                  </div>
-                  <div style={{display:'flex',alignItems:'center',gap:10}}>
-                    <div style={{textAlign:'right'}}>
-                      <div style={{fontSize:22,fontWeight:900,color:urgColor}}>{tauxInt}%</div>
-                      <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'#bbb',letterSpacing:'0.06em'}}>taux d'intérêt</div>
-                    </div>
-                    <span style={{fontSize:14,color:'#ccc',fontWeight:700}}>›</span>
-                  </div>
-                </div>
-                <div style={{display:'flex',height:14,gap:2,marginBottom:5}}>
-                  {bars.map(function(b){return b.w>0?<div key={b.label} style={{width:b.w+'%',background:b.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,color:b.color==='#eee'?'#999':'#fff',overflow:'hidden',borderRadius:0}}>{b.w>8?b.w+'%':''}</div>:null;})}
-                </div>
-                <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
-                  {bars.map(function(b){return <div key={b.label} style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:8,background:b.color,border:'1px solid #E4E4E6',display:'inline-block'}}/><span style={{fontSize:10,color:'#999'}}>{b.label}</span></div>;})}
-                </div>
-              </div>
-            );
-          })}
+          {activeKpi==='total' && (function(){
+  var MOIS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+  var CHS = {TOTAL:170, TOP:26, BOT:22, H:122};
+  var curM = new Date().getMonth();
+  var parMois = MOIS.map(function(m,i){return {m:m, idx:i, n:0, int:0, inj:0, pas:0, tot:0};});
+  kpiData.forEach(function(row){
+    var i = new Date(row.date_session).getMonth();
+    parMois[i].n += 1;
+    parMois[i].int += row.nb_interesses || 0;
+    parMois[i].inj += row.nb_injoignables || 0;
+    parMois[i].tot += row.nb_contacts || 0;
+  });
+  parMois.forEach(function(m){m.pas = Math.max(0, m.tot - m.int - m.inj);});
+  var maxTot = Math.max.apply(null, parMois.map(function(m){return m.tot;})) || 1;
+  var totalInt = parMois.reduce(function(a,m){return a+m.int;},0);
+  var totalTot = parMois.reduce(function(a,m){return a+m.tot;},0);
+  var totalSess = parMois.reduce(function(a,m){return a+m.n;},0);
+  var tauxGlobal = totalTot > 0 ? Math.round((totalInt/totalTot)*100) : 0;
+  var tauxColor = tauxGlobal >= 25 ? '#00C218' : tauxGlobal >= 10 ? '#FFE500' : '#FF3D2E';
+  var SEGS = [{key:'int',color:'#00C218',label:'Intéressés'},{key:'inj',color:'#bbb',label:'Injoignables'},{key:'pas',color:'#e8e8e8',label:'Pas intéressés'}];
+
+  return <>
+    {/* Header */}
+    <div style={{padding:'10px 18px',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:4}}>
+      <span style={{fontSize:12,fontWeight:700,color:'#1C1F35'}}>Sessions {new Date().getFullYear()}</span>
+      <span style={{fontSize:11,color:'#999'}}>{totalSess} sessions · {totalTot} contacts</span>
+      <span style={{fontSize:12,fontWeight:900,color:tauxColor}}>{tauxGlobal}% intéressés</span>
+    </div>
+    {/* Legend */}
+    <div style={{padding:'4px 18px 8px',display:'flex',gap:12,borderBottom:'1px solid #E4E4E6'}}>
+      {SEGS.map(function(seg){return <div key={seg.key} style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:8,background:seg.color,display:'inline-block'}}/><span style={{fontSize:10,color:'#999'}}>{seg.label}</span></div>;})}
+    </div>
+    {/* Chart */}
+    <div style={{position:'relative',height:CHS.TOTAL,margin:'0 18px'}}>
+      <div style={{position:'absolute',left:0,right:0,top:0,bottom:0,display:'flex',gap:3}}>
+        {parMois.map(function(m){
+          var isCur = m.idx === curM;
+          var isFut = m.idx > curM;
+          var totalBarH = (m.tot/maxTot)*CHS.H;
+          var taux = m.tot > 0 ? Math.round((m.int/m.tot)*100) : null;
+          var tC = taux !== null ? (taux >= 25 ? '#00C218' : taux >= 10 ? '#FFE500' : '#FF3D2E') : '#ccc';
+          var cumH = 0;
+          return <div key={m.idx} style={{flex:1,position:'relative',minWidth:0}}>
+            {SEGS.map(function(seg){
+              var h = (m[seg.key]/maxTot)*CHS.H;
+              var bot = CHS.BOT + cumH;
+              cumH += h;
+              return h > 0.5 ? <div key={seg.key} style={{position:'absolute',left:2,right:2,bottom:bot,height:h,background:seg.color,opacity:isFut?0.2:0.85,transition:'height 300ms'}}/> : null;
+            })}
+            {m.tot>0&&taux!==null&&<div style={{position:'absolute',left:0,right:0,bottom:CHS.BOT+totalBarH+3,textAlign:'center',fontSize:8,fontWeight:700,color:tC}}>{taux}%</div>}
+            {m.n>0&&<div style={{position:'absolute',left:0,right:0,bottom:CHS.BOT+totalBarH+13,textAlign:'center',fontSize:8,fontWeight:700,color:isCur?'#823DE8':'#ccc'}}>{m.n}s</div>}
+            {isCur&&<div style={{position:'absolute',left:'50%',marginLeft:-2,bottom:CHS.BOT-5,width:4,height:4,background:'#823DE8'}}/>}
+            <div style={{position:'absolute',left:0,right:0,bottom:4,textAlign:'center',fontSize:9,fontWeight:isCur?900:600,color:isCur?'#823DE8':isFut?'#ddd':'#999'}}>{m.m}</div>
+          </div>;
+        })}
+      </div>
+    </div>
+  </>;
+})()}
 
           {kpiData.length===0 && (
             <div style={{padding:'20px 16px',textAlign:'center',fontSize:12,color:'#999',fontWeight:700}}>Aucune donnée</div>
