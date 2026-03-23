@@ -288,6 +288,43 @@ const STATUT_STYLE = {
 };
 const BADGE_STYLE = { padding:'2px 8px', borderRadius:0, fontSize:11, fontWeight:700, whiteSpace:'nowrap', fontFamily:'Outfit,sans-serif', textTransform:'uppercase', letterSpacing:'0.04em' };
 // ═══════════════════════════════════════════════════════════════════════════════
+// DRAG & DROP LIST REORDER HOOK
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function useListReorder(storageKey) {
+  const [dragId,setDragId]=useState(null);
+  const [dragOverId,setDragOverId]=useState(null);
+  const [orders,setOrders]=useState(()=>{try{return JSON.parse(localStorage.getItem(storageKey)||'{}');}catch{return {};}});
+  const getOrderedItems=(group,items)=>{
+    const saved=orders[group];
+    if(!saved||saved.length===0)return items;
+    const idSet=new Set(items.map(b=>String(b.id)));
+    const ordered=saved.filter(id=>idSet.has(String(id))).map(id=>items.find(b=>String(b.id)===String(id))).filter(Boolean);
+    const orderedIds=new Set(ordered.map(b=>String(b.id)));
+    return [...ordered,...items.filter(b=>!orderedIds.has(String(b.id)))];
+  };
+  const onDragStart=(e,item)=>{setDragId(item.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(item.id));};
+  const onDragEnd=()=>{setDragId(null);setDragOverId(null);};
+  const onCardEnter=(e,item)=>{e.preventDefault();if(dragId&&dragId!==item.id)setDragOverId(item.id);};
+  const onCardLeave=(e,item)=>{if(!e.currentTarget.contains(e.relatedTarget))setDragOverId(v=>v===item.id?null:v);};
+  const onDropReorder=(e,group,items)=>{
+    e.preventDefault();
+    const id=e.dataTransfer.getData('text/plain');
+    if(!dragOverId||String(dragOverId)===String(id)){setDragId(null);setDragOverId(null);return;}
+    const ordered=getOrderedItems(group,items);
+    const oldIdx=ordered.findIndex(b=>String(b.id)===String(id));
+    const newIdx=ordered.findIndex(b=>String(b.id)===String(dragOverId));
+    if(oldIdx!==-1&&newIdx!==-1){
+      const r=[...ordered];const[moved]=r.splice(oldIdx,1);r.splice(newIdx,0,moved);
+      const updated={...orders,[group]:r.map(b=>String(b.id))};
+      setOrders(updated);localStorage.setItem(storageKey,JSON.stringify(updated));
+    }
+    setDragId(null);setDragOverId(null);
+  };
+  return {dragId,dragOverId,getOrderedItems,onDragStart,onDragEnd,onCardEnter,onCardLeave,onDropReorder};
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // SHARED COMPONENTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -2010,23 +2047,27 @@ function TacheCard({ t, contact, besoinLabel, missionLabel, canEdit, onDetail, o
   );
 }
 
-function TacheSection({ label, taches, contactMap, besoinMap, missionMap, profile, isAdmin, onDetail, onComplete, onDelete, onEdit }) {
+function TacheSection({ label, taches, contactMap, besoinMap, missionMap, profile, isAdmin, onDetail, onComplete, onDelete, onEdit, reorder }) {
   if(!taches.length) return null;
+  const groupKey=label;
+  const ordered=reorder?reorder.getOrderedItems(groupKey,taches):taches;
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <span className="text-sm font-semibold text-carbon">{label}</span>
         <span className="text-xs font-bold text-slate">{taches.length}</span>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {taches.map(t=>{
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3" onDragOver={e=>e.preventDefault()} onDrop={reorder?e=>reorder.onDropReorder(e,groupKey,taches):undefined}>
+        {ordered.map(t=>{
           const contact = t.contact_id ? contactMap[t.contact_id] : null;
           const besoinLabel = t.besoin_id ? besoinMap[t.besoin_id] : null;
           const m = t.mission_id ? (missionMap||{})[t.mission_id] : null;
           const missionLabel = m ? `${m.consultant}${m.client?' · '+m.client:''}` : null;
           const canEdit = isAdmin || t.responsable===profile.nom;
-          return <TacheCard key={t.id} t={t} contact={contact} besoinLabel={besoinLabel} missionLabel={missionLabel} canEdit={canEdit}
-            onDetail={onDetail} onComplete={onComplete} onDelete={onDelete} onEdit={onEdit}/>;
+          return <div key={t.id} draggable onDragStart={e=>reorder.onDragStart(e,t)} onDragEnd={reorder.onDragEnd} onDragEnter={e=>reorder.onCardEnter(e,t)} onDragLeave={e=>reorder.onCardLeave(e,t)} style={{borderTop:reorder.dragOverId===t.id&&reorder.dragId!==t.id?'3px solid #FFE500':'none'}}>
+            <TacheCard t={t} contact={contact} besoinLabel={besoinLabel} missionLabel={missionLabel} canEdit={canEdit}
+              onDetail={onDetail} onComplete={onComplete} onDelete={onDelete} onEdit={onEdit}/>
+          </div>;
         })}
       </div>
     </div>
@@ -2049,6 +2090,7 @@ function TabTaches({ taches, contacts, contactMap, besoins, missions, historique
   const [completingModal,setCompletingModal]=useState(null);
   const [editingTask,setEditingTask]=useState(null);
   const [deletingTask,setDeletingTask]=useState(null);
+  const reorder = useListReorder('taches_list_order');
   const besoinMap=useMemo(()=>{
     const m={};
     (besoins||[]).forEach(b=>{ if(b.titre) m[b.id]=b.titre; });
@@ -2096,7 +2138,7 @@ function TabTaches({ taches, contacts, contactMap, besoins, missions, historique
   const handleDelete=(t)=>{ setDetailTask(null); setDeletingTask(t); };
   const handleEdit=(t)=>{ setDetailTask(null); setEditingTask(t); };
 
-  const sectionProps={contactMap,besoinMap,missionMap,profile,isAdmin,onDetail:openDetail,onComplete:handleComplete,onDelete:handleDelete,onEdit:handleEdit};
+  const sectionProps={contactMap,besoinMap,missionMap,profile,isAdmin,onDetail:openDetail,onComplete:handleComplete,onDelete:handleDelete,onEdit:handleEdit,reorder};
 
   return (
     <div className="tab-content">
@@ -2809,6 +2851,7 @@ function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique
   useEffect(()=>{ if(navBesoinId){ const b=besoins.find(x=>String(x.id)===String(navBesoinId)); if(b) setSelected(b); } },[navBesoinKey]);
   const [showAdd,setShowAdd]=useState(false);
   const [viewMode,setViewMode]=useState(prefs?.besoins_view||'list');
+  const reorder = useListReorder('besoins_list_order');
   const isAdmin=profile.role==='admin';
 
   const agences=useMemo(()=>[...new Set(allProfiles.map(p=>p.agence).filter(Boolean))].sort(),[allProfiles]);
@@ -2898,13 +2941,14 @@ function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique
               const items=sorted.filter(b=>b.statut===statut);
               if(items.length===0) return null;
               const bc=BESOIN_BADGE_COLORS_GLOBAL[statut]||{bg:'#E4E4E6',color:'#1C1F35'};
+              const orderedItems=reorder.getOrderedItems(statut,items);
               return (
                 <div key={statut}>
                   <div className="flex items-center gap-2 mb-2">
                     <span style={{backgroundColor:bc.bg,color:bc.color,padding:'2px 8px',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em',whiteSpace:'nowrap'}}>{statut}</span>
                     <span className="text-xs font-bold text-slate">{items.length}</span>
                   </div>
-                  <div className="space-y-2">{items.map(b=>{
+                  <div className="space-y-2" onDragOver={e=>e.preventDefault()} onDrop={e=>reorder.onDropReorder(e,statut,items)}>{orderedItems.map(b=>{
                     const contact=contactMap[b.contact_id];
                     const bCandidats=(besoinCandidats||[]).filter(bc=>bc.besoin_id===b.id);
                     const candidatLegacy=contactMap[b.candidat_id];
@@ -2912,7 +2956,7 @@ function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique
                     const ca=nbJ*(b.tjm_vente||0);
                     const marge=ca-nbJ*(b.cjm_achat||0);
                     return (
-                      <div key={b.id} onClick={()=>setSelected(b)} data-detail tabIndex="0" className="bg-white border-2 border-neutral-200 p-3 sm:p-4 cursor-pointer hover:border-blue-200 focus:outline-none focus:border-midnight transition-colors">
+                      <div key={b.id} draggable onDragStart={e=>reorder.onDragStart(e,b)} onDragEnd={reorder.onDragEnd} onDragEnter={e=>reorder.onCardEnter(e,b)} onDragLeave={e=>reorder.onCardLeave(e,b)} style={{borderTop:reorder.dragOverId===b.id&&reorder.dragId!==b.id?'3px solid #FFE500':'none'}} onClick={()=>setSelected(b)} data-detail tabIndex="0" className="bg-white border-2 border-neutral-200 p-3 sm:p-4 cursor-pointer hover:border-blue-200 focus:outline-none focus:border-midnight transition-colors">
                         <div className="flex items-start gap-3">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -3618,6 +3662,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
   const [filterResp,setFilterResp] = useState('');
   const [tick,setTick] = useState(0); // force re-render on optimistic update
   const forceUpdate=useCallback(()=>setTick(t=>t+1),[]);
+  const reorderMobile = useListReorder('missions_mobile_order');
   const [activeChart, setActiveChart] = useState(prefs?.tdb_default_chart||'ca');
   const isAdmin = profile.role==='admin';
   const curMonthIdx = new Date().getMonth();
@@ -3767,13 +3812,13 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
           {hasFilter&&<button onClick={resetAll} className="px-3 py-1.5 text-sm text-slate hover:text-carbon">✕ Reset</button>}
         </div>
         {/* Vue cartes mobile */}
-        <div className="md:hidden space-y-2 mb-4">
-          {missionsTri.map(m=>{
+        <div className="md:hidden space-y-2 mb-4" onDragOver={e=>e.preventDefault()} onDrop={e=>reorderMobile.onDropReorder(e,'all',missionsTri)}>
+          {reorderMobile.getOrderedItems('all',missionsTri).map(m=>{
             const joursT=MOIS_KEYS.reduce((s,k)=>s+(parseFloat(m[`jours_${k}`])||0),0);
             const caT=joursT*(parseFloat(m.tjm)||0);
             const margeT=joursT*((parseFloat(m.tjm)||0)-(parseFloat(m.cjm)||0));
             return (
-              <div key={m.id} onClick={()=>setSelected(m)} data-detail tabIndex="0" className="bg-white border-2 border-neutral-200 hover:border-midnight p-3 cursor-pointer active:bg-azure-20 focus:outline-none focus:border-midnight transition-colors">
+              <div key={m.id} draggable onDragStart={e=>reorderMobile.onDragStart(e,m)} onDragEnd={reorderMobile.onDragEnd} onDragEnter={e=>reorderMobile.onCardEnter(e,m)} onDragLeave={e=>reorderMobile.onCardLeave(e,m)} style={{borderTop:reorderMobile.dragOverId===m.id&&reorderMobile.dragId!==m.id?'3px solid #FFE500':'none'}} onClick={()=>setSelected(m)} data-detail tabIndex="0" className="bg-white border-2 border-neutral-200 hover:border-midnight p-3 cursor-pointer active:bg-azure-20 focus:outline-none focus:border-midnight transition-colors">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="font-bold text-midnight text-sm">{m.consultant}</div>
