@@ -4533,13 +4533,13 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
     setKpiLoading(true);
     var data = [];
     if (id === 'interesses') {
-      var r1 = await sb.from('session_prospection_contacts').select('*, sessions_prospection(nom)').eq('statut','interested').order('created_at',{ascending:false});
+      var r1 = await sb.from('session_prospection_contacts').select('contact_id, notes, created_at, sessions_prospection(nom, date_session)').eq('statut','interested').order('created_at',{ascending:false});
       data = r1.data || [];
     } else if (id === 'relances') {
-      var r2 = await sb.from('taches').select('*').not('session_prospection_id','is',null).eq('statut','a_faire').order('due_date');
+      var r2 = await sb.from('taches').select('id, titre, due_date, contact_id, statut, notes').not('session_prospection_id','is',null).eq('statut','a_faire').order('due_date');
       data = r2.data || [];
     } else if (id === 'injoignables') {
-      var r3 = await sb.from('session_prospection_contacts').select('*, sessions_prospection(nom)').eq('statut','unreachable').order('created_at',{ascending:false}).limit(30);
+      var r3 = await sb.from('session_prospection_contacts').select('contact_id, created_at, sessions_prospection(nom)').eq('statut','unreachable').order('created_at',{ascending:false}).limit(50);
       data = r3.data || [];
     } else if (id === 'total') {
       var annee = new Date().getFullYear();
@@ -4577,33 +4577,79 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
             <button onClick={function(){setActiveKpi(null);setKpiData([]);}} style={{color:'#FFE500',background:'none',border:'none',cursor:'pointer',fontSize:14}}>✕</button>
           </div>
 
-          {(activeKpi==='interesses'||activeKpi==='injoignables') && kpiData.map(function(r) {
+          {activeKpi==='interesses' && kpiData.map(function(r) {
             var c = contactMap[r.contact_id];
             if (!c) return null;
-            var cfg = PROSPECT_CALL_STATUTS[r.statut]||PROSPECT_CALL_STATUTS.none;
             return (
-              <div key={r.id} style={{padding:'10px 16px',borderBottom:'1px solid #E4E4E6',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <div>
-                  <button onClick={function(){if(onNavToContact){setActiveKpi(null);onNavToContact(c.id);}}} style={{fontWeight:700,fontSize:13,color:'#1C1F35',background:'none',border:'none',cursor:'pointer',textDecoration:'underline',textDecorationColor:'#FFE500',textUnderlineOffset:2,padding:0,textAlign:'left'}}>{c.prenom} {c.nom}</button>
-                  {c.groupe&&<span style={{fontSize:11,color:'#999',marginLeft:8}}>{c.groupe}</span>}
-                  {r.sessions_prospection&&<div style={{fontSize:10,color:'#bbb'}}>Session : {r.sessions_prospection.nom}</div>}
-                  {r.notes&&<div style={{fontSize:10,color:'#999',fontStyle:'italic'}}>«{r.notes}»</div>}
+              <div key={r.contact_id+'-'+r.created_at} onClick={function(){if(onNavToContact){setActiveKpi(null);onNavToContact(c.id);}}}
+                style={{padding:'12px 18px',borderBottom:'1px solid #E4E4E6',display:'flex',gap:12,alignItems:'flex-start',cursor:'pointer',transition:'background 80ms',borderLeft:'3px solid #00C218'}}
+                onMouseEnter={function(e){e.currentTarget.style.background='#f5faf5';}}
+                onMouseLeave={function(e){e.currentTarget.style.background='#fff';}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:800,fontSize:13,color:'#1C1F35'}}>{c.prenom} {c.nom}</div>
+                  <div style={{fontSize:11,color:'#4A7FE5',fontWeight:700}}>{c.groupe||''}{c.role?' · '+c.role:''}</div>
+                  {r.sessions_prospection&&<div style={{fontSize:10,color:'#bbb',marginTop:2}}>{r.sessions_prospection.nom} · {new Date(r.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'})}</div>}
+                  {r.notes&&<div style={{fontSize:11,color:'#888',marginTop:4,fontStyle:'italic',borderLeft:'2px solid #00C218',paddingLeft:8}}>{r.notes}</div>}
                 </div>
-                <span style={{fontSize:10,fontWeight:800,textTransform:'uppercase',background:cfg.bg,color:cfg.color,border:'2px solid '+cfg.color,padding:'2px 6px',borderRadius:0}}>{cfg.label}</span>
+                <span style={{fontSize:14,color:'#ccc',flexShrink:0}}>›</span>
               </div>
             );
           })}
 
+          {activeKpi==='injoignables' && (function(){
+            var byContact = {};
+            kpiData.forEach(function(r){
+              if(!byContact[r.contact_id]) byContact[r.contact_id] = {contact_id:r.contact_id, created_at:r.created_at, sessions_prospection:r.sessions_prospection, nb:0};
+              byContact[r.contact_id].nb += 1;
+            });
+            var rows = Object.values(byContact);
+            return rows.map(function(r) {
+              var c = contactMap[r.contact_id];
+              if (!c) return null;
+              var nbColor = r.nb >= 3 ? '#FF3D2E' : r.nb === 2 ? '#FFE500' : '#bbb';
+              return (
+                <div key={r.contact_id} onClick={function(){if(onNavToContact){setActiveKpi(null);onNavToContact(c.id);}}}
+                  style={{padding:'12px 18px',borderBottom:'1px solid #E4E4E6',display:'flex',gap:10,alignItems:'center',cursor:'pointer',transition:'background 80ms',borderLeft:'3px solid #ccc'}}
+                  onMouseEnter={function(e){e.currentTarget.style.background='#f9f9f9';}}
+                  onMouseLeave={function(e){e.currentTarget.style.background='#fff';}}>
+                  <div style={{flexShrink:0,textAlign:'center',minWidth:28}}>
+                    <div style={{fontSize:16,fontWeight:900,color:nbColor,lineHeight:1}}>{r.nb}</div>
+                    <div style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'#ccc',letterSpacing:'0.04em'}}>essai{r.nb>1?'s':''}</div>
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:800,fontSize:13,color:'#1C1F35'}}>{c.prenom} {c.nom}<span style={{fontWeight:400,color:'#999'}}> — {c.groupe||''}</span></div>
+                    <div style={{fontSize:10,color:'#bbb',marginTop:2}}>Dernier essai : {new Date(r.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'})}{r.sessions_prospection?' · '+r.sessions_prospection.nom:''}</div>
+                  </div>
+                  <span style={{fontSize:14,color:'#ccc',flexShrink:0}}>›</span>
+                </div>
+              );
+            });
+          })()}
+
           {activeKpi==='relances' && kpiData.map(function(r) {
             var c = contactMap[r.contact_id];
+            var today = new Date(); today.setHours(0,0,0,0);
+            var due = r.due_date ? new Date(r.due_date) : null;
+            if(due) due.setHours(0,0,0,0);
+            var isRetard = due && due < today;
+            var isToday = due && due.getTime() === today.getTime();
+            var urgColor = isRetard ? '#FF3D2E' : isToday ? '#FFE500' : '#aaa';
+            var urgLabel = isRetard ? 'En retard' : isToday ? "Aujourd'hui" : (due ? due.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'}) : '');
+            var urgBg = isRetard ? '#FFF5F5' : isToday ? '#FFFBF0' : '#fff';
             return (
-              <div key={r.id} style={{padding:'10px 16px',borderBottom:'1px solid #E4E4E6',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <div>
-                  {c ? <button onClick={function(){if(onNavToContact){setActiveKpi(null);onNavToContact(c.id);}}} style={{fontWeight:700,fontSize:13,color:'#1C1F35',background:'none',border:'none',cursor:'pointer',textDecoration:'underline',textDecorationColor:'#FFE500',textUnderlineOffset:2,padding:0}}>{c.prenom} {c.nom}</button>
-                    : <span style={{fontWeight:700,fontSize:13,color:'#1C1F35'}}>{r.titre||'Relance'}</span>}
-                  {c&&c.groupe&&<span style={{fontSize:11,color:'#999',marginLeft:8}}>{c.groupe}</span>}
+              <div key={r.id} onClick={function(){if(onNavToContact && c){setActiveKpi(null);onNavToContact(c.id);}}}
+                style={{padding:'12px 18px',borderBottom:'1px solid #E4E4E6',display:'flex',gap:10,alignItems:'center',cursor:'pointer',background:urgBg,transition:'background 80ms',borderLeft:'3px solid '+urgColor}}
+                onMouseEnter={function(e){e.currentTarget.style.background=isRetard?'#ffe8e8':isToday?'#fff5d6':'#f9f9f9';}}
+                onMouseLeave={function(e){e.currentTarget.style.background=urgBg;}}>
+                <div style={{flexShrink:0,minWidth:64}}>
+                  <div style={{fontSize:9,fontWeight:900,textTransform:'uppercase',color:urgColor,letterSpacing:'0.05em'}}>{urgLabel}</div>
+                  {isRetard&&<div style={{fontSize:8,color:'#FF3D2E',fontWeight:800,marginTop:1}}>RETARD</div>}
                 </div>
-                <span style={{fontSize:11,fontWeight:700,color:'#1C1F35'}}>{r.due_date?new Date(r.due_date).toLocaleDateString('fr-FR'):''}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  {c ? <div style={{fontWeight:800,fontSize:13}}>{c.prenom} {c.nom}<span style={{fontWeight:400,color:'#999'}}> — {c.groupe||''}</span></div>
+                    : <div style={{fontWeight:800,fontSize:13,color:'#1C1F35'}}>{r.titre||'Relance'}</div>}
+                </div>
+                <span style={{fontSize:14,color:'#ccc',flexShrink:0}}>›</span>
               </div>
             );
           })}
