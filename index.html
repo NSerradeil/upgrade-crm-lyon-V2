@@ -4518,11 +4518,11 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
   const [activeKpi, setActiveKpi] = useState(null);
   const [kpiData, setKpiData] = useState([]);
   const [kpiLoading, setKpiLoading] = useState(false);
-  const [ignored, setIgnored] = useState(new Set());
-  const [created, setCreated] = useState(new Set());
-  const [addedNext, setAddedNext] = useState(new Set());
+  const [ignored, setIgnored] = useState({});
+  const [created, setCreated] = useState({});
+  const [addedNext, setAddedNext] = useState({});
 
-  useEffect(function(){ if (addedNext.size > 0) sessionStorage.setItem('prosp_preselect', JSON.stringify([...addedNext])); }, [addedNext]);
+  useEffect(function(){ if (Object.keys(addedNext).length > 0) sessionStorage.setItem('prosp_preselect', JSON.stringify(Object.keys(addedNext))); }, [addedNext]);
 
   var KPI_CARDS = [
     {id:'total', label:'SESSIONS', value:sessions.length, color:'#1C1F35'},
@@ -4535,19 +4535,19 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
     if (activeKpi === id) { setActiveKpi(null); setKpiData([]); return; }
     setActiveKpi(id);
     setKpiLoading(true);
-    setIgnored(new Set());
-    setCreated(new Set());
-    setAddedNext(new Set());
+    setIgnored({});
+    setCreated({});
+    setAddedNext({});
     var data = [];
     if (id === 'interesses') {
-      var r = await sb.from('session_prospection_contacts').select('*, sessions_prospection(nom)').eq('statut','interested').order('created_at',{ascending:false});
-      data = r.data || [];
+      var r1 = await sb.from('session_prospection_contacts').select('*, sessions_prospection(nom)').eq('statut','interested').order('created_at',{ascending:false});
+      data = r1.data || [];
     } else if (id === 'relances') {
-      var r = await sb.from('taches').select('*').not('session_prospection_id','is',null).eq('statut','a_faire').order('due_date');
-      data = r.data || [];
+      var r2 = await sb.from('taches').select('*').not('session_prospection_id','is',null).eq('statut','a_faire').order('due_date');
+      data = r2.data || [];
     } else if (id === 'injoignables') {
-      var r = await sb.from('session_prospection_contacts').select('*, sessions_prospection(nom)').eq('statut','unreachable').order('created_at',{ascending:false}).limit(30);
-      data = r.data || [];
+      var r3 = await sb.from('session_prospection_contacts').select('*, sessions_prospection(nom)').eq('statut','unreachable').order('created_at',{ascending:false}).limit(30);
+      data = r3.data || [];
     }
     setKpiData(data);
     setKpiLoading(false);
@@ -4564,7 +4564,7 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
           var active = activeKpi === k.id;
           return(
           <div key={k.id} onClick={function(){if(k.id!=='total')loadKpiDetail(k.id);}}
-            style={{background:active?'#1C1F35':'#fff',borderTop:'2px solid #E4E4E6',borderRight:'2px solid #E4E4E6',borderBottom:'2px solid #E4E4E6',borderLeft:'5px solid '+k.color,padding:'14px',cursor:k.id!=='total'?'pointer':'default',transition:'all 120ms',boxShadow:active?'4px 4px 0 '+k.color:'none',transform:active?'translate(-2px,-2px)':'none',borderRadius:0}}>
+            style={{background:active?'#1C1F35':'#fff',borderTop:active?'0':'2px solid #E4E4E6',borderRight:active?'0':'2px solid #E4E4E6',borderBottom:active?'0':'2px solid #E4E4E6',borderLeft:active?'0':'5px solid '+k.color,padding:'14px',cursor:k.id!=='total'?'pointer':'default',transition:'all 120ms',boxShadow:active?'4px 4px 0 '+k.color:'none',transform:active?'translate(-2px,-2px)':'none',borderRadius:0}}>
             <div style={{fontSize:24,fontWeight:900,color:active?'#fff':'#1C1F35'}}>{k.value}</div>
             <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',color:active?k.color:'#999',marginTop:4}}>{k.label}</div>
           </div>
@@ -4580,10 +4580,10 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
             <button onClick={function(){setActiveKpi(null);setKpiData([]);}} style={{color:'#FFE500',background:'none',border:'none',cursor:'pointer',fontSize:14}}>✕</button>
           </div>
 
-          {activeKpi==='interesses' && kpiData.filter(function(r){return !ignored.has(r.contact_id);}).map(function(r) {
+          {activeKpi==='interesses' && kpiData.filter(function(r){return !ignored[r.contact_id];}).map(function(r) {
             var c = contactMap[r.contact_id];
             if (!c) return null;
-            var done = created.has(r.contact_id);
+            var done = created[r.contact_id];
             return (
               <div key={r.id} style={{padding:'10px 16px',borderBottom:'1px solid #E4E4E6',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
                 <div style={{flex:1,minWidth:0}}>
@@ -4596,8 +4596,8 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
                   {done
                     ? <span style={{fontSize:10,fontWeight:700,color:'#00C218'}}>Besoin créé</span>
                     : <>
-                      <button onClick={function(){setCreated(function(s){return new Set([...s,r.contact_id]);});}} style={{fontSize:10,fontWeight:700,padding:'3px 8px',background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'3px 3px 0 #00C218',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>+ Créer besoin</button>
-                      <button onClick={function(){setIgnored(function(s){return new Set([...s,r.contact_id]);});}} style={{fontSize:10,fontWeight:700,padding:'3px 8px',background:'#fff',color:'#bbb',border:'2px solid #E4E4E6',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>Ignorer</button>
+                      <button onClick={function(){setCreated(function(s){return {...s,[r.contact_id]:true};});}} style={{fontSize:10,fontWeight:700,padding:'3px 8px',background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'3px 3px 0 #00C218',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>+ Créer besoin</button>
+                      <button onClick={function(){setIgnored(function(s){return {...s,[r.contact_id]:true};});}} style={{fontSize:10,fontWeight:700,padding:'3px 8px',background:'#fff',color:'#bbb',border:'2px solid #E4E4E6',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>Ignorer</button>
                     </>
                   }
                 </div>
@@ -4619,10 +4619,10 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
             );
           })}
 
-          {activeKpi==='injoignables' && kpiData.filter(function(r){return !ignored.has(r.contact_id);}).map(function(r) {
+          {activeKpi==='injoignables' && kpiData.filter(function(r){return !ignored[r.contact_id];}).map(function(r) {
             var c = contactMap[r.contact_id];
             if (!c) return null;
-            var isAdded = addedNext.has(r.contact_id);
+            var isAdded = addedNext[r.contact_id];
             return (
               <div key={r.id} style={{padding:'10px 16px',borderBottom:'1px solid #E4E4E6',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
                 <div style={{flex:1,minWidth:0}}>
@@ -4634,8 +4634,8 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
                   {isAdded
                     ? <span style={{fontSize:10,fontWeight:700,color:'#00C218'}}>Ajouté</span>
                     : <>
-                      <button onClick={function(){setAddedNext(function(s){return new Set([...s,r.contact_id]);});setIgnored(function(s){return new Set([...s,r.contact_id]);});}} style={{fontSize:10,fontWeight:700,padding:'3px 8px',background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'3px 3px 0 #FFE500',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>+ Prochaine session</button>
-                      <button onClick={function(){setIgnored(function(s){return new Set([...s,r.contact_id]);});}} style={{fontSize:10,fontWeight:700,padding:'3px 8px',background:'#fff',color:'#bbb',border:'2px solid #E4E4E6',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>Ignorer</button>
+                      <button onClick={function(){setAddedNext(function(s){return {...s,[r.contact_id]:true};});setIgnored(function(s){return {...s,[r.contact_id]:true};});}} style={{fontSize:10,fontWeight:700,padding:'3px 8px',background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'3px 3px 0 #FFE500',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>+ Prochaine session</button>
+                      <button onClick={function(){setIgnored(function(s){return {...s,[r.contact_id]:true};});}} style={{fontSize:10,fontWeight:700,padding:'3px 8px',background:'#fff',color:'#bbb',border:'2px solid #E4E4E6',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>Ignorer</button>
                     </>
                   }
                 </div>
@@ -4643,13 +4643,13 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
             );
           })}
 
-          {activeKpi==='injoignables' && addedNext.size>0 && (
+          {activeKpi==='injoignables' && Object.keys(addedNext).length>0 && (
             <div style={{padding:'8px 16px',background:'#f9f9f9',borderTop:'1px solid #E4E4E6',fontSize:11,color:'#666',fontWeight:700}}>
-              {addedNext.size} contact{addedNext.size>1?'s':''} pré-sélectionné{addedNext.size>1?'s':''} pour la prochaine session
+              {Object.keys(addedNext).length} contact{Object.keys(addedNext).length>1?'s':''} pré-sélectionné{Object.keys(addedNext).length>1?'s':''} pour la prochaine session
             </div>
           )}
 
-          {kpiData.filter(function(r){return activeKpi==='relances'||!ignored.has(r.contact_id);}).length===0 && (
+          {kpiData.filter(function(r){return activeKpi==='relances'||!ignored[r.contact_id];}).length===0 && (
             <div style={{padding:'20px 16px',textAlign:'center',fontSize:12,color:'#00C218',fontWeight:700}}>Tous les contacts ont été traités</div>
           )}
         </div>
@@ -4688,7 +4688,7 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
 function ProspectionNew({ contacts, profile, onStart, onBack }) {
   const [nom, setNom] = useState('');
   const [agence, setAgence] = useState(profile.agence||'');
-  const [delai, setDelai] = useState(30);
+  const [delai, setDelai] = useState(0);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(new Set());
 
