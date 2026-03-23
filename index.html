@@ -4548,6 +4548,9 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
     } else if (id === 'injoignables') {
       var r3 = await sb.from('session_prospection_contacts').select('*, sessions_prospection(nom)').eq('statut','unreachable').order('created_at',{ascending:false}).limit(30);
       data = r3.data || [];
+    } else if (id === 'total') {
+      var r4 = await sb.from('sessions_prospection').select('*').eq('statut','done').order('date_session',{ascending:false});
+      data = r4.data || [];
     }
     setKpiData(data);
     setKpiLoading(false);
@@ -4563,8 +4566,8 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
         {KPI_CARDS.map(function(k){
           var active = activeKpi === k.id;
           return(
-          <div key={k.id} onClick={function(){if(k.id!=='total')loadKpiDetail(k.id);}}
-            style={{background:active?'#1C1F35':'#fff',borderTop:active?'0':'2px solid #E4E4E6',borderRight:active?'0':'2px solid #E4E4E6',borderBottom:active?'0':'2px solid #E4E4E6',borderLeft:active?'0':'5px solid '+k.color,padding:'14px',cursor:k.id!=='total'?'pointer':'default',transition:'all 120ms',boxShadow:active?'4px 4px 0 '+k.color:'none',transform:active?'translate(-2px,-2px)':'none',borderRadius:0}}>
+          <div key={k.id} onClick={function(){loadKpiDetail(k.id);}}
+            style={{background:active?'#1C1F35':'#fff',borderTop:active?'0':'2px solid #E4E4E6',borderRight:active?'0':'2px solid #E4E4E6',borderBottom:active?'0':'2px solid #E4E4E6',borderLeft:active?'0':'5px solid '+k.color,padding:'14px',cursor:'pointer',transition:'all 120ms',boxShadow:active?'4px 4px 0 '+k.color:'none',transform:active?'translate(-2px,-2px)':'none',borderRadius:0}}>
             <div style={{fontSize:24,fontWeight:900,color:active?'#fff':'#1C1F35'}}>{k.value}</div>
             <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',color:active?k.color:'#999',marginTop:4}}>{k.label}</div>
           </div>
@@ -4649,7 +4652,47 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
             </div>
           )}
 
-          {kpiData.filter(function(r){return activeKpi==='relances'||!ignored[r.contact_id];}).length===0 && (
+          {activeKpi==='total' && kpiData.map(function(s) {
+            var total = s.nb_contacts || 1;
+            var nbPasInt = Math.max(0, (s.nb_contacts||0) - (s.nb_interesses||0) - (s.nb_injoignables||0));
+            var tauxInt = Math.round(((s.nb_interesses||0) / total) * 100);
+            var urgColor = tauxInt >= 25 ? '#00C218' : tauxInt >= 10 ? '#FFE500' : '#FF3D2E';
+            var bars = [
+              {w: Math.round(((s.nb_interesses||0)/total)*100), color:'#00C218', label:(s.nb_interesses||0)+' Intéressés'},
+              {w: Math.round(((s.nb_injoignables||0)/total)*100), color:'#bbb', label:(s.nb_injoignables||0)+' Injoignables'},
+              {w: Math.round((nbPasInt/total)*100), color:'#eee', label:nbPasInt+' Pas intéressés'},
+            ];
+            return (
+              <div key={s.id} onClick={function(){onDetail(s);}} style={{padding:'14px 18px',borderBottom:'1px solid #E4E4E6',cursor:'pointer',transition:'background 80ms'}}
+                onMouseEnter={function(e){e.currentTarget.style.background='#f9f9f9';}}
+                onMouseLeave={function(e){e.currentTarget.style.background='#fff';}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,flexWrap:'wrap',gap:4}}>
+                  <div>
+                    <div style={{fontWeight:800,fontSize:13,color:'#1C1F35'}}>{s.nom}</div>
+                    <div style={{fontSize:10,color:'#bbb',marginTop:1}}>
+                      {new Date(s.date_session).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'})}
+                      {' · '}{s.nb_contacts||0} contact{(s.nb_contacts||0)>1?'s':''} appelés
+                    </div>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:10}}>
+                    <div style={{textAlign:'right'}}>
+                      <div style={{fontSize:22,fontWeight:900,color:urgColor}}>{tauxInt}%</div>
+                      <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'#bbb',letterSpacing:'0.06em'}}>taux d'intérêt</div>
+                    </div>
+                    <span style={{fontSize:14,color:'#ccc',fontWeight:700}}>›</span>
+                  </div>
+                </div>
+                <div style={{display:'flex',height:14,gap:2,marginBottom:5}}>
+                  {bars.map(function(b){return b.w>0?<div key={b.label} style={{width:b.w+'%',background:b.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,color:b.color==='#eee'?'#999':'#fff',overflow:'hidden',borderRadius:0}}>{b.w>8?b.w+'%':''}</div>:null;})}
+                </div>
+                <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+                  {bars.map(function(b){return <div key={b.label} style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:8,background:b.color,border:'1px solid #E4E4E6',display:'inline-block'}}/><span style={{fontSize:10,color:'#999'}}>{b.label}</span></div>;})}
+                </div>
+              </div>
+            );
+          })}
+
+          {kpiData.filter(function(r){return activeKpi==='relances'||activeKpi==='total'||!ignored[r.contact_id];}).length===0 && (
             <div style={{padding:'20px 16px',textAlign:'center',fontSize:12,color:'#00C218',fontWeight:700}}>Tous les contacts ont été traités</div>
           )}
         </div>
