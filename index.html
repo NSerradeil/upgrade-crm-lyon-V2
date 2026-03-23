@@ -4513,7 +4513,7 @@ function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact }
   );
 }
 
-function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelete, contactMap, onNavToContact, isAdmin, allProfiles, profile }) {
+function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit, onDelete, contactMap, onNavToContact, isAdmin, allProfiles, profile }) {
   const [confirmDel, setConfirmDel] = useState(null);
   const [activeKpi, setActiveKpi] = useState(null);
   const [kpiData, setKpiData] = useState([]);
@@ -4764,6 +4764,7 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
               {s.statut==='active'&&<>
                 <span style={{fontSize:10,fontWeight:700,background:'#FF3D2E',color:'#fff',padding:'2px 8px',borderRadius:0}}>EN COURS</span>
                 <button onClick={function(e){e.stopPropagation();onResume(s);}} style={{fontSize:10,fontWeight:700,padding:'3px 10px',background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'3px 3px 0 #00C218',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>Reprendre</button>
+                <button onClick={function(e){e.stopPropagation();onEdit(s);}} style={{fontSize:10,fontWeight:700,padding:'3px 10px',background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'3px 3px 0 #4A7FE5',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>Modifier</button>
                 {confirmDel===s.id
                   ? <ConfirmDelete onConfirm={function(){onDelete(s);setConfirmDel(null);}} onCancel={function(){setConfirmDel(null);}} loading={false}/>
                   : <button onClick={function(e){e.stopPropagation();setConfirmDel(s.id);}} style={{fontSize:10,fontWeight:700,padding:'3px 10px',background:'#fff',color:'#FF3D2E',border:'2px solid #FF3D2E',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>Supprimer</button>
@@ -5004,6 +5005,102 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
   );
 }
 
+function ProspectionEditContacts({ session, contacts, profile, onSaved, onBack }) {
+  var existingIds = session.existingContactIds || [];
+  var [selected, setSelected] = useState(function(){return new Set(existingIds);});
+  var [search, setSearch] = useState('');
+  var [saving, setSaving] = useState(false);
+
+  var filtered = useMemo(function(){
+    return contacts.filter(function(c){
+      if (c.statut === 'Consultant CDI' || c.statut === 'Freelance') return false;
+      if (search) {
+        var s = search.toLowerCase();
+        if (![c.prenom,c.nom,c.groupe,c.ville].some(function(v){return (v||'').toLowerCase().indexOf(s)>=0;})) return false;
+      }
+      return true;
+    });
+  }, [contacts, search]);
+
+  var handleSave = async function() {
+    setSaving(true);
+    var currentIds = [...selected];
+    var toAdd = currentIds.filter(function(id){return existingIds.indexOf(id)<0;});
+    var toRemove = existingIds.filter(function(id){return currentIds.indexOf(id)<0;});
+
+    if (toAdd.length > 0) {
+      await sb.from('session_prospection_contacts').insert(toAdd.map(function(id){return {session_id:session.id, contact_id:id, statut:'none'};}));
+    }
+    if (toRemove.length > 0) {
+      for (var i=0; i<toRemove.length; i++) {
+        await sb.from('session_prospection_contacts').delete().eq('session_id',session.id).eq('contact_id',toRemove[i]);
+      }
+    }
+
+    toast((toAdd.length>0?'+'+toAdd.length+' ajouté'+(toAdd.length>1?'s':''):'')+
+          (toAdd.length>0&&toRemove.length>0?' · ':'')+
+          (toRemove.length>0?toRemove.length+' retiré'+(toRemove.length>1?'s':''):'') || 'Aucune modification');
+    setSaving(false);
+    onSaved();
+  };
+
+  var toggle = function(id) {
+    var s = new Set(selected);
+    if (s.has(id)) s.delete(id); else s.add(id);
+    setSelected(s);
+  };
+
+  var added = [...selected].filter(function(id){return existingIds.indexOf(id)<0;}).length;
+  var removed = existingIds.filter(function(id){return !selected.has(id);}).length;
+
+  return (
+    <div>
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
+        <button onClick={onBack} style={{background:'none',border:'none',cursor:'pointer',fontSize:14,color:'#999'}}><Icon d={ICONS.back} size={16}/> Retour</button>
+        <span style={{fontSize:16,fontWeight:900,color:'#1C1F35',textTransform:'uppercase'}}>Modifier : {session.nom}</span>
+      </div>
+
+      <div style={{display:'flex',gap:12,alignItems:'center',marginBottom:12}}>
+        <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Rechercher un contact..." className={inputCls} style={{flex:1}}/>
+        <span style={{fontSize:11,fontWeight:700,color:'#999'}}>{selected.size} sélectionnés</span>
+        {(added>0||removed>0)&&<span style={{fontSize:11,fontWeight:700}}>
+          {added>0&&<span style={{color:'#00C218'}}>+{added}</span>}
+          {added>0&&removed>0&&' '}
+          {removed>0&&<span style={{color:'#FF3D2E'}}>-{removed}</span>}
+        </span>}
+      </div>
+
+      <div style={{border:'2px solid #E4E4E6',maxHeight:400,overflowY:'auto',marginBottom:16}}>
+        {filtered.map(function(c){
+          var sel = selected.has(c.id);
+          var wasExisting = existingIds.indexOf(c.id)>=0;
+          return (
+            <div key={c.id} onClick={function(){toggle(c.id);}}
+              style={{padding:'10px 14px',borderBottom:'1px solid #E4E4E6',display:'flex',alignItems:'center',gap:10,cursor:'pointer',background:sel?'#FFFDE7':'#fff',transition:'background 80ms'}}>
+              <div style={{width:18,height:18,border:'2px solid '+(sel?'#1C1F35':'#E4E4E6'),background:sel?'#1C1F35':'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                {sel&&<Icon d={ICONS.check} size={12} className="text-white"/>}
+              </div>
+              <div style={{flex:1}}>
+                <span style={{fontWeight:700,fontSize:13,color:'#1C1F35'}}>{c.prenom} {c.nom}</span>
+                {c.groupe&&<span style={{fontSize:11,color:'#999',marginLeft:8}}>{c.groupe}</span>}
+              </div>
+              {wasExisting&&sel&&<span style={{fontSize:9,fontWeight:700,color:'#999',textTransform:'uppercase'}}>existant</span>}
+              {wasExisting&&!sel&&<span style={{fontSize:9,fontWeight:700,color:'#FF3D2E',textTransform:'uppercase'}}>retiré</span>}
+              {!wasExisting&&sel&&<span style={{fontSize:9,fontWeight:700,color:'#00C218',textTransform:'uppercase'}}>nouveau</span>}
+              <span style={{fontSize:10,color:'#ccc'}}>{c.agence}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{display:'flex',gap:8}}>
+        <BtnAction variant="edit" label={saving?'...':'Sauvegarder les modifications'} onClick={handleSave} disabled={saving||(added===0&&removed===0)}/>
+        <button onClick={onBack} style={{fontSize:11,color:'#999',background:'none',border:'none',cursor:'pointer',textTransform:'uppercase'}}>Annuler</button>
+      </div>
+    </div>
+  );
+}
+
 function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onNavToContact, allProfiles }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -5028,6 +5125,12 @@ function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onN
     setActiveSession({...session, contactIds:contactIds, spcRows:spcRows});
     setScreen('active');
   };
+  var handleEdit = async function(session) {
+    var result = await sb.from('session_prospection_contacts').select('contact_id').eq('session_id', session.id);
+    var existingIds = (result.data || []).map(function(r){return r.contact_id;});
+    setActiveSession({...session, existingContactIds: existingIds});
+    setScreen('edit');
+  };
   var handleDeleteSession = async function(session) {
     await sb.from('session_prospection_contacts').delete().eq('session_id', session.id);
     await sb.from('sessions_prospection').delete().eq('id', session.id);
@@ -5037,9 +5140,10 @@ function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onN
 
   return (
     <div className="tab-content">
-      {screen === 'list' && <ProspectionList sessions={sessions} loading={loading} onNew={function(){setScreen('new');}} onDetail={setDetailSession} onResume={handleResume} onDelete={handleDeleteSession} contactMap={contactMap} onNavToContact={onNavToContact} isAdmin={isAdmin} allProfiles={allProfiles} profile={profile}/>}
+      {screen === 'list' && <ProspectionList sessions={sessions} loading={loading} onNew={function(){setScreen('new');}} onDetail={setDetailSession} onResume={handleResume} onEdit={handleEdit} onDelete={handleDeleteSession} contactMap={contactMap} onNavToContact={onNavToContact} isAdmin={isAdmin} allProfiles={allProfiles} profile={profile}/>}
       {screen === 'new' && <ProspectionNew contacts={contacts} profile={profile} onStart={function(s){setActiveSession(s);setScreen('active');}} onBack={function(){setScreen('list');}}/>}
       {screen === 'active' && activeSession && <ProspectionActive session={activeSession} contacts={contacts} contactMap={contactMap} profile={profile} onDone={function(){setScreen('list');loadSessions();onRefresh();}} onBack={function(){setScreen('list');}}/>}
+      {screen === 'edit' && activeSession && <ProspectionEditContacts session={activeSession} contacts={contacts} profile={profile} onSaved={function(){setScreen('list');loadSessions();}} onBack={function(){setScreen('list');}}/>}
       {detailSession && <ProspectionDetailPanel session={detailSession} contactMap={contactMap} onClose={function(){setDetailSession(null);}} onNavToContact={onNavToContact}/>}
     </div>
   );
