@@ -4513,18 +4513,30 @@ function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact }
   );
 }
 
-function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelete, contactMap, onNavToContact }) {
+function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelete, contactMap, onNavToContact, isAdmin, allProfiles, profile }) {
   const [confirmDel, setConfirmDel] = useState(null);
   const [activeKpi, setActiveKpi] = useState(null);
   const [kpiData, setKpiData] = useState([]);
   const [kpiLoading, setKpiLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filterAgence, setFilterAgence] = useState('');
+  const [filterResp, setFilterResp] = useState('');
 
+  var filtered = sessions.filter(function(s) {
+    if (filterAgence && s.agence !== filterAgence) return false;
+    if (filterResp && s.responsable !== filterResp) return false;
+    if (search) {
+      var q = search.toLowerCase();
+      if ((s.nom||'').toLowerCase().indexOf(q) < 0 && (s.responsable||'').toLowerCase().indexOf(q) < 0) return false;
+    }
+    return true;
+  });
 
   var KPI_CARDS = [
-    {id:'total', label:'SESSIONS', value:sessions.length, color:'#823DE8'},
-    {id:'interesses', label:'INTÉRESSÉS', value:sessions.reduce(function(a,s){return a+(s.nb_interesses||0);},0), color:'#00C218'},
-    {id:'relances', label:'RELANCES', value:sessions.reduce(function(a,s){return a+(s.nb_relances||0);},0), color:'#FFE500'},
-    {id:'injoignables', label:'INJOIGNABLES', value:sessions.reduce(function(a,s){return a+(s.nb_injoignables||0);},0), color:'#999'},
+    {id:'total', label:'SESSIONS', value:filtered.length, color:'#823DE8'},
+    {id:'interesses', label:'INTÉRESSÉS', value:filtered.reduce(function(a,s){return a+(s.nb_interesses||0);},0), color:'#00C218'},
+    {id:'relances', label:'RELANCES', value:filtered.reduce(function(a,s){return a+(s.nb_relances||0);},0), color:'#FFE500'},
+    {id:'injoignables', label:'INJOIGNABLES', value:filtered.reduce(function(a,s){return a+(s.nb_injoignables||0);},0), color:'#999'},
   ];
 
   var loadKpiDetail = async function(id) {
@@ -4555,6 +4567,22 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
         <div/>
         <BtnAction variant="primary" icon={ICONS.add} label="Nouvelle session" onClick={onNew}/>
+      </div>
+      <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
+        <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Rechercher une session..." style={{flex:1,minWidth:200,padding:'8px 12px',border:'2px solid #E4E4E6',borderRadius:0,fontSize:13,fontFamily:'Outfit,sans-serif'}}/>
+        {isAdmin && <>
+          <select value={filterAgence} onChange={function(e){setFilterAgence(e.target.value);}} style={{padding:'8px 12px',border:'2px solid #E4E4E6',borderRadius:0,fontSize:13,fontFamily:'Outfit,sans-serif'}}>
+            <option value="">Toutes agences</option>
+            <option value="Lyon">Lyon</option>
+            <option value="Paris">Paris</option>
+            <option value="Bordeaux">Bordeaux</option>
+          </select>
+          <select value={filterResp} onChange={function(e){setFilterResp(e.target.value);}} style={{padding:'8px 12px',border:'2px solid #E4E4E6',borderRadius:0,fontSize:13,fontFamily:'Outfit,sans-serif'}}>
+            <option value="">Tous les commerciaux</option>
+            {allProfiles.map(function(p){return <option key={p.nom} value={p.nom}>{p.nom}</option>;})}
+          </select>
+        </>}
+        {(search||filterAgence||filterResp)&&<button onClick={function(){setSearch('');setFilterAgence('');setFilterResp('');}} style={{fontSize:11,fontWeight:700,padding:'8px 12px',border:'2px solid #E4E4E6',background:'#fff',cursor:'pointer',borderRadius:0,color:'#999'}}>Reset</button>}
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:10,marginBottom:16}}>
         {KPI_CARDS.map(function(k){
@@ -4721,7 +4749,7 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
       )}
       {kpiLoading && <div style={{padding:20,textAlign:'center',fontSize:12,color:'#999'}}>Chargement...</div>}
       <div style={{border:'2px solid #E4E4E6'}}>
-        {sessions.map(function(s){return(
+        {filtered.map(function(s){return(
           <div key={s.id} onClick={function(){onDetail(s);}} data-detail tabIndex="0" style={{padding:'14px 18px',borderBottom:'1px solid #E4E4E6',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',transition:'background 80ms'}}
             onMouseEnter={function(e){e.currentTarget.style.background='#f9f9f9';}} onMouseLeave={function(e){e.currentTarget.style.background='#fff';}}>
             <div>
@@ -4744,7 +4772,7 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
             </div>
           </div>
         );})}
-        {sessions.length===0&&!loading&&<div style={{padding:48,textAlign:'center',color:'#ccc',fontSize:13,fontWeight:700}}>Aucune session — lance ta premiere prospection</div>}
+        {filtered.length===0&&!loading&&<div style={{padding:48,textAlign:'center',color:'#ccc',fontSize:13,fontWeight:700}}>Aucune session — lance ta premiere prospection</div>}
       </div>
     </div>
   );
@@ -4976,7 +5004,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
   );
 }
 
-function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onNavToContact }) {
+function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onNavToContact, allProfiles }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState('list');
@@ -5009,7 +5037,7 @@ function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onN
 
   return (
     <div className="tab-content">
-      {screen === 'list' && <ProspectionList sessions={sessions} loading={loading} onNew={function(){setScreen('new');}} onDetail={setDetailSession} onResume={handleResume} onDelete={handleDeleteSession} contactMap={contactMap} onNavToContact={onNavToContact}/>}
+      {screen === 'list' && <ProspectionList sessions={sessions} loading={loading} onNew={function(){setScreen('new');}} onDetail={setDetailSession} onResume={handleResume} onDelete={handleDeleteSession} contactMap={contactMap} onNavToContact={onNavToContact} isAdmin={isAdmin} allProfiles={allProfiles} profile={profile}/>}
       {screen === 'new' && <ProspectionNew contacts={contacts} profile={profile} onStart={function(s){setActiveSession(s);setScreen('active');}} onBack={function(){setScreen('list');}}/>}
       {screen === 'active' && activeSession && <ProspectionActive session={activeSession} contacts={contacts} contactMap={contactMap} profile={profile} onDone={function(){setScreen('list');loadSessions();onRefresh();}} onBack={function(){setScreen('list');}}/>}
       {detailSession && <ProspectionDetailPanel session={detailSession} contactMap={contactMap} onClose={function(){setDetailSession(null);}} onNavToContact={onNavToContact}/>}
@@ -5262,7 +5290,7 @@ function App() {
       )}
       <div id="main-content" role="main" className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-6">
         {tab==='prospects'&&<TabProspects contacts={vContacts} contactMap={contactMap} historique={vHistorique} taches={vTaches} missions={vMissions} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navContactId={navContactId} navContactKey={navContactKey} onNavToBesoin={navToBesoin} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
-        {tab==='prospection'&&<TabProspection profile={activeProfile} contacts={vContacts} contactMap={contactMap} onRefresh={fetchAll} isAdmin={activeIsAdmin} onNavToContact={navToContact}/>}
+        {tab==='prospection'&&<TabProspection profile={activeProfile} contacts={vContacts} contactMap={contactMap} onRefresh={fetchAll} isAdmin={activeIsAdmin} onNavToContact={navToContact} allProfiles={allProfiles}/>}
         {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} contactMap={contactMap} besoins={vBesoins} missions={vMissions} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance} navTacheId={navTacheId} navTacheKey={navTacheKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToMission={navToMission} prefs={prefs}/>}
         {tab==='besoins'  &&<TabBesoins  contacts={vContacts} contactMap={contactMap} besoins={vBesoins} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navBesoinId={navBesoinId} navBesoinKey={navBesoinKey} onNavToContact={navToContact} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
         {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} prefs={prefs}/>}
