@@ -4383,10 +4383,58 @@ function ProspectionContactCard({ sc, idx, updateItem, expanded }) {
           );})}
         </div>
       </div>
-      <div style={{display:'flex',gap:12,marginTop:8,fontSize:11,color:'#666'}}>
-        {sc.telephone?<a href={'tel:'+sc.telephone} style={{color:'#4A7FE5'}}>{sc.telephone}</a>:<span style={{color:'#FF3D2E'}}>Pas de tel</span>}
-        {sc.email?<span>{sc.email}</span>:<span style={{color:'#FF3D2E'}}>Pas d email</span>}
-      </div>
+      {sc.status==='none'&&(
+        <div style={{display:'flex',gap:12,marginTop:8,fontSize:11,color:'#666'}}>
+          {sc.telephone?<a href={'tel:'+sc.telephone} style={{color:'#4A7FE5'}}>{sc.telephone}</a>:<span style={{color:'#FF3D2E'}}>Pas de tel</span>}
+          {sc.email?<span>{sc.email}</span>:<span style={{color:'#FF3D2E'}}>Pas d email</span>}
+        </div>
+      )}
+      {sc.status!=='none'&&(
+        <div style={{marginTop:8,display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+          <div>
+            <label style={{fontSize:9,fontWeight:700,color:'#999',textTransform:'uppercase',letterSpacing:'0.05em'}}>TELEPHONE</label>
+            <input value={sc.editTel} onChange={function(e){updateItem(idx,{editTel:e.target.value});}} placeholder="Telephone"
+              style={{width:'100%',fontSize:11,padding:'4px 6px',border:'2px solid '+(sc.editTel?'#E4E4E6':'#FFE500'),borderRadius:0,background:sc.editTel?'#fff':'#FFFDE7'}}/>
+          </div>
+          <div>
+            <label style={{fontSize:9,fontWeight:700,color:'#999',textTransform:'uppercase',letterSpacing:'0.05em'}}>EMAIL</label>
+            <input value={sc.editEmail} onChange={function(e){updateItem(idx,{editEmail:e.target.value});}} placeholder="Email"
+              style={{width:'100%',fontSize:11,padding:'4px 6px',border:'2px solid '+(sc.editEmail?'#E4E4E6':'#FFE500'),borderRadius:0,background:sc.editEmail?'#fff':'#FFFDE7'}}/>
+          </div>
+          <div>
+            <label style={{fontSize:9,fontWeight:700,color:'#999',textTransform:'uppercase',letterSpacing:'0.05em'}}>VILLE</label>
+            <input value={sc.editVille} onChange={function(e){updateItem(idx,{editVille:e.target.value});}} placeholder="Ville"
+              style={{width:'100%',fontSize:11,padding:'4px 6px',border:'2px solid #E4E4E6',borderRadius:0}}/>
+          </div>
+          <div>
+            <label style={{fontSize:9,fontWeight:700,color:'#999',textTransform:'uppercase',letterSpacing:'0.05em'}}>ROLE / POSTE</label>
+            <input value={sc.editRole} onChange={function(e){updateItem(idx,{editRole:e.target.value});}} placeholder="Poste"
+              style={{width:'100%',fontSize:11,padding:'4px 6px',border:'2px solid #E4E4E6',borderRadius:0}}/>
+          </div>
+          <div>
+            <label style={{fontSize:9,fontWeight:700,color:'#999',textTransform:'uppercase',letterSpacing:'0.05em'}}>LINKEDIN</label>
+            <input value={sc.editLinkedin} onChange={function(e){updateItem(idx,{editLinkedin:e.target.value});}} placeholder="LinkedIn URL"
+              style={{width:'100%',fontSize:11,padding:'4px 6px',border:'2px solid #E4E4E6',borderRadius:0}}/>
+          </div>
+          <div>
+            <label style={{fontSize:9,fontWeight:700,color:'#999',textTransform:'uppercase',letterSpacing:'0.05em'}}>ATS (RECRUITEE)</label>
+            <input value={sc.editAts} onChange={function(e){updateItem(idx,{editAts:e.target.value});}} placeholder="Lien ATS"
+              style={{width:'100%',fontSize:11,padding:'4px 6px',border:'2px solid #E4E4E6',borderRadius:0}}/>
+          </div>
+        </div>
+      )}
+      {sc.status!=='none'&&(
+        <div style={{marginTop:8,padding:'8px 10px',background:'#f9f9f9',border:'1px solid #E4E4E6',borderRadius:0}}>
+          <div style={{fontSize:9,fontWeight:700,color:'#999',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:4}}>CONTEXTE</div>
+          <div style={{fontSize:11,color:'#666'}}>
+            <span style={{fontWeight:700,color:'#1C1F35'}}>{sc.statut||'Prospect'}</span>
+            {sc.groupe&&<span> · {sc.groupe}</span>}
+            {sc.ville&&<span> · {sc.ville}</span>}
+            {sc.date_dernier_contact&&<span> · Dernier contact : {new Date(sc.date_dernier_contact).toLocaleDateString('fr-FR')}</span>}
+          </div>
+          {sc.commentaires&&<div style={{fontSize:11,color:'#999',marginTop:4,fontStyle:'italic'}}>{sc.commentaires}</div>}
+        </div>
+      )}
       {sc.status!=='none'&&(
         <div style={{marginTop:10}}>
           <textarea value={sc.notes} onChange={function(e){updateItem(idx,{notes:e.target.value});}} placeholder="Notes d appel..." rows={2}
@@ -4417,7 +4465,7 @@ function ProspectionContactCard({ sc, idx, updateItem, expanded }) {
   );
 }
 
-function ProspectionDetailPanel({ session, contactMap, onClose }) {
+function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   useEffect(function(){
@@ -4444,7 +4492,13 @@ function ProspectionDetailPanel({ session, contactMap, onClose }) {
           return (
             <div key={r.id} style={{padding:'10px 0',borderBottom:'1px solid #E4E4E6',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
               <div style={{flex:1}}>
-                <div style={{fontWeight:700,fontSize:13}}>{c?c.prenom:''} {c?c.nom:''}</div>
+                {onNavToContact&&c ? (
+                  <button onClick={function(){onClose();onNavToContact(r.contact_id);}} style={{background:'none',border:'none',fontSize:13,fontWeight:700,textAlign:'left',padding:0,color:'#1C1F35',textDecoration:'underline',textDecorationColor:'#FFE500',textUnderlineOffset:'2px',cursor:'pointer'}}>
+                    {c.prenom} {c.nom}
+                  </button>
+                ) : (
+                  <div style={{fontWeight:700,fontSize:13}}>{c?c.prenom:''} {c?c.nom:''}</div>
+                )}
                 {c&&c.groupe&&<div style={{fontSize:11,color:'#888'}}>{c.groupe}</div>}
                 {r.notes&&<div style={{fontSize:11,color:'#999',marginTop:3,fontStyle:'italic'}}>{r.notes}</div>}
                 {r.want_relance&&r.relance_date&&<div style={{fontSize:10,color:'#FFE500',fontWeight:700,marginTop:3}}>Relance : {new Date(r.relance_date).toLocaleDateString('fr-FR')}</div>}
@@ -4594,6 +4648,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
     return (session.contactIds||[]).map(function(id){return contactMap[id];}).filter(Boolean).map(function(c){return {
       ...c, status:'none', notes:'', wantRelance:false, relanceDate:'', relanceNote:'',
       editTel:c.telephone||'', editEmail:c.email||'', editLinkedin:c.linkedin||'',
+      editVille:c.ville||'', editRole:c.role||'', editAts:c.ats||c.recruitee||'',
     };});
   }, [session.contactIds, contactMap]);
 
@@ -4623,6 +4678,9 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
       if (sc.editTel && sc.editTel !== sc.telephone) upd.telephone = sc.editTel;
       if (sc.editEmail && sc.editEmail !== sc.email) upd.email = sc.editEmail;
       if (sc.editLinkedin && sc.editLinkedin !== sc.linkedin) upd.linkedin = sc.editLinkedin;
+      if (sc.editVille && sc.editVille !== sc.ville) upd.ville = sc.editVille;
+      if (sc.editRole && sc.editRole !== sc.role) upd.role = sc.editRole;
+      if (sc.editAts && sc.editAts !== (sc.ats||sc.recruitee||'')) upd.ats = sc.editAts;
       if (Object.keys(upd).length > 0) await sb.from('contacts').update({...upd, updated_at:now}).eq('id', sc.id);
     }
 
@@ -4708,7 +4766,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
   );
 }
 
-function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin }) {
+function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onNavToContact }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState('list');
@@ -4730,7 +4788,7 @@ function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin }) {
       {screen === 'list' && <ProspectionList sessions={sessions} loading={loading} onNew={function(){setScreen('new');}} onDetail={setDetailSession}/>}
       {screen === 'new' && <ProspectionNew contacts={contacts} profile={profile} onStart={function(s){setActiveSession(s);setScreen('active');}} onBack={function(){setScreen('list');}}/>}
       {screen === 'active' && activeSession && <ProspectionActive session={activeSession} contacts={contacts} contactMap={contactMap} profile={profile} onDone={function(){setScreen('list');loadSessions();onRefresh();}} onBack={function(){setScreen('list');}}/>}
-      {detailSession && <ProspectionDetailPanel session={detailSession} contactMap={contactMap} onClose={function(){setDetailSession(null);}}/>}
+      {detailSession && <ProspectionDetailPanel session={detailSession} contactMap={contactMap} onClose={function(){setDetailSession(null);}} onNavToContact={onNavToContact}/>}
     </div>
   );
 }
@@ -4980,7 +5038,7 @@ function App() {
       )}
       <div id="main-content" role="main" className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-6">
         {tab==='prospects'&&<TabProspects contacts={vContacts} contactMap={contactMap} historique={vHistorique} taches={vTaches} missions={vMissions} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navContactId={navContactId} navContactKey={navContactKey} onNavToBesoin={navToBesoin} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
-        {tab==='prospection'&&<TabProspection profile={activeProfile} contacts={vContacts} contactMap={contactMap} onRefresh={fetchAll} isAdmin={activeIsAdmin}/>}
+        {tab==='prospection'&&<TabProspection profile={activeProfile} contacts={vContacts} contactMap={contactMap} onRefresh={fetchAll} isAdmin={activeIsAdmin} onNavToContact={navToContact}/>}
         {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} contactMap={contactMap} besoins={vBesoins} missions={vMissions} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance} navTacheId={navTacheId} navTacheKey={navTacheKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToMission={navToMission} prefs={prefs}/>}
         {tab==='besoins'  &&<TabBesoins  contacts={vContacts} contactMap={contactMap} besoins={vBesoins} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navBesoinId={navBesoinId} navBesoinKey={navBesoinKey} onNavToContact={navToContact} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
         {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} prefs={prefs}/>}
