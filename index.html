@@ -3245,7 +3245,7 @@ function TabPipe({ besoins, contacts, contactMap, besoinCandidats, historique, t
       const ponderee=brute*proba;
       const lastAction=lastActionByBesoin[b.id]||b.updated_at||b.created_at;
       const daysInactive=daysSince(lastAction);
-      const atRisk=daysInactive>10&&b.statut!=='Besoin Gagné';
+      const atRisk=daysInactive>5&&b.statut!=='Besoin Gagné';
       const contact=b.contact_id?contactMap[b.contact_id]:null;
       return {...b,brute,proba,ponderee,lastAction,daysInactive,atRisk,contact};
     })
@@ -3347,7 +3347,7 @@ function TabPipe({ besoins, contacts, contactMap, besoinCandidats, historique, t
         <button onClick={()=>{setRiskFilter(!riskFilter);setDonutFilter('');}} className={`bg-white border-2 border-neutral-200 p-4 text-left transition-colors ${riskFilter?'border-orange-400 bg-lemon-20':'border-neutral-100 hover:border-orange-200'}`}>
           <div className="text-xs text-neutral-300 font-medium mb-1 uppercase tracking-wide">À risque</div>
           <div className={`text-3xl font-bold ${aRisqueCount>0?'text-coral-50':'text-neutral-200'}`}>{fmtCurrency(aRisqueVal)}</div>
-          <div className="text-xs text-slate mt-1">{aRisqueCount} besoin{aRisqueCount>1?'s':''} sans action &gt;10j</div>
+          <div className="text-xs text-slate mt-1">{aRisqueCount} besoin{aRisqueCount>1?'s':''} sans action &gt;5j</div>
         </button>
         <div className="bg-white border-2 border-neutral-200 p-4">
           <div className="text-xs text-neutral-300 font-medium mb-1 uppercase tracking-wide">Gagné YTD</div>
