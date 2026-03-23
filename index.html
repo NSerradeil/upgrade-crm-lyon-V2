@@ -1898,8 +1898,8 @@ function TacheDetailPanel({ task, contact, besoinLabel, mission, besoin, histori
   const taskHist = (historique||[]).filter(h=>h.tache_id===task.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const actions = canEdit ? (
     <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
-      <BtnAction variant="primary" icon={ICONS.add} label="+ Action" onClick={()=>setShowAddAction(true)}/>
-      <BtnAction variant="success" icon={ICONS.check} label="Marquer fait" onClick={onComplete}/>
+      <BtnAction variant="primary" icon={ICONS.add} label="Action" onClick={()=>setShowAddAction(true)}/>
+      <BtnAction variant="success" icon={ICONS.check} label="Fait" onClick={onComplete}/>
       <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={onEdit}/>
       {modal!=='confirmDel'
         ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
