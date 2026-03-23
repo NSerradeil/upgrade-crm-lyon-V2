@@ -4513,6 +4513,7 @@ function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact }
   );
 }
 
+function _addKey(obj, key) { var n = {}; for(var k in obj) n[k]=obj[k]; n[key]=true; return n; }
 function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelete, contactMap, onNavToContact }) {
   const [confirmDel, setConfirmDel] = useState(null);
   const [activeKpi, setActiveKpi] = useState(null);
@@ -4574,7 +4575,7 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
         );})}
       </div>
 
-      {activeKpi && !kpiLoading && kpiData.length > 0 && (
+      {activeKpi && !kpiLoading && (
         <div style={{border:'2px solid #E4E4E6',borderLeft:'5px solid '+(KPI_CARDS.find(function(k){return k.id===activeKpi;})||{}).color||'#E4E4E6',marginBottom:16,borderRadius:0}}>
           <div style={{background:'#1C1F35',padding:'8px 16px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <span style={{color:'#fff',fontWeight:800,fontSize:11,textTransform:'uppercase',letterSpacing:'0.08em'}}>
@@ -4599,8 +4600,8 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
                   {done
                     ? <span style={{fontSize:10,fontWeight:700,color:'#00C218'}}>Besoin créé</span>
                     : <>
-                      <button onClick={function(){setCreated(function(s){return {...s,[r.contact_id]:true};});}} style={{fontSize:10,fontWeight:700,padding:'3px 8px',background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'3px 3px 0 #00C218',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>+ Créer besoin</button>
-                      <button onClick={function(){setIgnored(function(s){return {...s,[r.contact_id]:true};});}} style={{fontSize:10,fontWeight:700,padding:'3px 8px',background:'#fff',color:'#bbb',border:'2px solid #E4E4E6',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>Ignorer</button>
+                      <button onClick={function(){setCreated(function(s){return _addKey(s,r.contact_id);});}} style={{fontSize:10,fontWeight:700,padding:'3px 8px',background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'3px 3px 0 #00C218',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>+ Créer besoin</button>
+                      <button onClick={function(){setIgnored(function(s){return _addKey(s,r.contact_id);});}} style={{fontSize:10,fontWeight:700,padding:'3px 8px',background:'#fff',color:'#bbb',border:'2px solid #E4E4E6',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>Ignorer</button>
                     </>
                   }
                 </div>
@@ -4610,12 +4611,12 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
 
           {activeKpi==='relances' && kpiData.map(function(r) {
             var c = contactMap[r.contact_id];
-            if (!c) return null;
             return (
               <div key={r.id} style={{padding:'10px 16px',borderBottom:'1px solid #E4E4E6',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                 <div>
-                  <button onClick={function(){if(onNavToContact){setActiveKpi(null);onNavToContact(c.id);}}} style={{fontWeight:700,fontSize:13,color:'#1C1F35',background:'none',border:'none',cursor:'pointer',textDecoration:'underline',textDecorationColor:'#FFE500',textUnderlineOffset:2,padding:0}}>{c.prenom} {c.nom}</button>
-                  {c.groupe&&<span style={{fontSize:11,color:'#999',marginLeft:8}}>{c.groupe}</span>}
+                  {c ? <button onClick={function(){if(onNavToContact){setActiveKpi(null);onNavToContact(c.id);}}} style={{fontWeight:700,fontSize:13,color:'#1C1F35',background:'none',border:'none',cursor:'pointer',textDecoration:'underline',textDecorationColor:'#FFE500',textUnderlineOffset:2,padding:0}}>{c.prenom} {c.nom}</button>
+                    : <span style={{fontWeight:700,fontSize:13,color:'#1C1F35'}}>{r.titre||'Relance'}</span>}
+                  {c&&c.groupe&&<span style={{fontSize:11,color:'#999',marginLeft:8}}>{c.groupe}</span>}
                 </div>
                 <span style={{fontSize:11,fontWeight:700,color:'#1C1F35'}}>{r.due_date?new Date(r.due_date).toLocaleDateString('fr-FR'):''}</span>
               </div>
@@ -4637,8 +4638,8 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onDelet
                   {isAdded
                     ? <span style={{fontSize:10,fontWeight:700,color:'#00C218'}}>Ajouté</span>
                     : <>
-                      <button onClick={function(){setAddedNext(function(s){return {...s,[r.contact_id]:true};});setIgnored(function(s){return {...s,[r.contact_id]:true};});}} style={{fontSize:10,fontWeight:700,padding:'3px 8px',background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'3px 3px 0 #FFE500',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>+ Prochaine session</button>
-                      <button onClick={function(){setIgnored(function(s){return {...s,[r.contact_id]:true};});}} style={{fontSize:10,fontWeight:700,padding:'3px 8px',background:'#fff',color:'#bbb',border:'2px solid #E4E4E6',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>Ignorer</button>
+                      <button onClick={function(){setAddedNext(function(s){return _addKey(s,r.contact_id);});setIgnored(function(s){return _addKey(s,r.contact_id);});}} style={{fontSize:10,fontWeight:700,padding:'3px 8px',background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'3px 3px 0 #FFE500',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>+ Prochaine session</button>
+                      <button onClick={function(){setIgnored(function(s){return _addKey(s,r.contact_id);});}} style={{fontSize:10,fontWeight:700,padding:'3px 8px',background:'#fff',color:'#bbb',border:'2px solid #E4E4E6',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>Ignorer</button>
                     </>
                   }
                 </div>
