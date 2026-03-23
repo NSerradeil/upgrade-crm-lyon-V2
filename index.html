@@ -288,6 +288,13 @@ const STATUT_STYLE = {
   'À définir':      { bg:'#E4E4E6', color:'#1C1F35' },
 };
 const BADGE_STYLE = { padding:'2px 8px', borderRadius:0, fontSize:11, fontWeight:700, whiteSpace:'nowrap', fontFamily:'Outfit,sans-serif', textTransform:'uppercase', letterSpacing:'0.04em' };
+const PROSPECT_CALL_STATUTS = {
+  none:           { label:'A appeler',     color:'#E4E4E6', bg:'#f9f9f9' },
+  called:         { label:'Appele',        color:'#4A7FE5', bg:'#EEF3FF' },
+  interested:     { label:'Interesse',     color:'#00C218', bg:'#EDFFF1' },
+  unreachable:    { label:'Pas joignable', color:'#999',    bg:'#f5f5f5' },
+  not_interested: { label:'Pas interesse', color:'#FF3D2E', bg:'#FFF0EF' },
+};
 // ═══════════════════════════════════════════════════════════════════════════════
 // DRAG & DROP LIST REORDER HOOK
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -557,6 +564,7 @@ const ICONS = {
   list: 'M280-600v-80h560v80H280Zm0 160v-80h560v80H280Zm0 160v-80h560v80H280ZM160-600q-17 0-28.5-11.5T120-640q0-17 11.5-28.5T160-680q17 0 28.5 11.5T200-640q0 17-11.5 28.5T160-600Zm0 160q-17 0-28.5-11.5T120-480q0-17 11.5-28.5T160-520q17 0 28.5 11.5T200-480q0 17-11.5 28.5T160-440Zm0 160q-17 0-28.5-11.5T120-320q0-17 11.5-28.5T160-360q17 0 28.5 11.5T200-320q0 17-11.5 28.5T160-280Z',
   keyboard: 'M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h640q33 0 56.5 23.5T880-720v480q0 33-23.5 56.5T800-160H160Zm0-80h640v-480H160v480Zm160-80h320v-80H320v80Z',
   stop: 'M240-240v-480h480v480H240Z',
+  chevronRight: 'M504-480 320-664l56-56 240 240-240 240-56-56 184-184Z',
 };
 
 function Loader({ label }) {
@@ -4354,6 +4362,380 @@ function PreferencesPanel({ prefs, onSave, profileNom }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// PROSPECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function ProspectionContactCard({ sc, idx, updateItem, expanded }) {
+  var cfg = PROSPECT_CALL_STATUTS[sc.status] || PROSPECT_CALL_STATUTS.none;
+  return (
+    <div style={{padding:'12px 16px',borderBottom:'1px solid #E4E4E6',background:sc.status!=='none'?cfg.bg:'#fff',borderLeft:'4px solid '+cfg.color,transition:'background 120ms'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+        <div>
+          <span style={{fontWeight:800,fontSize:14,color:'#1C1F35'}}>{sc.prenom} {sc.nom}</span>
+          {sc.groupe&&<span style={{fontSize:11,color:'#999',marginLeft:8}}>{sc.groupe}</span>}
+        </div>
+        <div style={{display:'flex',gap:4}}>
+          {Object.entries(PROSPECT_CALL_STATUTS).filter(function(arr){return arr[0]!=='none';}).map(function(arr){var key=arr[0],val=arr[1];return(
+            <button key={key} onClick={function(){updateItem(idx,{status:sc.status===key?'none':key});}}
+              style={{fontSize:10,fontWeight:700,padding:'3px 8px',borderRadius:0,border:'2px solid '+val.color,background:sc.status===key?val.color:'#fff',color:sc.status===key?'#fff':val.color,cursor:'pointer',transition:'all 80ms',textTransform:'uppercase'}}>
+              {val.label}
+            </button>
+          );})}
+        </div>
+      </div>
+      <div style={{display:'flex',gap:12,marginTop:8,fontSize:11,color:'#666'}}>
+        {sc.telephone?<a href={'tel:'+sc.telephone} style={{color:'#4A7FE5'}}>{sc.telephone}</a>:<span style={{color:'#FF3D2E'}}>Pas de tel</span>}
+        {sc.email?<span>{sc.email}</span>:<span style={{color:'#FF3D2E'}}>Pas d email</span>}
+      </div>
+      {sc.status!=='none'&&(
+        <div style={{marginTop:10}}>
+          <textarea value={sc.notes} onChange={function(e){updateItem(idx,{notes:e.target.value});}} placeholder="Notes d appel..." rows={2}
+            style={{width:'100%',fontSize:12,padding:'6px 8px',border:'2px solid #E4E4E6',borderRadius:0,resize:'vertical',fontFamily:'Outfit,sans-serif'}}/>
+          <div style={{marginTop:8,padding:'8px 12px',background:'#FFFBF0',borderLeft:'3px solid #FFE500'}}>
+            <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:11,fontWeight:700,color:'#1C1F35'}}>
+              <input type="checkbox" checked={sc.wantRelance} onChange={function(e){updateItem(idx,{wantRelance:e.target.checked});}}/>
+              Creer une tache de relance
+            </label>
+            {sc.wantRelance&&(
+              <div style={{marginTop:8,display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                <div style={{display:'flex',gap:4}}>
+                  {[{l:'Demain',d:1},{l:'3 jours',d:3},{l:'1 sem.',d:7}].map(function(p){
+                    var dt=new Date();dt.setDate(dt.getDate()+p.d);var val=dt.toISOString().slice(0,10);
+                    return <button key={p.l} onClick={function(){updateItem(idx,{relanceDate:val});}} style={{fontSize:10,fontWeight:700,padding:'3px 8px',border:'2px solid '+(sc.relanceDate===val?'#1C1F35':'#E4E4E6'),background:sc.relanceDate===val?'#1C1F35':'#fff',color:sc.relanceDate===val?'#fff':'#1C1F35',borderRadius:0,cursor:'pointer'}}>{p.l}</button>;
+                  })}
+                </div>
+                <input type="date" value={sc.relanceDate||''} onChange={function(e){updateItem(idx,{relanceDate:e.target.value});}}
+                  style={{fontSize:11,padding:'3px 6px',border:'2px solid #E4E4E6',borderRadius:0}}/>
+                <input value={sc.relanceNote||''} onChange={function(e){updateItem(idx,{relanceNote:e.target.value});}} placeholder="Note relance..."
+                  style={{flex:1,fontSize:11,padding:'3px 6px',border:'2px solid #E4E4E6',borderRadius:0,minWidth:120}}/>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProspectionDetailPanel({ session, contactMap, onClose }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(function(){
+    sb.from('session_prospection_contacts').select('*').eq('session_id',session.id).neq('statut','none').order('created_at')
+      .then(function(res){setRows(res.data||[]);setLoading(false);});
+  }, [session.id]);
+
+  return (
+    <SidePanel title={session.nom} badge={<span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:0,background:session.statut==='done'?'#E4E4E6':'#FF3D2E',color:session.statut==='done'?'#1C1F35':'#fff',textTransform:'uppercase'}}>{session.statut==='done'?'Terminee':'En cours'}</span>} onClose={onClose}>
+      <div className="grid grid-cols-3 gap-3 text-center">
+        {[{v:session.nb_contacts||0,l:'Appeles',c:'#1C1F35'},{v:session.nb_interesses||0,l:'Interesses',c:'#00C218'},{v:session.nb_relances||0,l:'Relances',c:'#FFE500'}].map(function(s){return(
+          <div key={s.l} style={{padding:'10px',border:'2px solid #E4E4E6',borderLeft:'4px solid '+s.c}}>
+            <div style={{fontSize:22,fontWeight:900,color:s.c}}>{s.v}</div>
+            <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'#999',marginTop:2}}>{s.l}</div>
+          </div>
+        );})}
+      </div>
+      <div>
+        <div className="text-[11px] font-bold text-slate uppercase tracking-[0.1em] mb-2">Contacts traites</div>
+        {loading&&<div className="text-xs text-neutral-300">Chargement...</div>}
+        {rows.map(function(r){
+          var c=contactMap[r.contact_id];
+          var cfg=PROSPECT_CALL_STATUTS[r.statut]||PROSPECT_CALL_STATUTS.none;
+          return (
+            <div key={r.id} style={{padding:'10px 0',borderBottom:'1px solid #E4E4E6',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700,fontSize:13}}>{c?c.prenom:''} {c?c.nom:''}</div>
+                {c&&c.groupe&&<div style={{fontSize:11,color:'#888'}}>{c.groupe}</div>}
+                {r.notes&&<div style={{fontSize:11,color:'#999',marginTop:3,fontStyle:'italic'}}>{r.notes}</div>}
+                {r.want_relance&&r.relance_date&&<div style={{fontSize:10,color:'#FFE500',fontWeight:700,marginTop:3}}>Relance : {new Date(r.relance_date).toLocaleDateString('fr-FR')}</div>}
+              </div>
+              <span style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:'0.04em',background:cfg.bg,color:cfg.color,border:'2px solid '+cfg.color,padding:'2px 6px',borderRadius:0}}>{cfg.label}</span>
+            </div>
+          );
+        })}
+        {!loading&&rows.length===0&&<div className="text-xs text-neutral-300">Aucun contact traite</div>}
+      </div>
+    </SidePanel>
+  );
+}
+
+function ProspectionList({ sessions, loading, onNew, onDetail }) {
+  return (
+    <div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+        <div/>
+        <BtnAction variant="primary" icon={ICONS.add} label="+ Nouvelle session" onClick={onNew}/>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:10,marginBottom:16}}>
+        {[
+          {label:'SESSIONS',value:sessions.length,color:'#1C1F35'},
+          {label:'INTERESSES',value:sessions.reduce(function(a,s){return a+(s.nb_interesses||0);},0),color:'#00C218'},
+          {label:'RELANCES',value:sessions.reduce(function(a,s){return a+(s.nb_relances||0);},0),color:'#FFE500'},
+          {label:'INJOIGNABLES',value:sessions.reduce(function(a,s){return a+(s.nb_injoignables||0);},0),color:'#999'},
+        ].map(function(k){return(
+          <div key={k.label} style={{background:'#fff',borderTop:'2px solid #E4E4E6',borderRight:'2px solid #E4E4E6',borderBottom:'2px solid #E4E4E6',borderLeft:'5px solid '+k.color,padding:'14px'}}>
+            <div style={{fontSize:24,fontWeight:900,color:'#1C1F35'}}>{k.value}</div>
+            <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',color:'#999',marginTop:4}}>{k.label}</div>
+          </div>
+        );})}
+      </div>
+      <div style={{border:'2px solid #E4E4E6'}}>
+        {sessions.map(function(s){return(
+          <div key={s.id} onClick={function(){onDetail(s);}} data-detail tabIndex="0" style={{padding:'14px 18px',borderBottom:'1px solid #E4E4E6',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',transition:'background 80ms'}}
+            onMouseEnter={function(e){e.currentTarget.style.background='#f9f9f9';}} onMouseLeave={function(e){e.currentTarget.style.background='#fff';}}>
+            <div>
+              <div style={{fontWeight:800,fontSize:14,color:'#1C1F35'}}>{s.nom}</div>
+              <div style={{fontSize:11,color:'#999',marginTop:2}}>
+                {new Date(s.date_session).toLocaleDateString('fr-FR')} · {s.responsable} · {(s.nb_contacts||0)+' contacts'}
+              </div>
+            </div>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              {(s.nb_interesses||0)>0&&<span style={{fontSize:10,fontWeight:700,background:'#EDFFF1',color:'#00C218',padding:'2px 8px',borderRadius:0}}>{s.nb_interesses} interesses</span>}
+              {(s.nb_relances||0)>0&&<span style={{fontSize:10,fontWeight:700,background:'#FFF9C0',color:'#1C1F35',padding:'2px 8px',borderRadius:0}}>{s.nb_relances} relances</span>}
+              {s.statut==='active'&&<span style={{fontSize:10,fontWeight:700,background:'#FF3D2E',color:'#fff',padding:'2px 8px',borderRadius:0}}>EN COURS</span>}
+            </div>
+          </div>
+        );})}
+        {sessions.length===0&&!loading&&<div style={{padding:48,textAlign:'center',color:'#ccc',fontSize:13,fontWeight:700}}>Aucune session — lance ta premiere prospection</div>}
+      </div>
+    </div>
+  );
+}
+
+function ProspectionNew({ contacts, profile, onStart, onBack }) {
+  const [nom, setNom] = useState('');
+  const [agence, setAgence] = useState(profile.agence||'');
+  const [delai, setDelai] = useState(30);
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState(new Set());
+
+  var today = new Date();
+  var filtered = useMemo(function(){return contacts.filter(function(c){
+    if (agence && c.agence !== agence) return false;
+    if (c.statut === 'Consultant CDI' || c.statut === 'Freelance') return false;
+    if (delai > 0 && c.date_dernier_contact) {
+      var last = new Date(c.date_dernier_contact);
+      var diff = (today - last) / (1000*60*60*24);
+      if (diff < delai) return false;
+    }
+    if (search) {
+      var s = search.toLowerCase();
+      if (![c.prenom,c.nom,c.groupe,c.ville].some(function(v){return (v||'').toLowerCase().includes(s);})) return false;
+    }
+    return true;
+  });}, [contacts, agence, delai, search]);
+
+  var toggleAll = function(){
+    if (selected.size === filtered.length) setSelected(new Set());
+    else setSelected(new Set(filtered.map(function(c){return c.id;})));
+  };
+
+  var handleStart = async function(){
+    var result = await sb.from('sessions_prospection').insert({
+      nom: nom || ('Session ' + new Date().toLocaleDateString('fr-FR')),
+      date_session: new Date().toISOString().slice(0,10),
+      responsable: profile.nom,
+      agence: agence||null,
+      statut: 'active',
+    }).select().single();
+    var sess = result.data;
+    var rows = Array.from(selected).map(function(id){return {session_id:sess.id, contact_id:id, statut:'none'};});
+    await sb.from('session_prospection_contacts').insert(rows);
+    onStart({...sess, contactIds:Array.from(selected)});
+  };
+
+  return (
+    <div>
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
+        <button onClick={onBack} style={{background:'none',border:'none',cursor:'pointer',fontSize:14,color:'#999'}}><Icon d={ICONS.back} size={16}/> Retour</button>
+        <span style={{fontSize:16,fontWeight:900,color:'#1C1F35',textTransform:'uppercase',letterSpacing:'-0.01em'}}>Nouvelle session de prospection</span>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:20}}>
+        <Field label="Nom de la session"><input value={nom} onChange={function(e){setNom(e.target.value);}} placeholder="Ex: Grands comptes Lyon" className={inputCls}/></Field>
+        <Field label="Agence"><select value={agence} onChange={function(e){setAgence(e.target.value);}} className={inputCls}><option value="">Toutes</option><option value="Lyon">Lyon</option><option value="Paris">Paris</option><option value="Bordeaux">Bordeaux</option></select></Field>
+        <Field label="Dernier contact > X jours"><select value={delai} onChange={function(e){setDelai(+e.target.value);}} className={inputCls}><option value={0}>Tous</option><option value={14}>14 jours</option><option value={30}>30 jours</option><option value={60}>60 jours</option><option value={90}>90 jours</option></select></Field>
+      </div>
+      <div style={{display:'flex',gap:12,alignItems:'center',marginBottom:12}}>
+        <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Rechercher un contact..." className={inputCls} style={{flex:1}}/>
+        <button onClick={toggleAll} style={{fontSize:11,fontWeight:700,padding:'6px 14px',border:'2px solid #E4E4E6',background:'#fff',cursor:'pointer',borderRadius:0,textTransform:'uppercase'}}>
+          {selected.size===filtered.length?'Tout deselectionner':'Tout selectionner'} ({filtered.length})
+        </button>
+      </div>
+      <div style={{border:'2px solid #E4E4E6',maxHeight:400,overflowY:'auto',marginBottom:16}}>
+        {filtered.map(function(c){
+          var sel = selected.has(c.id);
+          return (
+            <div key={c.id} onClick={function(){var s=new Set(selected);if(sel)s.delete(c.id);else s.add(c.id);setSelected(s);}}
+              style={{padding:'10px 14px',borderBottom:'1px solid #E4E4E6',display:'flex',alignItems:'center',gap:10,cursor:'pointer',background:sel?'#FFFDE7':'#fff',transition:'background 80ms'}}>
+              <div style={{width:18,height:18,border:'2px solid '+(sel?'#1C1F35':'#E4E4E6'),background:sel?'#1C1F35':'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                {sel&&<Icon d={ICONS.check} size={12} className="text-white"/>}
+              </div>
+              <div style={{flex:1}}>
+                <span style={{fontWeight:700,fontSize:13,color:'#1C1F35'}}>{c.prenom} {c.nom}</span>
+                {c.groupe&&<span style={{fontSize:11,color:'#999',marginLeft:8}}>{c.groupe}</span>}
+              </div>
+              <div style={{display:'flex',gap:4}}>
+                {!c.telephone&&<span style={{fontSize:9,fontWeight:700,color:'#FF3D2E',background:'#FFF0EF',padding:'1px 4px'}}>TEL?</span>}
+                {!c.email&&<span style={{fontSize:9,fontWeight:700,color:'#FF3D2E',background:'#FFF0EF',padding:'1px 4px'}}>EMAIL?</span>}
+              </div>
+              <span style={{fontSize:10,color:'#ccc'}}>{c.agence}</span>
+            </div>
+          );
+        })}
+        {filtered.length===0&&<div style={{padding:32,textAlign:'center',color:'#ccc',fontSize:12}}>Aucun contact ne correspond aux filtres</div>}
+      </div>
+      <BtnAction variant="primary" label={'Lancer la session ('+selected.size+' contacts)'} onClick={handleStart} disabled={selected.size===0}/>
+    </div>
+  );
+}
+
+function ProspectionActive({ session, contacts, contactMap, profile, onDone, onBack }) {
+  var sessionContacts = useMemo(function(){
+    return (session.contactIds||[]).map(function(id){return contactMap[id];}).filter(Boolean).map(function(c){return {
+      ...c, status:'none', notes:'', wantRelance:false, relanceDate:'', relanceNote:'',
+      editTel:c.telephone||'', editEmail:c.email||'', editLinkedin:c.linkedin||'',
+    };});
+  }, [session.contactIds, contactMap]);
+
+  const [items, setItems] = useState(sessionContacts);
+  const [saving, setSaving] = useState(false);
+  const [focusIdx, setFocusIdx] = useState(0);
+  const [view, setView] = useState('list');
+
+  var updateItem = function(idx, patch){setItems(function(prev){return prev.map(function(it,i){return i===idx?{...it,...patch}:it;});});};
+
+  var stats = useMemo(function(){return {
+    done: items.filter(function(c){return c.status!=='none';}).length,
+    interested: items.filter(function(c){return c.status==='interested';}).length,
+    relances: items.filter(function(c){return c.wantRelance&&c.relanceDate;}).length,
+  };}, [items]);
+
+  var handleTerminer = async function(){
+    setSaving(true);
+    var todayStr = getToday();
+    var now = new Date().toISOString();
+    var appeles = items.filter(function(c){return c.status !== 'none';});
+    var LABELS = {called:'Appele',interested:'Interesse',unreachable:'Pas joignable',not_interested:'Pas interesse'};
+
+    for (var si=0; si<appeles.length; si++) {
+      var sc = appeles[si];
+      var upd = {};
+      if (sc.editTel && sc.editTel !== sc.telephone) upd.telephone = sc.editTel;
+      if (sc.editEmail && sc.editEmail !== sc.email) upd.email = sc.editEmail;
+      if (sc.editLinkedin && sc.editLinkedin !== sc.linkedin) upd.linkedin = sc.editLinkedin;
+      if (Object.keys(upd).length > 0) await sb.from('contacts').update({...upd, updated_at:now}).eq('id', sc.id);
+    }
+
+    if (appeles.length > 0) {
+      await sb.from('historique_actions').insert(appeles.map(function(sc2){return {
+        id_prospect: sc2.id, date: todayStr, type_action: 'Appel sortant',
+        details: ['Session : '+session.nom,'Resultat : '+LABELS[sc2.status],sc2.notes?('Notes : '+sc2.notes):null].filter(Boolean).join('\n'),
+        responsable: profile.nom,
+      };}));
+    }
+
+    var relances = appeles.filter(function(sc3){return sc3.wantRelance && sc3.relanceDate;});
+    if (relances.length > 0) {
+      await sb.from('taches').insert(relances.map(function(sc4){return {
+        titre: ('Relance '+(sc4.prenom||'')+' '+sc4.nom+' — '+(sc4.groupe||'')).trim(),
+        statut: 'a_faire', due_date: sc4.relanceDate, contact_id: sc4.id,
+        session_prospection_id: session.id,
+        notes: ['Session : '+session.nom,'Statut : '+LABELS[sc4.status],sc4.relanceNote||null].filter(Boolean).join('\n'),
+        responsable: profile.nom,
+      };}));
+    }
+
+    await sb.from('session_prospection_contacts').upsert(items.map(function(sc5){return {
+      session_id: session.id, contact_id: sc5.id, statut: sc5.status,
+      notes: sc5.notes||null, want_relance: sc5.wantRelance,
+      relance_date: sc5.relanceDate||null, relance_note: sc5.relanceNote||null,
+      tel_saisi: sc5.editTel!==sc5.telephone?sc5.editTel:null,
+      email_saisi: sc5.editEmail!==sc5.email?sc5.editEmail:null,
+      linkedin_saisi: sc5.editLinkedin!==sc5.linkedin?sc5.editLinkedin:null,
+    };}));
+
+    await sb.from('sessions_prospection').update({
+      statut:'done', nb_contacts:appeles.length,
+      nb_interesses:stats.interested, nb_relances:relances.length,
+      nb_injoignables:appeles.filter(function(c){return c.status==='unreachable';}).length,
+      updated_at:now,
+    }).eq('id', session.id);
+
+    setSaving(false);
+    toast('Session terminee — '+appeles.length+' appeles, '+stats.interested+' interesses, '+relances.length+' relances');
+    onDone();
+  };
+
+  var current = items[focusIdx];
+
+  return (
+    <div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,flexWrap:'wrap',gap:8}}>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <button onClick={onBack} style={{background:'none',border:'none',cursor:'pointer',color:'#999'}}><Icon d={ICONS.back} size={16}/></button>
+          <span style={{fontSize:16,fontWeight:900,color:'#1C1F35'}}>{session.nom}</span>
+          <span style={{fontSize:11,color:'#999'}}>{stats.done}/{items.length} traites</span>
+        </div>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <button onClick={function(){setView(view==='list'?'focus':'list');}} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:'2px solid #E4E4E6',background:'#fff',cursor:'pointer',borderRadius:0,textTransform:'uppercase'}}>
+            {view==='list'?'Vue focus':'Vue liste'}
+          </button>
+          <button onClick={handleTerminer} disabled={saving||stats.done===0} style={{background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #00C218',padding:'8px 16px',fontWeight:900,fontSize:12,textTransform:'uppercase',letterSpacing:'0.04em',cursor:stats.done===0?'not-allowed':'pointer',borderRadius:0,opacity:stats.done===0?0.4:1}}>
+            {saving?'Enregistrement...':'Terminer la session'}
+          </button>
+        </div>
+      </div>
+      <div style={{display:'flex',gap:16,marginBottom:16,fontSize:11,fontWeight:700}}>
+        <span style={{color:'#4A7FE5'}}>{stats.done} appeles</span>
+        <span style={{color:'#00C218'}}>{stats.interested} interesses</span>
+        <span style={{color:'#FFE500'}}>{stats.relances} relances</span>
+      </div>
+      {view === 'list' ? (
+        <div style={{border:'2px solid #E4E4E6'}}>
+          {items.map(function(sc,idx){return <ProspectionContactCard key={sc.id} sc={sc} idx={idx} updateItem={updateItem}/> ;})}
+        </div>
+      ) : current ? (
+        <div>
+          <div style={{display:'flex',gap:8,marginBottom:12}}>
+            <button onClick={function(){setFocusIdx(Math.max(0,focusIdx-1));}} disabled={focusIdx===0} style={{padding:'4px 12px',border:'2px solid #E4E4E6',background:'#fff',cursor:'pointer',borderRadius:0,opacity:focusIdx===0?0.3:1}}>Precedent</button>
+            <span style={{fontSize:12,color:'#999',padding:'6px 0'}}>{focusIdx+1} / {items.length}</span>
+            <button onClick={function(){setFocusIdx(Math.min(items.length-1,focusIdx+1));}} disabled={focusIdx===items.length-1} style={{padding:'4px 12px',border:'2px solid #E4E4E6',background:'#fff',cursor:'pointer',borderRadius:0,opacity:focusIdx===items.length-1?0.3:1}}>Suivant</button>
+          </div>
+          <ProspectionContactCard sc={current} idx={focusIdx} updateItem={updateItem} expanded/>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin }) {
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [screen, setScreen] = useState('list');
+  const [activeSession, setActiveSession] = useState(null);
+  const [detailSession, setDetailSession] = useState(null);
+
+  var loadSessions = async function(){
+    setLoading(true);
+    var q = sb.from('sessions_prospection').select('*').order('created_at', {ascending:false});
+    if (!isAdmin) q = q.eq('responsable', profile.nom);
+    var result = await q;
+    setSessions(result.data || []);
+    setLoading(false);
+  };
+  useEffect(function(){ loadSessions(); }, []);
+
+  return (
+    <div className="tab-content">
+      {screen === 'list' && <ProspectionList sessions={sessions} loading={loading} onNew={function(){setScreen('new');}} onDetail={setDetailSession}/>}
+      {screen === 'new' && <ProspectionNew contacts={contacts} profile={profile} onStart={function(s){setActiveSession(s);setScreen('active');}} onBack={function(){setScreen('list');}}/>}
+      {screen === 'active' && activeSession && <ProspectionActive session={activeSession} contacts={contacts} contactMap={contactMap} profile={profile} onDone={function(){setScreen('list');loadSessions();onRefresh();}} onBack={function(){setScreen('list');}}/>}
+      {detailSession && <ProspectionDetailPanel session={detailSession} contactMap={contactMap} onClose={function(){setDetailSession(null);}}/>}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // APP
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -4468,10 +4850,11 @@ function App() {
       if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT'||e.target.isContentEditable)return;
       if(e.key==='1'){e.preventDefault();setTab('taches');}
       if(e.key==='2'){e.preventDefault();setTab('prospects');}
-      if(e.key==='3'){e.preventDefault();setTab('besoins');}
-      if(e.key==='4'){e.preventDefault();setTab('pipe');}
-      if(e.key==='5'){e.preventDefault();setTab('tdb');}
-      if(e.key==='6'){e.preventDefault();setTab('historique');}
+      if(e.key==='3'){e.preventDefault();setTab('prospection');}
+      if(e.key==='4'){e.preventDefault();setTab('besoins');}
+      if(e.key==='5'){e.preventDefault();setTab('pipe');}
+      if(e.key==='6'){e.preventDefault();setTab('tdb');}
+      if(e.key==='7'){e.preventDefault();setTab('historique');}
       if(e.key==='r'&&!e.metaKey&&!e.ctrlKey){e.preventDefault();fetchAll();}
     };
     window.addEventListener('keydown',h);return()=>window.removeEventListener('keydown',h);
@@ -4513,11 +4896,12 @@ function App() {
   const tachesActives=vTaches.filter(t=>t.statut!=='fait'&&t.statut!=='annule');
   const tachesRetard=tachesActives.filter(t=>t.due_date&&extractDate(t.due_date)<TODAY);
   const besoinsPipeActifs=vBesoins.filter(b=>b.statut!=='Besoin Perdu');
-  const TAB_COLORS={taches:'#0BA600',prospects:'#5090FE',besoins:'#FFEA2F',pipe:'#823DE8',tdb:'#FF78FD',historique:'#565861',settings:'#A4A6AB'};
+  const TAB_COLORS={taches:'#0BA600',prospects:'#5090FE',prospection:'#FFE500',besoins:'#FFEA2F',pipe:'#823DE8',tdb:'#FF78FD',historique:'#565861',settings:'#A4A6AB'};
   const activeColor=TAB_COLORS[tab]||'#5090FE';
   const TABS=[
     {id:'taches',     label:<><Icon d={ICONS.check} size={14}/> Tâches ({tachesActives.length}){tachesRetard.length>0&&<span className="w-2 h-2 bg-coral-100 rounded-full inline-block ml-1"/>}</>},
     {id:'prospects',  label:<><Icon d={ICONS.person} size={14}/> Contacts ({vContacts.length})</>},
+    {id:'prospection',label:<><Icon d={ICONS.phone} size={14}/> Prosp.</>},
     {id:'besoins',    label:<><Icon d={ICONS.target} size={14}/> Besoins ({vBesoins.length})</>},
     {id:'pipe',       label:<><Icon d={ICONS.chart} size={14}/> Pipe ({besoinsPipeActifs.length})</>},
     {id:'tdb',        label:<><Icon d={ICONS.work} size={14}/> Missions ({vMissions.length})</>},
@@ -4596,6 +4980,7 @@ function App() {
       )}
       <div id="main-content" role="main" className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-6">
         {tab==='prospects'&&<TabProspects contacts={vContacts} contactMap={contactMap} historique={vHistorique} taches={vTaches} missions={vMissions} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navContactId={navContactId} navContactKey={navContactKey} onNavToBesoin={navToBesoin} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
+        {tab==='prospection'&&<TabProspection profile={activeProfile} contacts={vContacts} contactMap={contactMap} onRefresh={fetchAll} isAdmin={activeIsAdmin}/>}
         {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} contactMap={contactMap} besoins={vBesoins} missions={vMissions} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance} navTacheId={navTacheId} navTacheKey={navTacheKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToMission={navToMission} prefs={prefs}/>}
         {tab==='besoins'  &&<TabBesoins  contacts={vContacts} contactMap={contactMap} besoins={vBesoins} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navBesoinId={navBesoinId} navBesoinKey={navBesoinKey} onNavToContact={navToContact} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
         {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} prefs={prefs}/>}
@@ -4607,7 +4992,7 @@ function App() {
       {showShortcuts&&(
         <Modal title={<><Icon d={ICONS.keyboard} size={14}/> Raccourcis clavier</>} onClose={()=>setShowShortcuts(false)}>
           <div className="space-y-2 text-sm">
-            {[['1–6','Changer d\'onglet'],['Entrée','Ouvrir le panneau / modal (au survol)'],['Échap','Fermer le panneau / modal'],['R','Rafraîchir les données']].map(([k,d])=>(
+            {[['1–7','Changer d\'onglet'],['Entrée','Ouvrir le panneau / modal (au survol)'],['Échap','Fermer le panneau / modal'],['R','Rafraîchir les données']].map(([k,d])=>(
               <div key={k} className="flex items-center gap-3">
                 <kbd className="px-2 py-1 bg-neutral-100 border rounded text-xs font-mono font-semibold text-carbon min-w-[40px] text-center">{k}</kbd>
                 <span className="text-slate">{d}</span>
