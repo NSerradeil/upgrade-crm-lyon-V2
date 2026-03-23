@@ -2335,7 +2335,23 @@ function BesoinCandidatsList({ besoinId, candidats, contacts, contactMap, profil
     onRefresh();
   };
   const updateEntretien=async(id,dateVal)=>{
-    await sb.from('besoin_candidats').update({date_entretien:dateVal||null}).eq('id',id);
+    const {error}=await sb.from('besoin_candidats').update({date_entretien:dateVal||null}).eq('id',id);
+    if(error){toast('Erreur : '+error.message,'error');return;}
+    // Créer une tâche entretien si date saisie
+    if(dateVal){
+      const bc=candidats.find(x=>x.id===id);
+      const c=bc?contactMap[bc.contact_id]:null;
+      const candidatName=c?`${c.prenom} ${c.nom}`:'Candidat';
+      await sb.from('taches').insert({
+        titre:`Entretien ${candidatName}`,
+        due_date:dateVal,
+        statut:'a_faire',
+        responsable:profile.nom,
+        besoin_id:besoinId,
+        contact_id:bc?.contact_id||null,
+      });
+      toast(`Tâche entretien créée pour ${candidatName}`);
+    }
     onRefresh();
   };
   const removeCandidat=async(id)=>{
