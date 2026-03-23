@@ -2350,11 +2350,11 @@ function BesoinCandidatsList({ besoinId, candidats, contacts, contactMap, profil
                 )}
                 {!readOnly?(
                   <select value={bc.statut} onChange={e=>updateStatut(bc.id,e.target.value)}
-                    className={`text-xs px-2 py-1 rounded-lg border-0 font-medium ${st.color}`}>
+                    style={{fontSize:11,padding:'3px 8px',fontWeight:700,borderRadius:0,border:'2px solid #E4E4E6',background:'#fff',cursor:'pointer'}}>
                     {CANDIDAT_STATUTS.map(s=><option key={s.value} value={s.value}>{s.label}</option>)}
                   </select>
                 ):(
-                  <span className={`text-xs px-2 py-1 rounded-lg font-medium ${st.color}`}>{st.label}</span>
+                  <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:0}} className={st.color}>{st.label}</span>
                 )}
                 {bc.statut==='entretien'&&!readOnly&&(
                   <input type="datetime-local" value={bc.date_entretien?String(bc.date_entretien).slice(0,16):''} onChange={e=>updateEntretien(bc.id,e.target.value||null)}
@@ -2619,11 +2619,7 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
       )}
       {gagneErrors.candidat&&<div className="text-xs text-coral-100">{gagneErrors.candidat}</div>}
 
-      {/* Entretien */}
-      {BESOIN_HAS_ENTRETIEN.has(f.statut)&&(editing
-        ?<Field label="Date entretien"><input type="datetime-local" value={f.date_entretien?.slice(0,16)||''} onChange={e=>setF(v=>({...v,date_entretien:e.target.value}))} className={inputCls}/></Field>
-        :besoin.date_entretien&&<div className="text-sm"><span className="text-[11px] text-slate uppercase tracking-wide">Entretien : </span>{new Date(besoin.date_entretien).toLocaleString('fr-FR',{timeZone:TZ})}</div>
-      )}
+      {/* Entretien — dates par candidat (voir BesoinCandidatsList), champ global retiré */}
 
       {/* Compte-rendu */}
       {BESOIN_HAS_CR.has(f.statut)&&(editing
