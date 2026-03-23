@@ -291,6 +291,28 @@ const BADGE_STYLE = { padding:'2px 8px', borderRadius:0, fontSize:11, fontWeight
 // SHARED COMPONENTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
+function BtnAction({ onClick, icon, label, variant='primary', disabled=false }) {
+  const V = {
+    primary: {background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #FF3D2E'},
+    task:    {background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #FFE500'},
+    edit:    {background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #4A7FE5'},
+    danger:  {background:'#fff',color:'#FF3D2E',border:'2px solid #FF3D2E',boxShadow:'4px 4px 0 #FF3D2E'},
+    success: {background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #00C218'},
+  };
+  const s = V[variant]||V.primary;
+  return <button onClick={onClick} disabled={disabled} style={{...s,padding:'6px 12px',fontSize:12,fontWeight:700,fontFamily:'Outfit,sans-serif',letterSpacing:'0.03em',cursor:disabled?'not-allowed':'pointer',opacity:disabled?0.5:1,display:'inline-flex',alignItems:'center',gap:5,borderRadius:0,transition:'all 80ms ease',textTransform:'uppercase'}}
+    onMouseEnter={e=>{if(!disabled)e.currentTarget.style.transform='translate(-2px,-2px)';}}
+    onMouseLeave={e=>{e.currentTarget.style.transform='none';}}>{icon&&<Icon d={icon} size={13}/>}{label}</button>;
+}
+
+function ConfirmDelete({ onConfirm, onCancel, loading }) {
+  return <div style={{display:'flex',alignItems:'center',gap:8}}>
+    <span style={{fontSize:11,fontWeight:700,color:'#FF3D2E',textTransform:'uppercase',letterSpacing:'0.05em'}}>Confirmer ?</span>
+    <button onClick={onConfirm} disabled={loading} style={{background:'#FF3D2E',color:'#fff',border:'2px solid #FF3D2E',boxShadow:'3px 3px 0 #1C1F35',padding:'4px 12px',fontSize:11,fontWeight:800,borderRadius:0,cursor:loading?'wait':'pointer',textTransform:'uppercase',fontFamily:'Outfit,sans-serif'}}>{loading?'...':'Oui, supprimer'}</button>
+    <button onClick={onCancel} style={{background:'#fff',color:'#1C1F35',border:'2px solid #1C1F35',padding:'4px 10px',fontSize:11,fontWeight:700,borderRadius:0,cursor:'pointer',textTransform:'uppercase',fontFamily:'Outfit,sans-serif'}}>Annuler</button>
+  </div>;
+}
+
 function ChartHeader({ title, kpi, kpiLabel, color, children }) {
   return (
     <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:4,flexWrap:'wrap'}}>
@@ -1109,15 +1131,14 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
     toast('Contact supprimé');onRefresh(); onClose();
   };
   const actions = isOwner && (
-    <>
-      <button onClick={()=>setModal('edit')} className="px-3 py-1.5 text-xs bg-midnight text-white font-medium btn-brutal"><Icon d={ICONS.edit} size={14}/> Modifier</button>
-      <button onClick={()=>setModal('hist')} className="px-3 py-1.5 text-xs bg-midnight text-white font-medium btn-brutal"><Icon d={ICONS.add} size={14}/> Action</button>
-      <button onClick={()=>setModal('tache')} className="px-3 py-1.5 text-xs border-2 border-neutral-200 text-carbon font-medium hover:border-midnight"><Icon d={ICONS.check} size={14}/> Tâche</button>
+    <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+      <BtnAction variant="primary" icon={ICONS.add} label="+ Action" onClick={()=>setModal('hist')}/>
+      <BtnAction variant="task" icon={ICONS.check} label="Tâche" onClick={()=>setModal('tache')}/>
+      <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setModal('edit')}/>
       {modal!=='confirmDel'
-        ? <button onClick={()=>setModal('confirmDel')} className="px-3 py-1.5 text-xs border-2 border-coral-100 text-coral-100 font-medium hover:bg-coral-100 hover:text-white transition-colors"><Icon d={ICONS.delete} size={14}/></button>
-        : <div className="flex gap-2 items-center"><span className="text-xs text-red-700">Supprimer ?</span><button onClick={handleDelete} disabled={deleting} className="px-2 py-1 text-xs bg-coral-100 text-white rounded">{deleting?'...':'Oui'}</button><button onClick={()=>setModal(null)} className="text-xs text-slate">Non</button></div>
-      }
-    </>
+        ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
+        : <ConfirmDelete onConfirm={handleDelete} onCancel={()=>setModal(null)} loading={deleting}/>}
+    </div>
   );
   return (
     <SidePanel title={`${contact.prenom} ${contact.nom}`}
@@ -1358,6 +1379,7 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
   const [modal,setModal]=useState(null);
   const [viewContact,setViewContact]=useState(null);
   const [tick,setTick]=useState(0);
+  const [deleting,setDeleting]=useState(false);
   const isAdmin=profile.role==='admin';
   const canEdit = isAdmin || mission.responsable===profile.nom;
   const hist = (histMissions||[]).filter(h=>h.mission_id===mission.id)
@@ -1381,14 +1403,24 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
   const tauxMarge  = caTotal>0?(margeTotal/caTotal*100):0;
 
   const saved = () => { setShowAdd(false); setModal(null); onRefresh(); };
+  const handleDelete = async () => {
+    setDeleting(true);
+    await sb.from('historique_missions').delete().eq('mission_id',mission.id);
+    await sb.from('missions').delete().eq('id',mission.id);
+    toast('Mission supprimée');onClose();onRefresh();
+  };
 
   const missionTaches = (taches||[]).filter(t=>t.mission_id===mission.id&&t.statut!=='fait'&&t.statut!=='annule');
-  const actions = canEdit ? (<div className="flex gap-2 flex-wrap">
-    <button onClick={()=>setModal('edit')} className="px-3 py-1.5 text-xs bg-midnight text-white font-medium btn-brutal"><Icon d={ICONS.edit} size={14}/> Modifier</button>
-    <button onClick={()=>setShowAdd(true)} className="px-3 py-1.5 text-xs bg-midnight text-white font-medium btn-brutal"><Icon d={ICONS.add} size={14}/> Action</button>
-    <button onClick={()=>setModal('tache')} className="px-3 py-1.5 text-xs border-2 border-neutral-200 text-carbon font-medium hover:border-midnight"><Icon d={ICONS.check} size={14}/> Tâche</button>
-    <button onClick={()=>setModal('confirmDel')} className="px-3 py-1.5 text-xs border-2 border-coral-100 text-coral-100 font-medium hover:bg-coral-100 hover:text-white transition-colors"><Icon d={ICONS.delete} size={14}/></button>
-  </div>) : null;
+  const actions = canEdit ? (
+    <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+      <BtnAction variant="primary" icon={ICONS.add} label="+ Action" onClick={()=>setShowAdd(true)}/>
+      <BtnAction variant="task" icon={ICONS.check} label="Tâche" onClick={()=>setModal('tache')}/>
+      <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setModal('edit')}/>
+      {modal!=='confirmDel'
+        ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
+        : <ConfirmDelete onConfirm={handleDelete} onCancel={()=>setModal(null)} loading={deleting}/>}
+    </div>
+  ) : null;
 
   return (
     <SidePanel title={consultantContact?<span className="cursor-pointer text-azure-100 hover:underline" onClick={()=>{if(onNavToContact){onClose();onNavToContact(consultantContact.id);}else setViewContact(consultantContact);}}>{mission.consultant}</span>:mission.consultant} badge={<div className="flex gap-2 flex-wrap"><MissionStatutBadge statut={mission.statut}/>{mission.agence&&<span className="text-xs bg-azure-20 text-azure-100 px-2 py-0.5 rounded-full font-medium">{mission.agence}</span>}{mission.type_contrat&&<span className="text-xs bg-neutral-100 text-slate px-2 py-0.5 rounded-full">{mission.type_contrat}</span>}</div>} onClose={onClose} actions={actions}>
@@ -1486,7 +1518,6 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
       {showAdd&&<AddHistMissionModal mission={mission} profile={profile} onClose={()=>setShowAdd(false)} onSaved={saved}/>}
       {modal==='edit'&&<MissionFormModal mission={mission} profile={profile} allProfiles={allProfiles} contacts={contacts} besoins={besoins} onClose={()=>setModal(null)} onSaved={saved}/>}
       {modal==='tache'&&<AddTacheModal contacts={contacts} besoins={besoins||[]} missions={missions||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved} defaultMissionId={mission.id}/>}
-      {modal==='confirmDel'&&<DeleteMissionModal mission={mission} onClose={()=>setModal(null)} onDeleted={()=>{onClose();onRefresh();}}/>}
       {viewContact&&<ContactDetail contact={viewContact} historique={[]} taches={[]} profile={profile} allProfiles={allProfiles} onClose={()=>setViewContact(null)} onRefresh={()=>{setViewContact(null);onRefresh();}}/>}
     </SidePanel>
   );
@@ -1861,15 +1892,20 @@ function AddActionFromTaskModal({ task, contact, profile, onClose, onSaved }) {
 
 function TacheDetailPanel({ task, contact, besoinLabel, mission, besoin, historique, profile, onClose, onEdit, onComplete, onDelete, onAddAction, canEdit, onViewContact, onViewMission, onViewBesoin }) {
   const [showAddAction,setShowAddAction]=useState(false);
+  const [modal,setModal]=useState(null);
   const statusColor = task.statut==='fait'?'bg-jade-20 text-jade-100':task.overdue?'bg-coral-20 text-coral-100':'bg-azure-20 text-azure-100';
   const statusLabel = task.statut==='fait'?'Fait':task.overdue?'En retard':task.statut==='en_cours'?'En cours':'À faire';
   const taskHist = (historique||[]).filter(h=>h.tache_id===task.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  const actions = canEdit ? (<div className="flex gap-2 flex-wrap">
-    <button onClick={onEdit} className="px-3 py-1.5 text-xs bg-midnight text-white font-medium btn-brutal"><Icon d={ICONS.edit} size={14}/> Modifier</button>
-    <button onClick={()=>setShowAddAction(true)} className="px-3 py-1.5 text-xs bg-midnight text-white font-medium btn-brutal"><Icon d={ICONS.add} size={14}/> Action</button>
-    <button onClick={onComplete} className="px-3 py-1.5 text-xs border-2 border-neutral-200 text-carbon font-medium hover:border-midnight"><Icon d={ICONS.check} size={14}/> Marquer fait</button>
-    <button onClick={onDelete} className="px-3 py-1.5 text-xs border-2 border-coral-100 text-coral-100 font-medium hover:bg-coral-100 hover:text-white transition-colors"><Icon d={ICONS.delete} size={14}/></button>
-  </div>) : null;
+  const actions = canEdit ? (
+    <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+      <BtnAction variant="primary" icon={ICONS.add} label="+ Action" onClick={()=>setShowAddAction(true)}/>
+      <BtnAction variant="success" icon={ICONS.check} label="Marquer fait" onClick={onComplete}/>
+      <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={onEdit}/>
+      {modal!=='confirmDel'
+        ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
+        : <ConfirmDelete onConfirm={onDelete} onCancel={()=>setModal(null)} loading={false}/>}
+    </div>
+  ) : null;
   return (
     <SidePanel title={task.titre} badge={<span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor}`}>{statusLabel}</span>} onClose={onClose} actions={actions}>
       <div className="space-y-4">
@@ -2478,15 +2514,16 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
   };
 
   const actions=isOwner&&(
-    <>
-      <button onClick={()=>setEditing(!editing)} className="px-3 py-1.5 text-xs bg-midnight text-white font-medium btn-brutal">{editing?'Annuler':<><Icon d={ICONS.edit} size={14}/> Modifier</>}</button>
-      <button onClick={()=>setModal('hist')} className="px-3 py-1.5 text-xs bg-midnight text-white font-medium btn-brutal"><Icon d={ICONS.add} size={14}/> Action</button>
-      <button onClick={()=>setModal('tache')} className="px-3 py-1.5 text-xs border-2 border-neutral-200 text-carbon font-medium hover:border-midnight"><Icon d={ICONS.check} size={14}/> Tâche</button>
-      {modal!=='confirmDel'
-        ?<button onClick={()=>setModal('confirmDel')} className="px-3 py-1.5 text-xs border-2 border-coral-100 text-coral-100 font-medium hover:bg-coral-100 hover:text-white transition-colors"><Icon d={ICONS.delete} size={14}/></button>
-        :<div className="flex gap-2 items-center"><span className="text-xs text-red-700">Supprimer ?</span><button onClick={handleDelete} disabled={deleting} className="px-2 py-1 text-xs bg-coral-100 text-white rounded">{deleting?'...':'Oui'}</button><button onClick={()=>setModal(null)} className="text-xs text-slate">Non</button></div>
-      }
-    </>
+    <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+      <BtnAction variant="primary" icon={ICONS.add} label="+ Action" onClick={()=>setModal('hist')}/>
+      <BtnAction variant="task" icon={ICONS.check} label="Tâche" onClick={()=>setModal('tache')}/>
+      {editing
+        ? <BtnAction variant="task" icon={ICONS.close} label="Annuler" onClick={()=>setEditing(false)}/>
+        : <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setEditing(true)}/>}
+      {!editing && (modal!=='confirmDel'
+        ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
+        : <ConfirmDelete onConfirm={handleDelete} onCancel={()=>setModal(null)} loading={deleting}/>)}
+    </div>
   );
 
   return (
