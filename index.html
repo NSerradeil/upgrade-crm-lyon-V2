@@ -208,6 +208,7 @@ const BESOIN_HAS_CANDIDAT = new Set(['Push opportuniste','Profil proposé','Entr
 const CANDIDAT_STATUTS=[
   {value:'en_attente',label:'En attente',color:'bg-neutral-100 text-slate',dot:'bg-neutral-300'},
   {value:'propose',label:'Proposé',color:'bg-azure-20 text-azure-100',dot:'bg-azure-200'},
+  {value:'entretien',label:'Entretien',color:'bg-lemon-20 text-midnight',dot:'bg-lemon-100'},
   {value:'retenu',label:'Retenu',color:'bg-jade-20 text-jade-100',dot:'bg-jade-200'},
   {value:'refuse',label:'Refusé',color:'bg-coral-20 text-coral-100',dot:'bg-coral-200'},
 ];
@@ -2295,6 +2296,10 @@ function BesoinCandidatsList({ besoinId, candidats, contacts, contactMap, profil
     if(error){toast('Erreur : '+error.message,'error');return;}
     onRefresh();
   };
+  const updateEntretien=async(id,dateVal)=>{
+    await sb.from('besoin_candidats').update({date_entretien:dateVal||null}).eq('id',id);
+    onRefresh();
+  };
   const removeCandidat=async(id)=>{
     const {error}=await sb.from('besoin_candidats').delete().eq('id',id);
     if(error){toast('Erreur : '+error.message,'error');return;}
@@ -2331,7 +2336,7 @@ function BesoinCandidatsList({ besoinId, candidats, contacts, contactMap, profil
             if(!c) return null;
             const st=statutObj(bc.statut);
             return (
-              <div key={bc.id} className="flex items-center gap-2 bg-neutral-50 rounded-lg px-3 py-2 flex-wrap">
+              <div key={bc.id} className="flex items-center gap-2 bg-neutral-50 rounded-lg px-3 py-2 flex-wrap" style={{...(bc.statut==='entretien'?{background:'#FFFDE7',borderLeft:'3px solid #FFE500'}:{}),borderRadius:0}}>
                 <div className={`w-2 h-2 rounded-full shrink-0 ${st.dot}`}/>
                 <div className="flex-1 min-w-0">
                   {onNavToContact?<button onClick={()=>{onClose?.();onNavToContact(c.id);}} className="text-sm font-medium text-midnight underline decoration-2 decoration-lemon-100 underline-offset-2 hover:bg-lemon-20 truncate text-left cursor-pointer transition-colors">{c.prenom} {c.nom}</button>:<div className="text-sm font-medium text-midnight truncate">{c.prenom} {c.nom}</div>}
@@ -2350,6 +2355,15 @@ function BesoinCandidatsList({ besoinId, candidats, contacts, contactMap, profil
                   </select>
                 ):(
                   <span className={`text-xs px-2 py-1 rounded-lg font-medium ${st.color}`}>{st.label}</span>
+                )}
+                {bc.statut==='entretien'&&!readOnly&&(
+                  <input type="datetime-local" value={bc.date_entretien?String(bc.date_entretien).slice(0,16):''} onChange={e=>updateEntretien(bc.id,e.target.value||null)}
+                    style={{fontSize:11,padding:'3px 6px',border:'2px solid #FFE500',borderRadius:0,background:'#fff',color:'#1C1F35',fontFamily:'Outfit,sans-serif'}}/>
+                )}
+                {bc.statut==='entretien'&&readOnly&&bc.date_entretien&&(
+                  <span style={{fontSize:11,color:'#92400e',fontWeight:700}}>
+                    {new Date(bc.date_entretien).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
+                  </span>
                 )}
                 {!readOnly&&<button onClick={()=>removeCandidat(bc.id)} className="text-neutral-200 hover:text-red-500 text-sm shrink-0" title="Retirer">×</button>}
               </div>
