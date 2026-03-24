@@ -2560,7 +2560,7 @@ function AddBesoinModal({ contacts, profile, allProfiles, onClose, onSaved }) {
 // Status stepper interactif (lecture seule, cliquable)
 function BesoinStatusStepper2({ besoin, onStatusChange, onContextualChange }) {
   var PIPELINE = ['Opportunité','Push opportuniste','Besoin ouvert','Profil proposé','Entretien programmé','Entretien passé','Besoin Gagné','Besoin Perdu'];
-  var SIMPLE = new Set(['Opportunité','Push opportuniste','Besoin ouvert']);
+  var SIMPLE = new Set(['Opportunité','Besoin ouvert']);
   var SHORT = {'Opportunité':'Opport.','Push opportuniste':'Push','Besoin ouvert':'Ouvert','Profil proposé':'Proposé','Entretien programmé':'Entr. prog.','Entretien passé':'Entr. passé','Besoin Gagné':'Gagné','Besoin Perdu':'Perdu'};
   var currentIdx = PIPELINE.indexOf(besoin.statut);
 
