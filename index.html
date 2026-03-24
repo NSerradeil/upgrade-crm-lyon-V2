@@ -2577,9 +2577,9 @@ function BesoinStatusStepper2({ besoin, onStatusChange, onContextualChange }) {
           else onContextualChange(s);
         }} style={{
           padding:'4px 10px',fontSize:10,fontWeight:isCurrent?900:700,
-          background:isCurrent?'#1C1F35':isPast?'#f5f5f5':'#fff',
-          color:isCurrent?'#fff':isPast?'#aaa':'#1C1F35',
-          border:isCurrent?'0':'1px solid '+(isPast?'#ddd':'#E4E4E6'),
+          background:isCurrent?'#1C1F35':'#fff',
+          color:isCurrent?'#fff':'#1C1F35',
+          border:isCurrent?'0':'1px solid #E4E4E6',
           boxShadow:isCurrent?'3px 3px 0 '+bc.bg:'none',
           transform:isCurrent?'translate(-1px,-1px)':'none',
           cursor:isCurrent?'default':'pointer',
@@ -2672,7 +2672,8 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
 
   // Contextual status change — open micro-form
   const handleContextualStatus = function(statut) {
-    setStatusForm(statut);
+    setF(function(v){var n={};for(var k in v)n[k]=v[k];n.statut=statut;return n;});
+    setEditing(true);
   };
 
   // Contextual form confirm handler
@@ -2791,7 +2792,6 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
       {/* Stepper statut interactif (view mode) */}
       {!editing && isOwner && <BesoinStatusStepper2 besoin={besoin} onStatusChange={handleSimpleStatus} onContextualChange={handleContextualStatus}/>}
       {/* Micro-form pour statuts contextuels */}
-      {statusForm && <BesoinMicroForm targetStatut={statusForm} besoin={besoin} onConfirm={handleContextualConfirm} onCancel={function(){setStatusForm(null);}} saving={statusSaving}/>}
 
       {/* Infos générales */}
       <div className="grid grid-cols-2 gap-3 text-sm">
