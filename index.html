@@ -759,7 +759,7 @@ function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
       <div className="grid grid-cols-2 gap-3">
         <Field label="Statut"><select value={f.statut} onChange={s('statut')} className={inputCls}>{STATUTS_CONTACT.map(x=><option key={x} value={x}>{x}</option>)}</select></Field>
         {isAdmin&&<Field label="Responsable"><select value={f.responsable} onChange={s('responsable')} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>}
-        <Field label="Agence">{canEditAgence?<select value={f.agence||''} onChange={s('agence')} className={inputCls}><option value="Lyon">Lyon</option><option value="Paris">Paris</option><option value="Bordeaux">Bordeaux</option></select>:<div className={inputCls} style={{background:'#f5f5f5',color:'#999',borderRadius:0}}>{contact.agence||'\u2014'}</div>}</Field>
+        <Field label="Agence">{canEditAgence?<select value={f.agence||''} onChange={s('agence')} className={inputCls}><option value="Lyon">Lyon</option><option value="Paris">Paris</option><option value="Bordeaux">Bordeaux</option><option value="Nantes">Nantes</option></select>:<div className={inputCls} style={{background:'#f5f5f5',color:'#999',borderRadius:0}}>{contact.agence||'\u2014'}</div>}</Field>
       </div>
       {['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)&&<Field label="ATS (lien candidat)"><input type="url" value={f.ats} onChange={s('ats')} className={inputCls} placeholder="Lien Recruitee"/></Field>}
       <Field label="Commentaires"><textarea rows={3} value={f.commentaires} onChange={s('commentaires')} className={inputCls+' resize-none'}/></Field>
@@ -4357,7 +4357,7 @@ function PreferencesPanel({ prefs, onSave, profileNom }) {
   };
 
   const TAB_OPTIONS=[{v:'taches',l:'Tâches'},{v:'prospects',l:'Contacts'},{v:'prospection',l:'Prospection'},{v:'besoins',l:'Besoins'},{v:'pipe',l:'Pipe'},{v:'tdb',l:'Missions'},{v:'historique',l:'Historique'}];
-  const AGENCES=['Lyon','Paris','Bordeaux'];
+  const AGENCES=['Lyon','Paris','Bordeaux','Nantes'];
 
   const selectStyle={appearance:'none',padding:'9px 36px 9px 12px',border:'1px solid #e2e8f0',borderRadius:9,fontSize:'13.5px',fontWeight:500,color:'#1e293b',background:'white url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath d=\'M3 4.5L6 7.5L9 4.5\' fill=\'none\' stroke=\'%2394a3b8\' stroke-width=\'1.5\' stroke-linecap=\'round\'/%3E%3C/svg%3E") no-repeat right 12px center',boxShadow:'0 1px 2px rgba(0,0,0,.04)',width:'100%',outline:'none'};
   const segGroup={display:'inline-flex',background:'#f1f5f9',borderRadius:10,padding:3,gap:2,border:'1px solid #e2e8f0'};
@@ -4999,7 +4999,7 @@ function ProspectionNew({ contacts, profile, onStart, onBack }) {
       </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:20}}>
         <Field label="Nom de la session"><input value={nom} onChange={function(e){setNom(e.target.value);}} placeholder="Ex: Grands comptes Lyon" className={inputCls}/></Field>
-        <Field label="Agence"><select value={agence} onChange={function(e){setAgence(e.target.value);}} className={inputCls}><option value="">Toutes</option><option value="Lyon">Lyon</option><option value="Paris">Paris</option><option value="Bordeaux">Bordeaux</option></select></Field>
+        <Field label="Agence"><select value={agence} onChange={function(e){setAgence(e.target.value);}} className={inputCls}><option value="">Toutes</option><option value="Lyon">Lyon</option><option value="Paris">Paris</option><option value="Bordeaux">Bordeaux</option><option value="Nantes">Nantes</option></select></Field>
         <Field label="Dernier contact > X jours"><select value={delai} onChange={function(e){setDelai(+e.target.value);}} className={inputCls}><option value={0}>Tous</option><option value={14}>14 jours</option><option value={30}>30 jours</option><option value={60}>60 jours</option><option value={90}>90 jours</option></select></Field>
       </div>
       <div style={{display:'flex',gap:12,alignItems:'center',marginBottom:12}}>
@@ -5287,7 +5287,7 @@ function ProspectionEditContacts({ session, contacts, profile, onSaved, onBack }
         <div style={{display:'flex',gap:10,marginBottom:10,flexWrap:'wrap'}}>
           <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Rechercher par nom, société, ville..." style={{flex:1,minWidth:180,padding:'8px 12px',border:'2px solid #E4E4E6',borderRadius:0,fontSize:13,fontFamily:'Outfit,sans-serif'}}/>
           <select value={agence} onChange={function(e){setAgence(e.target.value);}} style={{padding:'8px 12px',border:'2px solid #E4E4E6',borderRadius:0,fontSize:13,fontFamily:'Outfit,sans-serif'}}>
-            <option value="">Toutes agences</option><option value="Lyon">Lyon</option><option value="Paris">Paris</option><option value="Bordeaux">Bordeaux</option>
+            <option value="">Toutes agences</option><option value="Lyon">Lyon</option><option value="Paris">Paris</option><option value="Bordeaux">Bordeaux</option><option value="Nantes">Nantes</option>
           </select>
           <select value={delai} onChange={function(e){setDelai(+e.target.value);}} style={{padding:'8px 12px',border:'2px solid #E4E4E6',borderRadius:0,fontSize:13,fontFamily:'Outfit,sans-serif'}}>
             <option value={0}>Tous</option><option value={14}>{'>'} 14 jours</option><option value={30}>{'>'} 30 jours</option><option value={60}>{'>'} 60 jours</option><option value={90}>{'>'} 90 jours</option>
