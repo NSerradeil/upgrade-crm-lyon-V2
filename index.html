@@ -4793,7 +4793,10 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit,
             </div>
           </div>
         );})}
-        {filtered.length===0&&!loading&&<div style={{padding:48,textAlign:'center',color:'#ccc',fontSize:13,fontWeight:700}}>Aucune session — lance ta première prospection</div>}
+        {filtered.length===0&&!loading&&<div style={{padding:48,textAlign:'center'}}>
+  <div style={{fontSize:13,color:'#999',fontWeight:700,marginBottom:12}}>Aucune session — lance ta première prospection</div>
+  <BtnAction variant="primary" icon={ICONS.add} label="Nouvelle session" onClick={onNew}/>
+</div>}
       </div>
     </div>
   );
@@ -4927,6 +4930,22 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
     relances: items.filter(function(c){return c.wantRelance&&c.relanceDate;}).length,
   };}, [items]);
 
+  useEffect(function(){
+    var handler = function(e){
+      if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT') return;
+      if(view!=='focus') return;
+      var idx = focusIdx;
+      if(e.key==='ArrowRight'||e.key==='ArrowDown'){e.preventDefault();setFocusIdx(Math.min(items.length-1,idx+1));}
+      if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault();setFocusIdx(Math.max(0,idx-1));}
+      if(e.key==='a'||e.key==='A'){updateItem(idx,{status:items[idx].status==='called'?'none':'called'});}
+      if(e.key==='i'||e.key==='I'){updateItem(idx,{status:items[idx].status==='interested'?'none':'interested'});}
+      if(e.key==='n'||e.key==='N'){updateItem(idx,{status:items[idx].status==='unreachable'?'none':'unreachable'});}
+      if(e.key==='p'||e.key==='P'){updateItem(idx,{status:items[idx].status==='not_interested'?'none':'not_interested'});}
+    };
+    window.addEventListener('keydown',handler);
+    return function(){window.removeEventListener('keydown',handler);};
+  },[view,focusIdx,items]);
+
   var handleTerminer = async function(){
     setSaving(true);
     var todayStr = getToday();
@@ -5009,10 +5028,14 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
           </button>
         </div>
       </div>
-      <div style={{display:'flex',gap:16,marginBottom:16,fontSize:11,fontWeight:700}}>
+      <div style={{display:'flex',gap:16,marginBottom:16,fontSize:11,fontWeight:700,alignItems:'center'}}>
         <span style={{color:'#2C5FC4'}}>{stats.done} appelés</span>
         <span style={{color:'#007A10'}}>{stats.interested} intéressés</span>
         <span style={{color:'#B8A000'}}>{stats.relances} relances</span>
+        <div style={{flex:1,height:6,background:'#E4E4E6',position:'relative',minWidth:80}}>
+          <div style={{height:6,background:stats.done===items.length?'#00C218':stats.done>0?'#4A7FE5':'#E4E4E6',width:(items.length>0?Math.round(stats.done/items.length*100):0)+'%',transition:'width 300ms'}}/>
+        </div>
+        <span style={{fontSize:11,fontWeight:900,color:stats.done===items.length?'#007A10':'#1C1F35'}}>{stats.done}/{items.length}</span>
       </div>
       {view === 'list' ? (
         <div style={{border:'2px solid #E4E4E6'}}>
@@ -5026,6 +5049,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
             <button onClick={function(){setFocusIdx(Math.min(items.length-1,focusIdx+1));}} disabled={focusIdx===items.length-1} style={{padding:'4px 12px',border:'2px solid #E4E4E6',background:'#fff',cursor:'pointer',borderRadius:0,opacity:focusIdx===items.length-1?0.3:1}}>Suivant</button>
           </div>
           <ProspectionContactCard sc={current} idx={focusIdx} updateItem={updateItem} expanded/>
+          {view==='focus'&&<div style={{fontSize:9,color:'#ccc',marginTop:4}}>Raccourcis : A=Appelé · I=Intéressé · N=iNjoignable · P=Pas intéressé · ←→ Navigation</div>}
         </div>
       ) : null}
       {showConfirm && <Modal title="Terminer la session ?" onClose={function(){setShowConfirm(false);}} footer={<>
