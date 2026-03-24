@@ -724,12 +724,13 @@ function respOptions(allProfiles, current) {
 
 function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
   const isAdmin=profile.role==='admin';
-  const [f,setF] = useState({ telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', responsable:contact.responsable||'', linkedin:contact.linkedin||'', ats:contact.ats||'' });
+  const [f,setF] = useState({ telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', responsable:contact.responsable||'', linkedin:contact.linkedin||'', ats:contact.ats||'', agence:contact.agence||'' });
+  const canEditAgence = isAdmin || (contact.responsable === profile.nom);
   const [saving,setSaving]=useState(false); const [err,setErr]=useState('');
   const s = k => e => setF(v=>({...v,[k]:e.target.value}));
   const save = async () => {
     setSaving(true);
-    const upd={ telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, groupe:f.groupe||null, responsable:f.responsable||contact.responsable, linkedin:f.linkedin||null, updated_at:new Date().toISOString() };
+    const upd={ telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, groupe:f.groupe||null, responsable:f.responsable||contact.responsable, linkedin:f.linkedin||null, agence:f.agence||contact.agence, updated_at:new Date().toISOString() };
     if(['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)) upd.ats=f.ats||null;
     const { error } = await sb.from('contacts').update(upd).eq('id',contact.id);
     if (error) { setErr(error.message); setSaving(false); }
@@ -739,6 +740,7 @@ function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
       if ((f.groupe||'') !== (contact.groupe||'')) changes.push(`société → ${f.groupe||'(vide)'}`);
       if ((f.ville||'') !== (contact.ville||'')) changes.push(`ville → ${f.ville||'(vide)'}`);
       if (f.responsable !== (contact.responsable||'')) changes.push(`responsable → ${f.responsable}`);
+      if (f.agence && f.agence !== (contact.agence||'')) changes.push(`agence → ${f.agence}`);
       const details = changes.length ? `Fiche modifiée : ${changes.join(', ')}` : 'Fiche contact modifiée';
       await sb.from('historique_actions').insert({ id_prospect:contact.id, date:getToday(), type_action:'Note interne', details, responsable:profile?.nom||contact.responsable });
       toast('Contact modifié');onSaved();
@@ -757,6 +759,7 @@ function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
       <div className="grid grid-cols-2 gap-3">
         <Field label="Statut"><select value={f.statut} onChange={s('statut')} className={inputCls}>{STATUTS_CONTACT.map(x=><option key={x} value={x}>{x}</option>)}</select></Field>
         {isAdmin&&<Field label="Responsable"><select value={f.responsable} onChange={s('responsable')} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>}
+        <Field label="Agence">{canEditAgence?<select value={f.agence||''} onChange={s('agence')} className={inputCls}><option value="Lyon">Lyon</option><option value="Paris">Paris</option><option value="Bordeaux">Bordeaux</option></select>:<div className={inputCls} style={{background:'#f5f5f5',color:'#999',borderRadius:0}}>{contact.agence||'\u2014'}</div>}</Field>
       </div>
       {['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)&&<Field label="ATS (lien candidat)"><input type="url" value={f.ats} onChange={s('ats')} className={inputCls} placeholder="Lien Recruitee"/></Field>}
       <Field label="Commentaires"><textarea rows={3} value={f.commentaires} onChange={s('commentaires')} className={inputCls+' resize-none'}/></Field>
@@ -1195,6 +1198,7 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div><span className="text-[11px] text-slate uppercase tracking-wide">Ville</span><br/><span className="text-carbon font-medium">{contact.ville||'—'}</span></div>
         <div><span className="text-[11px] text-slate uppercase tracking-wide">Responsable</span><br/><span className="text-carbon font-medium">{contact.responsable||'—'}</span></div>
+        <div><span className="text-[11px] text-slate uppercase tracking-wide">Agence</span><br/><span className="text-carbon font-medium">{contact.agence||'—'}</span></div>
         {contact.email&&<div className="col-span-2"><span className="text-[11px] text-slate uppercase tracking-wide">Email</span><br/><a href={`mailto:${contact.email}`} className="text-azure-100 hover:underline font-medium">{contact.email}</a></div>}
         {contact.telephone&&<div><span className="text-[11px] text-slate uppercase tracking-wide">Tel</span><br/><a href={`tel:${contact.telephone}`} className="text-jade-100 font-mono font-medium">{contact.telephone}</a></div>}
         {contact.linkedin&&<div><span className="text-[11px] text-slate uppercase tracking-wide">LinkedIn</span><br/><a href={contact.linkedin} target="_blank" className="text-azure-100 hover:underline text-xs">→ Profil LinkedIn</a></div>}
@@ -1613,6 +1617,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
   const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState(prefResp);
   const [filterAgence,setFilterAgence]=useState('');
+  const [filterMine,setFilterMine]=useState(false);
   const [sortCol,setSortCol]=useState('date_dernier'); const [sortDir,setSortDir]=useState('desc');
   const [selected,setSelected]=useState(null); const [showAdd,setShowAdd]=useState(false);
   useEffect(()=>{ if(navContactId){ const c=contacts.find(x=>x.id===navContactId||String(x.id)===String(navContactId)); if(c) setSelected(c); } },[navContactKey]);
@@ -1638,9 +1643,10 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
     const rows=contacts
       .map(c=>({...c,jours:daysSince(c.date_dernier)}))
       .filter(c=>{
+        if(filterMine&&c.responsable!==profile.nom) return false;
         if(filterStatut&&c.statut!==filterStatut) return false;
-        if(filterAgence&&c.agence!==filterAgence) return false;
-        if(filterResp&&c.responsable!==filterResp) return false;
+        if(!filterMine&&filterAgence&&c.agence!==filterAgence) return false;
+        if(!filterMine&&filterResp&&c.responsable!==filterResp) return false;
         if(filterPeriode==='7j'&&c.jours>7) return false;
         if(filterPeriode==='30j'&&c.jours>30) return false;
         if(q&&![c.prenom,c.nom,c.groupe,c.ville,c.role,c.besoins].some(v=>(v||'').toLowerCase().includes(q))) return false;
@@ -1660,10 +1666,10 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
       return 0;
     });
     return rows;
-  },[contacts,search,filterStatut,filterPeriode,filterResp,filterAgence,sortCol,sortDir]);
+  },[contacts,search,filterStatut,filterPeriode,filterResp,filterAgence,filterMine,profile.nom,sortCol,sortDir]);
 
-  const hasFilter=search||filterStatut||filterPeriode||filterResp||filterAgence;
-  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterPeriode('');setFilterResp('');setFilterAgence('');};
+  const hasFilter=search||filterStatut||filterPeriode||filterResp||filterAgence||filterMine;
+  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterPeriode('');setFilterResp('');setFilterAgence('');setFilterMine(false);};
   const thCls="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-azure-100 whitespace-nowrap";
   return (
     <div className="tab-content">
@@ -1690,6 +1696,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
           <option value="">Tous{filterAgence?` (${filterAgence})`:''}</option>
           {responsablesVisibles.map(r=><option key={r} value={r}>{r}{r===profile.nom?' (moi)':''}</option>)}
         </select>
+        <button onClick={function(){setFilterMine(!filterMine);if(!filterMine){setFilterAgence('');setFilterResp('');}}} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:filterMine?'0':'2px solid #E4E4E6',background:filterMine?'#1C1F35':'#fff',color:filterMine?'#fff':'#1C1F35',cursor:'pointer',borderRadius:0,textTransform:'uppercase',boxShadow:filterMine?'3px 3px 0 #FFE500':'none',transition:'all 120ms'}}>Mes contacts ({contacts.filter(function(c){return c.responsable===profile.nom;}).length})</button>
         {hasFilter&&<button onClick={resetAll} className="px-2 sm:px-3 py-2 text-sm text-slate hover:text-carbon">✕</button>}
       </div>
       <div className="text-xs text-neutral-300 mb-2">{filtered.length} contact{filtered.length>1?'s':''}</div>
