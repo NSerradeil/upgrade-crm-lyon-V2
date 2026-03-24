@@ -2557,6 +2557,86 @@ function AddBesoinModal({ contacts, profile, allProfiles, onClose, onSaved }) {
   );
 }
 
+// Status stepper interactif (lecture seule, cliquable)
+function BesoinStatusStepper2({ besoin, onStatusChange, onContextualChange }) {
+  var PIPELINE = ['Opportunité','Push opportuniste','Besoin ouvert','Profil proposé','Entretien programmé','Entretien passé','Besoin Gagné','Besoin Perdu'];
+  var SIMPLE = new Set(['Opportunité','Push opportuniste','Besoin ouvert','Profil proposé']);
+  var SHORT = {'Opportunité':'Opport.','Push opportuniste':'Push','Besoin ouvert':'Ouvert','Profil proposé':'Proposé','Entretien programmé':'Entr. prog.','Entretien passé':'Entr. passé','Besoin Gagné':'Gagné','Besoin Perdu':'Perdu'};
+  var currentIdx = PIPELINE.indexOf(besoin.statut);
+
+  return (
+    <div style={{display:'flex',gap:4,flexWrap:'wrap',padding:'8px 0'}}>
+      {PIPELINE.map(function(s, i){
+        var isCurrent = s === besoin.statut;
+        var isPast = i < currentIdx && currentIdx >= 0;
+        var isSimple = SIMPLE.has(s);
+        var bc = BESOIN_BADGE_COLORS_GLOBAL[s] || {bg:'#E4E4E6',color:'#1C1F35'};
+        return <button key={s} onClick={function(){
+          if(isCurrent) return;
+          if(isSimple) onStatusChange(s);
+          else onContextualChange(s);
+        }} style={{
+          padding:'4px 10px',fontSize:10,fontWeight:isCurrent?900:700,
+          background:isCurrent?'#1C1F35':isPast?'#f5f5f5':'#fff',
+          color:isCurrent?'#fff':isPast?'#aaa':'#1C1F35',
+          border:isCurrent?'0':'1px solid '+(isPast?'#ddd':'#E4E4E6'),
+          boxShadow:isCurrent?'3px 3px 0 '+bc.bg:'none',
+          transform:isCurrent?'translate(-1px,-1px)':'none',
+          cursor:isCurrent?'default':'pointer',
+          borderRadius:0,textTransform:'uppercase',letterSpacing:'0.03em',
+          transition:'all 80ms',fontFamily:'Outfit,sans-serif',
+        }}>{SHORT[s]||s}</button>;
+      })}
+    </div>
+  );
+}
+
+// Micro-formulaire contextuel pour changement de statut
+function BesoinMicroForm({ targetStatut, besoin, onConfirm, onCancel, saving }) {
+  var [formData, setFormData] = useState({});
+  var upd = function(k,v){setFormData(function(p){var n={};for(var x in p)n[x]=p[x];n[k]=v;return n;});};
+  var bc = BESOIN_BADGE_COLORS_GLOBAL[targetStatut]||{bg:'#E4E4E6'};
+
+  var canSubmit = true;
+  if(targetStatut==='Entretien programmé' && !formData.date_entretien) canSubmit = false;
+  if(targetStatut==='Entretien passé' && (!formData.cr_entretien || !formData.resultat)) canSubmit = false;
+  if(targetStatut==='Besoin Gagné' && !formData.date_demarrage) canSubmit = false;
+  if(targetStatut==='Besoin Perdu' && !formData.motif_perte) canSubmit = false;
+
+  return (
+    <div style={{border:'2px solid #1C1F35',boxShadow:'4px 4px 0 '+bc.bg,background:'#FAFAFA',padding:16,margin:'8px 0',borderRadius:0}}>
+      <div style={{fontSize:12,fontWeight:800,color:'#1C1F35',textTransform:'uppercase',marginBottom:12}}>Passage à : {targetStatut}</div>
+
+      {targetStatut==='Entretien programmé'&&<>
+        <Field label="Date de l'entretien *"><input type="datetime-local" value={formData.date_entretien||''} onChange={function(e){upd('date_entretien',e.target.value);}} className={inputCls}/></Field>
+        <Field label="Format"><select value={formData.type_entretien||'Visio'} onChange={function(e){upd('type_entretien',e.target.value);}} className={inputCls}><option>Visio</option><option>Présentiel</option><option>Téléphone</option></select></Field>
+        <Field label="Interlocuteur client"><input value={formData.interlocuteur||''} onChange={function(e){upd('interlocuteur',e.target.value);}} placeholder="Prénom NOM, titre" className={inputCls}/></Field>
+      </>}
+
+      {targetStatut==='Entretien passé'&&<>
+        <Field label="Compte-rendu *"><textarea value={formData.cr_entretien||''} onChange={function(e){upd('cr_entretien',e.target.value);}} placeholder="Points clés..." rows={3} className={inputCls+' resize-none'}/></Field>
+        <Field label="Résultat *"><select value={formData.resultat||''} onChange={function(e){upd('resultat',e.target.value);}} className={inputCls}><option value="">— Choisir —</option><option>Positif</option><option>Négatif</option><option>En attente retour</option></select></Field>
+      </>}
+
+      {targetStatut==='Besoin Gagné'&&<>
+        <Field label="Date de démarrage *"><input type="date" value={formData.date_demarrage||''} onChange={function(e){upd('date_demarrage',e.target.value);}} className={inputCls}/></Field>
+        <Field label="Durée estimée"><input value={formData.duree||''} onChange={function(e){upd('duree',e.target.value);}} placeholder="ex: 3 mois" className={inputCls}/></Field>
+        <Field label="TJM négocié (€)"><input type="number" value={formData.tjm||''} onChange={function(e){upd('tjm',e.target.value);}} className={inputCls}/></Field>
+      </>}
+
+      {targetStatut==='Besoin Perdu'&&<>
+        <Field label="Motif *"><select value={formData.motif_perte||''} onChange={function(e){upd('motif_perte',e.target.value);}} className={inputCls}><option value="">— Choisir —</option><option>Budget insuffisant</option><option>Choix concurrent</option><option>Besoin annulé</option><option>Perdu de vue</option><option>Autre</option></select></Field>
+        <Field label="Commentaire"><textarea value={formData.commentaire||''} onChange={function(e){upd('commentaire',e.target.value);}} placeholder="Contexte..." rows={2} className={inputCls+' resize-none'}/></Field>
+      </>}
+
+      <div style={{display:'flex',gap:8,marginTop:12}}>
+        <BtnAction variant="primary" label={saving?'...':'Confirmer'} onClick={function(){onConfirm(targetStatut,formData);}} disabled={saving||!canSubmit}/>
+        <button onClick={onCancel} style={{fontSize:11,color:'#999',background:'none',border:'none',cursor:'pointer',textTransform:'uppercase'}}>Annuler</button>
+      </div>
+    </div>
+  );
+}
+
 // Panneau détail besoin (SidePanel)
 function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historique, taches, missions, besoins, profile, allProfiles, onClose, onRefresh, onDataRefresh, onNavToContact, onNavToMission, onNavToTache }) {
   const isAdmin=profile.role==='admin';
@@ -2579,6 +2659,58 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
   const tauxMarge=caProj>0?(margeProj/caProj*100):0;
 
   const [gagneErrors,setGagneErrors]=useState({});
+  const [statusForm, setStatusForm] = useState(null);
+  const [statusSaving, setStatusSaving] = useState(false);
+
+  // Simple status change — direct Supabase update
+  const handleSimpleStatus = async function(newStatut) {
+    var result = await sb.from('besoins').update({statut:newStatut,updated_at:new Date().toISOString()}).eq('id',besoin.id);
+    if(result.error){toast('Erreur: '+result.error.message,'error');return;}
+    toast('Statut → '+newStatut);
+    onRefresh();
+  };
+
+  // Contextual status change — open micro-form
+  const handleContextualStatus = function(statut) {
+    setStatusForm(statut);
+  };
+
+  // Contextual form confirm handler
+  const handleContextualConfirm = async function(statut, formData) {
+    setStatusSaving(true);
+    var patch = {statut: statut, updated_at: new Date().toISOString()};
+
+    if(statut==='Entretien programmé') {
+      patch.date_entretien = formData.date_entretien;
+      await sb.from('taches').insert({
+        titre:'Entretien — '+besoin.titre,
+        due_date:formData.date_entretien,
+        statut:'a_faire',
+        responsable:profile.nom,
+        besoin_id:besoin.id,
+        contact_id:besoin.contact_id?parseInt(besoin.contact_id):null,
+      });
+    }
+    if(statut==='Entretien passé') {
+      patch.compte_rendu = formData.cr_entretien;
+    }
+    if(statut==='Besoin Gagné') {
+      patch.date_demarrage = formData.date_demarrage;
+      if(formData.tjm) patch.tjm_vente = parseFloat(formData.tjm);
+    }
+    if(statut==='Besoin Perdu') {
+      patch.motif_perte = formData.motif_perte;
+      if(formData.commentaire) patch.motif_perte_precision = formData.commentaire;
+    }
+
+    var result = await sb.from('besoins').update(patch).eq('id',besoin.id);
+    if(result.error){toast('Erreur: '+result.error.message,'error');setStatusSaving(false);return;}
+    toast('Statut → '+statut);
+    setStatusForm(null);
+    setStatusSaving(false);
+    onRefresh();
+  };
+
   const saveEdit=async()=>{
     // Validation Besoin Gagné : candidat + contact obligatoires
     if(f.statut==='Besoin Gagné'){
@@ -2654,8 +2786,12 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
     <SidePanel title={editing?<input type="text" value={f.titre} onChange={e=>setF(v=>({...v,titre:e.target.value}))} className="font-bold text-lg border-b-2 border-midnight focus:outline-none focus:border-lemon-100 w-full bg-transparent transition-colors" style={{minWidth:0}}/>:besoin.titre}
       badge={<BesoinBadge statut={f.statut}/>} onClose={onClose} actions={actions}>
 
-      {/* Stepper statut */}
+      {/* Stepper statut (edit mode) */}
       {editing&&<BesoinStatusStepper value={f.statut} onChange={s=>setF(v=>({...v,statut:s}))}/>}
+      {/* Stepper statut interactif (view mode) */}
+      {!editing && isOwner && <BesoinStatusStepper2 besoin={besoin} onStatusChange={handleSimpleStatus} onContextualChange={handleContextualStatus}/>}
+      {/* Micro-form pour statuts contextuels */}
+      {statusForm && <BesoinMicroForm targetStatut={statusForm} besoin={besoin} onConfirm={handleContextualConfirm} onCancel={function(){setStatusForm(null);}} saving={statusSaving}/>}
 
       {/* Infos générales */}
       <div className="grid grid-cols-2 gap-3 text-sm">
