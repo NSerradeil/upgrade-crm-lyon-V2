@@ -5030,7 +5030,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
       ) : null}
       {showConfirm && <Modal title="Terminer la session ?" onClose={function(){setShowConfirm(false);}} footer={<>
         <button onClick={function(){setShowConfirm(false);}} className="px-4 py-2 text-sm text-slate hover:text-carbon">Continuer la session</button>
-        <BtnAction variant="close" label="Terminer quand m\u00eame" onClick={function(){setShowConfirm(false);handleTerminer();}}/>
+        <BtnAction variant="close" label="Terminer quand même" onClick={function(){setShowConfirm(false);handleTerminer();}}/>
       </>}>
         <div style={{fontSize:13,color:'#1C1F35'}}>
           <strong>{items.filter(function(c){return c.status==='none';}).length}</strong> contact{items.filter(function(c){return c.status==='none';}).length>1?'s':''} non traité{items.filter(function(c){return c.status==='none';}).length>1?'s':''}. Les contacts non traités ne seront pas enregistrés.
