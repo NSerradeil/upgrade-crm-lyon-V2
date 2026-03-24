@@ -4465,16 +4465,36 @@ function ProspectionContactCard({ sc, idx, updateItem, expanded }) {
   );
 }
 
-function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact }) {
+function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact, onDelete, isAdmin }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  var handleDelete = async function(){
+    setDeleting(true);
+    await sb.from('session_prospection_contacts').delete().eq('session_id',session.id);
+    await sb.from('taches').update({session_prospection_id:null}).eq('session_prospection_id',session.id);
+    await sb.from('sessions_prospection').delete().eq('id',session.id);
+    setDeleting(false);
+    toast('Session supprimée');
+    if(onDelete) onDelete();
+    onClose();
+  };
   useEffect(function(){
     sb.from('session_prospection_contacts').select('*').eq('session_id',session.id).neq('statut','none').order('created_at')
       .then(function(res){setRows(res.data||[]);setLoading(false);});
   }, [session.id]);
 
+  var actions = isAdmin ? (
+    <div style={{display:'flex',gap:8,alignItems:'center'}}>
+      {!confirmDel
+        ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={function(){setConfirmDel(true);}}/>
+        : <ConfirmDelete onConfirm={handleDelete} onCancel={function(){setConfirmDel(false);}} loading={deleting}/>}
+    </div>
+  ) : null;
+
   return (
-    <SidePanel title={session.nom} badge={<span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:0,background:session.statut==='done'?'#E4E4E6':'#FF3D2E',color:session.statut==='done'?'#1C1F35':'#fff',textTransform:'uppercase'}}>{session.statut==='done'?'Terminee':'En cours'}</span>} onClose={onClose}>
+    <SidePanel title={session.nom} badge={<span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:0,background:session.statut==='done'?'#E4E4E6':'#FF3D2E',color:session.statut==='done'?'#1C1F35':'#fff',textTransform:'uppercase'}}>{session.statut==='done'?'Terminee':'En cours'}</span>} onClose={onClose} actions={actions}>
       <div className="grid grid-cols-3 gap-3 text-center">
         {[{v:session.nb_contacts||0,l:'Appeles',c:'#1C1F35'},{v:session.nb_interesses||0,l:'Interesses',c:'#00C218'},{v:session.nb_relances||0,l:'Relances',c:'#FFE500'}].map(function(s){return(
           <div key={s.l} style={{padding:'10px',border:'2px solid #E4E4E6',borderLeft:'4px solid '+s.c}}>
@@ -5182,7 +5202,7 @@ function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onN
       {screen === 'new' && <ProspectionNew contacts={contacts} profile={profile} onStart={function(s){setActiveSession(s);setScreen('active');}} onBack={function(){setScreen('list');}}/>}
       {screen === 'active' && activeSession && <ProspectionActive session={activeSession} contacts={contacts} contactMap={contactMap} profile={profile} onDone={function(){setScreen('list');loadSessions();onRefresh();}} onBack={function(){setScreen('list');}}/>}
       {screen === 'edit' && activeSession && <ProspectionEditContacts session={activeSession} contacts={contacts} profile={profile} onSaved={function(){setScreen('list');loadSessions();}} onBack={function(){setScreen('list');}}/>}
-      {detailSession && <ProspectionDetailPanel session={detailSession} contactMap={contactMap} onClose={function(){setDetailSession(null);}} onNavToContact={onNavToContact}/>}
+      {detailSession && <ProspectionDetailPanel session={detailSession} contactMap={contactMap} onClose={function(){setDetailSession(null);}} onNavToContact={onNavToContact} isAdmin={isAdmin} onDelete={function(){setDetailSession(null);loadSessions();}}/>}
     </div>
   );
 }
