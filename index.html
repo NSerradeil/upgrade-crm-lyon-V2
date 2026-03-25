@@ -5133,7 +5133,8 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
 
     var relances = appeles.filter(function(sc3){return sc3.wantRelance && sc3.relanceDate;});
     if (relances.length > 0) {
-      var relanceInsert = await sb.from('taches').insert(relances.map(function(sc4){return {
+      var relanceInsert = await sb.from('taches').insert(relances.map(function(sc4,idx){return {
+        id: 'tw_relance_'+sc4.id+'_'+Date.now()+'_'+idx,
         titre: ('Relance '+(sc4.prenom||'')+' '+sc4.nom+' — '+(sc4.groupe||'')).trim(),
         statut: 'a_faire', due_date: sc4.relanceDate, contact_id: sc4.id,
         session_prospection_id: session.id,
@@ -5181,6 +5182,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
       if (sc.editLinkedin && sc.editLinkedin !== sc.linkedin) upd.linkedin = sc.editLinkedin;
       if (sc.editVille && sc.editVille !== sc.ville) upd.ville = sc.editVille;
       if (sc.editRole && sc.editRole !== sc.role) upd.role = sc.editRole;
+      if (sc.editAts && sc.editAts !== (sc.ats||sc.recruitee||'')) upd.ats = sc.editAts;
       if (Object.keys(upd).length > 0) await sb.from('contacts').update(upd).eq('id', sc.id);
     }
 
@@ -5203,7 +5205,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
         if (existing) {
           await sb.from('taches').update({due_date:sc3.relanceDate, notes:['Session : '+session.nom,sc3.relanceNote||null].filter(Boolean).join('\n')}).eq('id',existing.id);
         } else {
-          var ins = await sb.from('taches').insert({titre:('Relance '+(sc3.prenom||'')+' '+sc3.nom+' — '+(sc3.groupe||'')).trim(),statut:'a_faire',due_date:sc3.relanceDate,contact_id:sc3.id,session_prospection_id:session.id,notes:['Session : '+session.nom,sc3.relanceNote||null].filter(Boolean).join('\n'),responsable:profile.nom});
+          var ins = await sb.from('taches').insert({id:'tw_relance_'+sc3.id+'_'+Date.now()+'_'+k,titre:('Relance '+(sc3.prenom||'')+' '+sc3.nom+' — '+(sc3.groupe||'')).trim(),statut:'a_faire',due_date:sc3.relanceDate,contact_id:sc3.id,session_prospection_id:session.id,notes:['Session : '+session.nom,sc3.relanceNote||null].filter(Boolean).join('\n'),responsable:profile.nom});
           if(ins.error) toast('Erreur relance : '+ins.error.message,'error');
         }
       } else if (!sc3.wantRelance && existing) {
