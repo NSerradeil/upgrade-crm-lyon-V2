@@ -724,13 +724,13 @@ function respOptions(allProfiles, current) {
 
 function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
   const isAdmin=profile.role==='admin';
-  const [f,setF] = useState({ telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', responsable:contact.responsable||'', linkedin:contact.linkedin||'', ats:contact.ats||'', agence:contact.agence||'' });
+  const [f,setF] = useState({ telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', responsable:contact.responsable||'', linkedin:contact.linkedin||'', ats:contact.ats||'', agence:contact.agence||'', ne_pas_recontacter:contact.ne_pas_recontacter||false, ne_pas_recontacter_note:contact.ne_pas_recontacter_note||'' });
   const canEditAgence = isAdmin || (contact.responsable === profile.nom);
   const [saving,setSaving]=useState(false); const [err,setErr]=useState('');
   const s = k => e => setF(v=>({...v,[k]:e.target.value}));
   const save = async () => {
     setSaving(true);
-    const upd={ telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, groupe:f.groupe||null, responsable:f.responsable||contact.responsable, linkedin:f.linkedin||null, agence:f.agence||contact.agence, updated_at:new Date().toISOString() };
+    const upd={ telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, groupe:f.groupe||null, responsable:f.responsable||contact.responsable, linkedin:f.linkedin||null, agence:f.agence||contact.agence, updated_at:new Date().toISOString(), ne_pas_recontacter:f.ne_pas_recontacter||false, ne_pas_recontacter_note:f.ne_pas_recontacter_note||null, ne_pas_recontacter_date:f.ne_pas_recontacter?contact.ne_pas_recontacter_date||(f.ne_pas_recontacter!==contact.ne_pas_recontacter?getToday():null):null };
     if(['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)) upd.ats=f.ats||null;
     const { error } = await sb.from('contacts').update(upd).eq('id',contact.id);
     if (error) { setErr(error.message); setSaving(false); }
@@ -743,6 +743,13 @@ function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
       if (f.agence && f.agence !== (contact.agence||'')) changes.push(`agence → ${f.agence}`);
       const details = changes.length ? `Fiche modifiée : ${changes.join(', ')}` : 'Fiche contact modifiée';
       await sb.from('historique_actions').insert({ id_prospect:contact.id, date:getToday(), type_action:'Note interne', details, responsable:profile?.nom||contact.responsable });
+      if (f.ne_pas_recontacter !== (contact.ne_pas_recontacter||false)) {
+        if (f.ne_pas_recontacter) {
+          await sb.from('historique_actions').insert({id_prospect:contact.id,date:getToday(),type_action:'Flag NPC',details:'Flag posé par '+profile.nom+(f.ne_pas_recontacter_note?' — '+f.ne_pas_recontacter_note:''),responsable:profile.nom});
+        } else {
+          await sb.from('historique_actions').insert({id_prospect:contact.id,date:getToday(),type_action:'Flag NPC levé',details:'Flag levé par '+profile.nom,responsable:profile.nom});
+        }
+      }
       toast('Contact modifié');onSaved();
     }
   };
@@ -763,6 +770,13 @@ function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
       </div>
       {['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)&&<Field label="ATS (lien candidat)"><input type="url" value={f.ats} onChange={s('ats')} className={inputCls} placeholder="Lien Recruitee"/></Field>}
       <Field label="Commentaires"><textarea rows={3} value={f.commentaires} onChange={s('commentaires')} className={inputCls+' resize-none'}/></Field>
+      <div style={{borderTop:'2px solid #E4E4E6',paddingTop:12,marginTop:12}}>
+        <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+          <input type="checkbox" checked={f.ne_pas_recontacter||false} onChange={function(e){setF(function(v){var n={};for(var k in v)n[k]=v[k];n.ne_pas_recontacter=e.target.checked;if(e.target.checked)n.ne_pas_recontacter_date=getToday();return n;});}}/>
+          <span style={{fontSize:12,fontWeight:700,color:'#FF3D2E'}}>Ne pas recontacter</span>
+        </label>
+        {f.ne_pas_recontacter&&<textarea rows={2} placeholder="Raison (optionnel)" value={f.ne_pas_recontacter_note||''} onChange={function(e){setF(function(v){var n={};for(var k in v)n[k]=v[k];n.ne_pas_recontacter_note=e.target.value;return n;});}} style={{marginTop:6,width:'100%',fontSize:12,padding:'6px 10px',border:'1px solid #E4E4E6',borderRadius:0,resize:'none'}} className={inputCls}/>}
+      </div>
       {err && <div className="text-xs text-coral-100 bg-coral-20 rounded px-3 py-2">{err}</div>}
     </Modal>
   );
@@ -1195,6 +1209,17 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
     <SidePanel title={`${contact.prenom} ${contact.nom}`}
       badge={<><div className="text-sm text-slate">{contact.groupe} · {contact.role}</div><div className="mt-1"><StatutBadge statut={contact.statut}/></div></>}
       onClose={onClose} actions={actions}>
+      {contact.ne_pas_recontacter&&(
+        <div style={{background:'#FF3D2E',color:'#fff',padding:'10px 16px',fontWeight:700,fontSize:12,display:'flex',alignItems:'center',gap:8,marginBottom:12,borderRadius:0}}>
+          <Icon d={ICONS.warning} size={16}/>
+          <div style={{flex:1}}>
+            <div>NE PAS RECONTACTER</div>
+            {contact.ne_pas_recontacter_note&&<div style={{fontWeight:400,fontSize:11,marginTop:2}}>{contact.ne_pas_recontacter_note}</div>}
+            {contact.ne_pas_recontacter_date&&<div style={{fontWeight:400,fontSize:10,opacity:0.8}}>Posé le {new Date(contact.ne_pas_recontacter_date).toLocaleDateString('fr-FR')}</div>}
+          </div>
+          {isOwner&&<button onClick={async function(){await sb.from('contacts').update({ne_pas_recontacter:false,ne_pas_recontacter_note:null,ne_pas_recontacter_date:null}).eq('id',contact.id);await sb.from('historique_actions').insert({id_prospect:contact.id,date:getToday(),type_action:'Flag NPC levé',details:'Flag levé par '+profile.nom,responsable:profile.nom});toast('Flag levé');onRefresh();}} style={{fontSize:10,background:'rgba(255,255,255,0.2)',border:'1px solid rgba(255,255,255,0.4)',color:'#fff',padding:'4px 8px',cursor:'pointer',borderRadius:0,fontWeight:700}}>Lever le flag</button>}
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div><span className="text-[11px] text-slate uppercase tracking-wide">Ville</span><br/><span className="text-carbon font-medium">{contact.ville||'—'}</span></div>
         <div><span className="text-[11px] text-slate uppercase tracking-wide">Responsable</span><br/><span className="text-carbon font-medium">{contact.responsable||'—'}</span></div>
@@ -1711,6 +1736,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
                 {c.role&&<div className="text-xs text-neutral-300">{c.role}</div>}
               </div>
               <StatutBadge statut={c.statut}/>
+              {c.ne_pas_recontacter&&<span style={{fontSize:9,fontWeight:700,padding:'2px 6px',background:'#FF3D2E',color:'#fff',borderRadius:0,textTransform:'uppercase',letterSpacing:'0.04em'}}><Icon d={ICONS.warning} size={10}/> NPC</span>}
             </div>
             <div className="flex items-center gap-3 mt-2 text-xs text-neutral-300">
               {c.ville&&<span>{c.ville}</span>}
@@ -1735,7 +1761,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
               <td className="px-4 py-3"><div className="font-medium text-midnight">{c.prenom} {c.nom}</div>{c.role&&<div className="text-xs text-neutral-300">{c.role}</div>}</td>
               <td className="px-4 py-3 text-slate">{c.groupe}</td>
               <td className="px-4 py-3 text-slate hidden lg:table-cell">{c.ville}</td>
-              <td className="px-4 py-3"><StatutBadge statut={c.statut}/></td>
+              <td className="px-4 py-3"><StatutBadge statut={c.statut}/>{c.ne_pas_recontacter&&<span style={{fontSize:9,fontWeight:700,padding:'2px 6px',background:'#FF3D2E',color:'#fff',borderRadius:0,textTransform:'uppercase',letterSpacing:'0.04em',marginLeft:6}}><Icon d={ICONS.warning} size={10}/> NPC</span>}</td>
               <td className="px-4 py-3 text-slate text-xs hidden lg:table-cell">{c.responsable||'—'}</td>
               <td className="px-4 py-3 hidden lg:table-cell">{c.jours<999?<span className={c.jours>90?'text-coral-100 font-medium':'text-slate'}>{c.jours}j</span>:<span className="text-neutral-200">—</span>}</td>
             </tr>
@@ -5034,6 +5060,7 @@ function ProspectionNew({ contacts, profile, onStart, onBack }) {
               <div style={{flex:1}}>
                 <span style={{fontWeight:700,fontSize:13,color:'#1C1F35'}}>{c.prenom} {c.nom}</span>
                 {c.groupe&&<span style={{fontSize:11,color:'#999',marginLeft:8}}>{c.groupe}</span>}
+                {c.ne_pas_recontacter&&<span style={{fontSize:9,fontWeight:700,color:'#FF3D2E',marginLeft:8}} title="Ce contact a demandé à ne plus être contacté">⛔ NPC</span>}
               </div>
               <div style={{display:'flex',gap:4}}>
                 {!c.telephone&&<span style={{fontSize:9,fontWeight:700,color:'#FF3D2E',background:'#FFF0EF',padding:'1px 4px'}}>TEL?</span>}
@@ -5124,6 +5151,15 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
       if (Object.keys(upd).length > 0) await sb.from('contacts').update({...upd, updated_at:now}).eq('id', sc.id);
     }
 
+    // Auto-flag contacts marked "not_interested"
+    var pasInteresses = appeles.filter(function(c){return c.status==='not_interested';});
+    for (var pi=0; pi<pasInteresses.length; pi++) {
+      var pic = pasInteresses[pi];
+      if (!pic.ne_pas_recontacter) {
+        await sb.from('contacts').update({ne_pas_recontacter:true,ne_pas_recontacter_date:getToday(),ne_pas_recontacter_note:'Marqué "Pas intéressé" en session de prospection'}).eq('id',pic.id);
+      }
+    }
+
     if (appeles.length > 0) {
       await sb.from('historique_actions').insert(appeles.map(function(sc2){return {
         id_prospect: sc2.id, date: todayStr, type_action: 'Appel sortant',
@@ -5188,6 +5224,15 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
       if (Object.keys(upd).length > 0) {
         var cRes = await sb.from('contacts').update(upd).eq('id', sc.id);
         if(cRes.error) console.error('[PostEdit] Contact update error for',sc.id,':',cRes.error.message);
+      }
+    }
+
+    // Auto-flag contacts marked "not_interested"
+    var pasInteresses2 = appeles.filter(function(c){return c.status==='not_interested';});
+    for (var pi2=0; pi2<pasInteresses2.length; pi2++) {
+      var pic2 = pasInteresses2[pi2];
+      if (!pic2.ne_pas_recontacter) {
+        await sb.from('contacts').update({ne_pas_recontacter:true,ne_pas_recontacter_date:getToday(),ne_pas_recontacter_note:'Marqué "Pas intéressé" en session de prospection'}).eq('id',pic2.id);
       }
     }
 
