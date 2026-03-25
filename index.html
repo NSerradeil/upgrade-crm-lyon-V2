@@ -4683,9 +4683,9 @@ function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact, 
           var isActive=activeFilter===s.id;
           return(
           <div key={s.id} onClick={function(){setActiveFilter(activeFilter===s.id&&s.id!=='all'?'all':s.id);}}
-            style={{padding:'10px',border:isActive?'2px solid '+s.c:'2px solid #E4E4E6',borderLeft:'4px solid '+s.c,cursor:'pointer',background:isActive?s.c+'12':'transparent',transition:'all 80ms',userSelect:'none'}}>
-            <div style={{fontSize:22,fontWeight:900,color:s.c}}>{s.v}</div>
-            <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'#666',marginTop:2}}>{s.l}</div>
+            style={{padding:'10px',borderTop:isActive?'0':'2px solid #E4E4E6',borderRight:isActive?'0':'2px solid #E4E4E6',borderBottom:isActive?'0':'2px solid #E4E4E6',borderLeft:isActive?'0':'4px solid '+s.c,cursor:'pointer',background:isActive?'#1C1F35':'transparent',boxShadow:isActive?'4px 4px 0 '+s.c:'none',transform:isActive?'translate(-2px,-2px)':'none',transition:'all 120ms',userSelect:'none',borderRadius:0}}>
+            <div style={{fontSize:22,fontWeight:900,color:isActive?'#fff':s.c}}>{s.v}</div>
+            <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:isActive?'#fff':'#666',marginTop:2}}>{s.l}</div>
           </div>
         );})}
       </div>
