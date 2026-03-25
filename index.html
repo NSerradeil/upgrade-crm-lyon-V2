@@ -4640,7 +4640,7 @@ function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact, 
 
   return (
     <SidePanel title={session.nom} badge={<span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:0,background:session.statut==='done'?'#E4E4E6':'#FF3D2E',color:session.statut==='done'?'#1C1F35':'#fff',textTransform:'uppercase'}}>{session.statut==='done'?'Terminée':'En cours'}</span>} onClose={onClose} actions={actions}>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,textAlign:'center'}}>
         {[{v:session.nb_contacts||0,l:'Appelés',c:'#1C1F35'},{v:session.nb_interesses||0,l:'Intéressants',c:'#007A10'},{v:session.nb_relances||0,l:'Relances',c:'#B8A000'},{v:rows.filter(function(r){return r.statut==='not_interested';}).length,l:'Pas intéressants',c:'#888'}].map(function(s){return(
           <div key={s.l} style={{padding:'10px',border:'2px solid #E4E4E6',borderLeft:'4px solid '+s.c}}>
             <div style={{fontSize:22,fontWeight:900,color:s.c}}>{s.v}</div>
