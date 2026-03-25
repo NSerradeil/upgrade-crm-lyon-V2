@@ -5120,6 +5120,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
       if (sc.editVille && sc.editVille !== sc.ville) upd.ville = sc.editVille;
       if (sc.editRole && sc.editRole !== sc.role) upd.role = sc.editRole;
       if (sc.editAts && sc.editAts !== (sc.ats||sc.recruitee||'')) upd.ats = sc.editAts;
+      if (sc.notes && sc.notes.trim()) upd.commentaires = sc.notes.trim();
       if (Object.keys(upd).length > 0) await sb.from('contacts').update({...upd, updated_at:now}).eq('id', sc.id);
     }
 
@@ -5183,6 +5184,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
       if (sc.editVille && sc.editVille !== sc.ville) upd.ville = sc.editVille;
       if (sc.editRole && sc.editRole !== sc.role) upd.role = sc.editRole;
       if (sc.editAts && sc.editAts !== (sc.ats||sc.recruitee||'')) upd.ats = sc.editAts;
+      if (sc.notes && sc.notes.trim()) upd.commentaires = sc.notes.trim();
       if (Object.keys(upd).length > 0) await sb.from('contacts').update(upd).eq('id', sc.id);
     }
 
