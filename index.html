@@ -1736,7 +1736,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
                 {c.role&&<div className="text-xs text-neutral-300">{c.role}</div>}
               </div>
               <StatutBadge statut={c.statut}/>
-              {c.ne_pas_recontacter&&<span style={{fontSize:9,fontWeight:700,padding:'2px 6px',background:'#FF3D2E',color:'#fff',borderRadius:0,textTransform:'uppercase',letterSpacing:'0.04em'}}><Icon d={ICONS.warning} size={10}/> NPC</span>}
+              {c.ne_pas_recontacter&&<span title="Ne pas recontacter" style={{fontSize:9,fontWeight:700,padding:'2px 6px',background:'#FF3D2E',color:'#fff',borderRadius:0,textTransform:'uppercase',letterSpacing:'0.04em',cursor:'help'}}><Icon d={ICONS.warning} size={10}/> NPC</span>}
             </div>
             <div className="flex items-center gap-3 mt-2 text-xs text-neutral-300">
               {c.ville&&<span>{c.ville}</span>}
@@ -1761,7 +1761,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
               <td className="px-4 py-3"><div className="font-medium text-midnight">{c.prenom} {c.nom}</div>{c.role&&<div className="text-xs text-neutral-300">{c.role}</div>}</td>
               <td className="px-4 py-3 text-slate">{c.groupe}</td>
               <td className="px-4 py-3 text-slate hidden lg:table-cell">{c.ville}</td>
-              <td className="px-4 py-3"><StatutBadge statut={c.statut}/>{c.ne_pas_recontacter&&<span style={{fontSize:9,fontWeight:700,padding:'2px 6px',background:'#FF3D2E',color:'#fff',borderRadius:0,textTransform:'uppercase',letterSpacing:'0.04em',marginLeft:6}}><Icon d={ICONS.warning} size={10}/> NPC</span>}</td>
+              <td className="px-4 py-3"><StatutBadge statut={c.statut}/>{c.ne_pas_recontacter&&<span title="Ne pas recontacter" style={{fontSize:9,fontWeight:700,padding:'2px 6px',background:'#FF3D2E',color:'#fff',borderRadius:0,textTransform:'uppercase',letterSpacing:'0.04em',marginLeft:6,cursor:'help'}}><Icon d={ICONS.warning} size={10}/> NPC</span>}</td>
               <td className="px-4 py-3 text-slate text-xs hidden lg:table-cell">{c.responsable||'—'}</td>
               <td className="px-4 py-3 hidden lg:table-cell">{c.jours<999?<span className={c.jours>90?'text-coral-100 font-medium':'text-slate'}>{c.jours}j</span>:<span className="text-neutral-200">—</span>}</td>
             </tr>
@@ -5513,6 +5513,10 @@ function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onN
   var handleEditResults = async function(session) {
     var result = await sb.from('session_prospection_contacts').select('*').eq('session_id', session.id).neq('statut','none').order('created_at');
     var spcRows = result.data || [];
+    // Dédupliquer par contact_id — garder la ligne la plus récente (last wins, trié created_at ASC)
+    var spcByContact = {};
+    spcRows.forEach(function(r){spcByContact[r.contact_id] = r;});
+    spcRows = Object.values(spcByContact);
     var contactIds = spcRows.map(function(r){return r.contact_id;});
     setActiveSession({...session, contactIds:contactIds, spcRows:spcRows, editMode:'results'});
     setDetailSession(null);
