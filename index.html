@@ -4725,7 +4725,7 @@ function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact, 
 
 function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit, onDelete, contactMap, onNavToContact, isAdmin, allProfiles, profile }) {
   const [confirmDel, setConfirmDel] = useState(null);
-  const [activeKpi, setActiveKpi] = useState(null);
+  const [activeKpi, setActiveKpi] = useState('total');
   const [kpiData, setKpiData] = useState([]);
   const [kpiLoading, setKpiLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -4756,8 +4756,9 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit,
     {id:'not_interested', label:'PAS INTÉRESSÉS', value:nbNotInt, color:'#FF3D2E'},
   ];
 
-  var loadKpiDetail = async function(id) {
-    if (activeKpi === id) { setActiveKpi(null); setKpiData([]); return; }
+  useEffect(function(){loadKpiDetail('total',true);},[]);
+  var loadKpiDetail = async function(id, force) {
+    if (!force && activeKpi === id) { setActiveKpi(null); setKpiData([]); return; }
     setActiveKpi(id);
     setKpiLoading(true);
     var data = [];
