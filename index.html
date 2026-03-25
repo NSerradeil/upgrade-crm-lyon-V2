@@ -5147,7 +5147,6 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
       if (sc.editVille && sc.editVille !== sc.ville) upd.ville = sc.editVille;
       if (sc.editRole && sc.editRole !== sc.role) upd.role = sc.editRole;
       if (sc.editAts && sc.editAts !== (sc.ats||sc.recruitee||'')) upd.ats = sc.editAts;
-      if (sc.notes && sc.notes.trim()) upd.commentaires = sc.notes.trim();
       if (Object.keys(upd).length > 0) await sb.from('contacts').update({...upd, updated_at:now}).eq('id', sc.id);
     }
 
@@ -5220,10 +5219,13 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
       if (sc.editVille && sc.editVille !== sc.ville) upd.ville = sc.editVille;
       if (sc.editRole && sc.editRole !== sc.role) upd.role = sc.editRole;
       if (sc.editAts && sc.editAts !== (sc.ats||sc.recruitee||'')) upd.ats = sc.editAts;
-      if (sc.notes && sc.notes.trim()) upd.commentaires = sc.notes.trim();
       if (Object.keys(upd).length > 0) {
         var cRes = await sb.from('contacts').update(upd).eq('id', sc.id);
         if(cRes.error) console.error('[PostEdit] Contact update error for',sc.id,':',cRes.error.message);
+      }
+      // Logger la note en historique (pas dans contacts.commentaires)
+      if (sc.notes && sc.notes.trim()) {
+        await sb.from('historique_actions').insert({id_prospect:sc.id,date:getToday(),type_action:'Note session',details:'[Correction session : '+session.nom+']\n'+sc.notes.trim(),responsable:profile.nom});
       }
     }
 
