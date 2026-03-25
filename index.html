@@ -5757,7 +5757,7 @@ function App() {
   const vHistMiss   = histMissions; // filtré par missions déjà
 
   const tachesActives=vTaches.filter(t=>t.statut!=='fait'&&t.statut!=='annule');
-  const tachesRetard=tachesActives.filter(t=>t.due_date&&extractDate(t.due_date)<TODAY);
+  const tachesRetard=taches.filter(t=>t.statut!=='fait'&&t.statut!=='annule'&&t.due_date&&extractDate(t.due_date)<TODAY&&t.responsable===activeProfile.nom);
   const besoinsPipeActifs=vBesoins.filter(b=>b.statut!=='Besoin Perdu');
   const TAB_COLORS={taches:'#0BA600',prospects:'#5090FE',prospection:'#FF3D2E',besoins:'#FFEA2F',pipe:'#823DE8',tdb:'#FF78FD',historique:'#565861',settings:'#A4A6AB'};
   const activeColor=TAB_COLORS[tab]||'#5090FE';
