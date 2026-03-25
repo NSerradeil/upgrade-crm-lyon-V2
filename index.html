@@ -4740,11 +4740,18 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit,
     return true;
   });
 
+  var [nbNotInt, setNbNotInt] = useState(0);
+  useEffect(function(){
+    sb.from('session_prospection_contacts').select('contact_id',{count:'exact',head:true}).eq('statut','not_interested')
+      .then(function(res){setNbNotInt(res.count||0);});
+  },[]);
+
   var KPI_CARDS = [
     {id:'total', label:'SESSIONS', value:filtered.length, color:'#4A7FE5'},
     {id:'interesses', label:'INTÉRESSANTS', value:filtered.reduce(function(a,s){return a+(s.nb_interesses||0);},0), color:'#00C218'},
     {id:'relances', label:'RELANCES', value:filtered.reduce(function(a,s){return a+(s.nb_relances||0);},0), color:'#FFE500'},
     {id:'injoignables', label:'INJOIGNABLES', value:filtered.reduce(function(a,s){return a+(s.nb_injoignables||0);},0), color:'#999'},
+    {id:'not_interested', label:'PAS INTÉRESSÉS', value:nbNotInt, color:'#FF3D2E'},
   ];
 
   var loadKpiDetail = async function(id) {
@@ -4761,6 +4768,9 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit,
     } else if (id === 'injoignables') {
       var r3 = await sb.from('session_prospection_contacts').select('contact_id, created_at, sessions_prospection(nom)').eq('statut','unreachable').order('created_at',{ascending:false}).limit(50);
       data = r3.data || [];
+    } else if (id === 'not_interested') {
+      var r5 = await sb.from('session_prospection_contacts').select('contact_id, notes, created_at, sessions_prospection(nom, date_session)').eq('statut','not_interested').order('created_at',{ascending:false});
+      data = r5.data || [];
     } else if (id === 'total') {
       var annee = new Date().getFullYear();
       var r4 = await sb.from('sessions_prospection').select('date_session, nb_contacts, nb_interesses, nb_injoignables').eq('statut','done').gte('date_session', annee+'-01-01').lte('date_session', annee+'-12-31').order('date_session',{ascending:true});
@@ -4808,7 +4818,7 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit,
         <div style={{border:'2px solid #E4E4E6',borderLeft:'5px solid '+(KPI_CARDS.find(function(k){return k.id===activeKpi;})||{}).color||'#E4E4E6',marginBottom:16,borderRadius:0}}>
           <div style={{background:'#1C1F35',padding:'8px 16px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <span style={{color:'#fff',fontWeight:800,fontSize:11,textTransform:'uppercase',letterSpacing:'0.08em'}}>
-              {activeKpi==='interesses'?'Contacts intéressants':activeKpi==='relances'?'Relances en attente':activeKpi==='total'?'Historique sessions':'Contacts injoignables'}
+              {activeKpi==='interesses'?'Contacts intéressants':activeKpi==='relances'?'Relances en attente':activeKpi==='total'?'Historique sessions':activeKpi==='not_interested'?'Contacts pas intéressés':'Contacts injoignables'}
             </span>
             <button onClick={function(){setActiveKpi(null);setKpiData([]);}} style={{color:'#FFE500',background:'none',border:'none',cursor:'pointer',fontSize:14}}>✕</button>
           </div>
@@ -4884,6 +4894,25 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit,
                 <div style={{flex:1,minWidth:0}}>
                   {c ? <div style={{fontWeight:800,fontSize:13}}>{c.prenom} {c.nom}<span style={{fontWeight:400,color:'#999'}}> — {c.groupe||''}</span></div>
                     : <div style={{fontWeight:800,fontSize:13,color:'#1C1F35'}}>{r.titre||'Relance'}</div>}
+                </div>
+                <span style={{fontSize:14,color:'#ccc',flexShrink:0}}>›</span>
+              </div>
+            );
+          })}
+
+          {activeKpi==='not_interested' && kpiData.map(function(r) {
+            var c = contactMap[r.contact_id];
+            if (!c) return null;
+            return (
+              <div key={r.contact_id+'_'+r.created_at} onClick={function(){if(onNavToContact){setActiveKpi(null);onNavToContact(c.id);}}}
+                style={{padding:'12px 18px',borderBottom:'1px solid #E4E4E6',display:'flex',gap:12,alignItems:'flex-start',cursor:'pointer',transition:'background 80ms',borderLeft:'3px solid #FF3D2E'}}
+                onMouseEnter={function(e){e.currentTarget.style.background='#FFF5F5';}}
+                onMouseLeave={function(e){e.currentTarget.style.background='#fff';}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:800,fontSize:13,color:'#1C1F35'}}>{c.prenom} {c.nom}</div>
+                  <div style={{fontSize:11,color:'#4A7FE5',fontWeight:700}}>{c.groupe||''}{c.role?' · '+c.role:''}</div>
+                  {r.sessions_prospection&&<div style={{fontSize:10,color:'#bbb',marginTop:2}}>{r.sessions_prospection.nom} · {r.sessions_prospection.date_session?new Date(r.sessions_prospection.date_session).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'}):''}  </div>}
+                  {r.notes&&<div style={{fontSize:11,color:'#888',marginTop:4,fontStyle:'italic',borderLeft:'2px solid #FF3D2E',paddingLeft:8}}>{r.notes}</div>}
                 </div>
                 <span style={{fontSize:14,color:'#ccc',flexShrink:0}}>›</span>
               </div>
