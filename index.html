@@ -41,6 +41,7 @@ tailwind.config = {
   ::selection { background: #FFE500; color: #0A0A0A; }
   .kpi-hover { transition: transform 120ms ease, box-shadow 120ms ease; }
   .kpi-hover:not([data-active="true"]):hover { transform: translateY(-2px); }
+
   .btn-brutal { box-shadow: 3px 3px 0 #FF3D2E; transition: transform 80ms, box-shadow 80ms; }
   .btn-brutal:hover { transform: translate(1px,1px); box-shadow: 2px 2px 0 #FF3D2E; }
   .btn-brutal:active { transform: translate(3px,3px); box-shadow: 0 0 0 #FF3D2E; }
@@ -4757,7 +4758,7 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit,
     {id:'total', label:'SESSIONS', value:filtered.length, color:'#4A7FE5'},
     {id:'interesses', label:'INTÉRESSANTS', value:filtered.reduce(function(a,s){return a+(s.nb_interesses||0);},0), color:'#00C218'},
     {id:'relances', label:'RELANCES', value:filtered.reduce(function(a,s){return a+(s.nb_relances||0);},0), color:'#FFE500'},
-    {id:'injoignables', label:'INJOIGNABLES', value:filtered.reduce(function(a,s){return a+(s.nb_injoignables||0);},0), color:'#999'},
+    {id:'injoignables', label:'INJOIGNABLES', value:filtered.reduce(function(a,s){return a+(s.nb_injoignables||0);},0), color:'#999999'},
     {id:'not_interested', label:'PAS INTÉRESSÉS', value:nbNotInt, color:'#FF3D2E'},
   ];
 
