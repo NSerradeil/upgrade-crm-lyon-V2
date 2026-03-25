@@ -4666,7 +4666,7 @@ function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact, 
 
   var [activeFilter, setActiveFilter] = useState('all');
   var filterCards = [
-    {id:'all',           v:session.nb_contacts||0,   l:'Appelés',       c:'#1C1F35'},
+    {id:'all',           v:session.nb_contacts||0,   l:'Appelés',       c:'#4A7FE5'},
     {id:'interested',    v:session.nb_interesses||0, l:'Intéressants',  c:'#007A10'},
     {id:'relance',       v:session.nb_relances||0,   l:'Relances',      c:'#B8A000'},
     {id:'not_interested',v:rows.filter(function(r){return r.statut==='not_interested';}).length, l:'Pas intéressés', c:'#FF3D2E'},
