@@ -1197,7 +1197,7 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
   };
   const actions = isOwner && (
     <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
-      <BtnAction variant="primary" icon={ICONS.add} label="+ Action" onClick={()=>setModal('hist')}/>
+      <BtnAction variant="primary" icon={ICONS.add} label="Action" onClick={()=>setModal('hist')}/>
       <BtnAction variant="task" icon={ICONS.check} label="Tâche" onClick={()=>setModal('tache')}/>
       <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setModal('edit')}/>
       {modal!=='confirmDel'
@@ -1517,7 +1517,7 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
   const missionTaches = (taches||[]).filter(t=>t.mission_id===mission.id&&t.statut!=='fait'&&t.statut!=='annule');
   const actions = canEdit ? (
     <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
-      <BtnAction variant="primary" icon={ICONS.add} label="+ Action" onClick={()=>setShowAdd(true)}/>
+      <BtnAction variant="primary" icon={ICONS.add} label="Action" onClick={()=>setShowAdd(true)}/>
       <BtnAction variant="task" icon={ICONS.check} label="Tâche" onClick={()=>setModal('tache')}/>
       <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setModal('edit')}/>
       {mission.statut==='Terminée'&&<span style={{fontSize:11,fontWeight:700,background:'#E4E4E6',color:'#1C1F35',padding:'4px 10px',borderRadius:0,textTransform:'uppercase',letterSpacing:'0.05em'}}>Mission terminée</span>}
@@ -2806,7 +2806,7 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
 
   const actions=isOwner&&(
     <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
-      <BtnAction variant="primary" icon={ICONS.add} label="+ Action" onClick={()=>setModal('hist')}/>
+      <BtnAction variant="primary" icon={ICONS.add} label="Action" onClick={()=>setModal('hist')}/>
       <BtnAction variant="task" icon={ICONS.check} label="Tâche" onClick={()=>setModal('tache')}/>
       {editing
         ? <BtnAction variant="task" icon={ICONS.close} label="Annuler" onClick={()=>setEditing(false)}/>
