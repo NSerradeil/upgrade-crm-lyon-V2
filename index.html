@@ -4641,7 +4641,7 @@ function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact, 
   return (
     <SidePanel title={session.nom} badge={<span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:0,background:session.statut==='done'?'#E4E4E6':'#FF3D2E',color:session.statut==='done'?'#1C1F35':'#fff',textTransform:'uppercase'}}>{session.statut==='done'?'Terminée':'En cours'}</span>} onClose={onClose} actions={actions}>
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,textAlign:'center'}}>
-        {[{v:session.nb_contacts||0,l:'Appelés',c:'#1C1F35'},{v:session.nb_interesses||0,l:'Intéressants',c:'#007A10'},{v:session.nb_relances||0,l:'Relances',c:'#B8A000'},{v:rows.filter(function(r){return r.statut==='not_interested';}).length,l:'Pas intéressants',c:'#888'}].map(function(s){return(
+        {[{v:session.nb_contacts||0,l:'Appelés',c:'#1C1F35'},{v:session.nb_interesses||0,l:'Intéressants',c:'#007A10'},{v:session.nb_relances||0,l:'Relances',c:'#B8A000'},{v:rows.filter(function(r){return r.statut==='not_interested';}).length,l:'Pas intéressés',c:'#FF3D2E'}].map(function(s){return(
           <div key={s.l} style={{padding:'10px',border:'2px solid #E4E4E6',borderLeft:'4px solid '+s.c}}>
             <div style={{fontSize:22,fontWeight:900,color:s.c}}>{s.v}</div>
             <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'#999',marginTop:2}}>{s.l}</div>
@@ -4866,7 +4866,7 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit,
   var totalSess = parMois.reduce(function(a,m){return a+m.n;},0);
   var tauxGlobal = totalTot > 0 ? Math.round((totalInt/totalTot)*100) : 0;
   var tauxColor = tauxGlobal >= 25 ? '#00C218' : tauxGlobal >= 10 ? '#FFE500' : '#FF3D2E';
-  var SEGS = [{key:'int',color:'#00C218',label:'Intéressants'},{key:'inj',color:'#bbb',label:'Injoignables'},{key:'pas',color:'#e8e8e8',label:'Pas intéressants'}];
+  var SEGS = [{key:'int',color:'#00C218',label:'Intéressants'},{key:'inj',color:'#bbb',label:'Injoignables'},{key:'pas',color:'#e8e8e8',label:'Pas intéressés'}];
 
   return <>
     {/* Header */}
