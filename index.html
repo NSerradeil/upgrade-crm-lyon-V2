@@ -39,8 +39,8 @@ tailwind.config = {
   button { font-family: 'Outfit', sans-serif; }
   *:focus-visible { outline: 3px solid #FFE500; outline-offset: 2px; }
   ::selection { background: #FFE500; color: #0A0A0A; }
-  .kpi-hover { transition: transform 120ms ease, box-shadow 120ms ease; }
-  .kpi-hover:not([data-active="true"]):hover { transform: translateY(-2px); box-shadow: 0 3px 8px rgba(0,0,0,0.08); }
+  .kpi-hover { transition: transform 120ms ease, box-shadow 120ms ease; --kpi-c: #999; }
+  .kpi-hover:not([data-active="true"]):hover { transform: translateY(-2px); box-shadow: 0 4px 12px var(--kpi-c, rgba(0,0,0,0.08)); }
   .btn-brutal { box-shadow: 3px 3px 0 #FF3D2E; transition: transform 80ms, box-shadow 80ms; }
   .btn-brutal:hover { transform: translate(1px,1px); box-shadow: 2px 2px 0 #FF3D2E; }
   .btn-brutal:active { transform: translate(3px,3px); box-shadow: 0 0 0 #FF3D2E; }
@@ -4016,7 +4016,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
         {KPI_CARDS.map(c=>{
           const active = activeChart===c.id;
           return (
-            <div key={c.id} className="kpi-hover" data-active={active?'true':undefined} onClick={()=>setActiveChart(c.id)} style={{cursor:'pointer',position:'relative',background:active?'#1C1F35':'#fff',borderTop:active?'0':'2px solid #E4E4E6',borderRight:active?'0':'2px solid #E4E4E6',borderBottom:active?'0':'2px solid #E4E4E6',borderLeft:active?'0':`5px solid ${c.color}`,padding:'16px 14px',borderRadius:0,boxShadow:active?`4px 4px 0 ${c.color}`:'none',transform:active?'translate(-2px,-2px)':'none'}}>
+            <div key={c.id} className="kpi-hover" data-active={active?'true':undefined} onClick={()=>setActiveChart(c.id)} style={{'--kpi-c':c.color+'40',cursor:'pointer',position:'relative',background:active?'#1C1F35':'#fff',borderTop:active?'0':'2px solid #E4E4E6',borderRight:active?'0':'2px solid #E4E4E6',borderBottom:active?'0':'2px solid #E4E4E6',borderLeft:active?'0':`5px solid ${c.color}`,padding:'16px 14px',borderRadius:0,boxShadow:active?`4px 4px 0 ${c.color}`:'none',transform:active?'translate(-2px,-2px)':'none'}}>
               <div style={{fontSize:28,fontWeight:900,color:active?'#fff':'#1C1F35',fontFamily:'Outfit,sans-serif',lineHeight:1}}>{c.value}</div>
               <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',color:active?c.color:'#999',marginTop:4}}>{c.label}</div>
               <div style={{fontSize:11,color:active?'#777':'#ccc',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.sub}</div>
@@ -4685,7 +4685,7 @@ function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact, 
           var isActive=activeFilter===s.id;
           return(
           <div key={s.id} className="kpi-hover" data-active={isActive?'true':undefined} onClick={function(){setActiveFilter(activeFilter===s.id&&s.id!=='all'?'all':s.id);}}
-            style={{padding:'10px',borderTop:isActive?'0':'2px solid #E4E4E6',borderRight:isActive?'0':'2px solid #E4E4E6',borderBottom:isActive?'0':'2px solid #E4E4E6',borderLeft:isActive?'0':'4px solid '+s.c,cursor:'pointer',background:isActive?'#1C1F35':'transparent',boxShadow:isActive?'4px 4px 0 '+s.c:'none',transform:isActive?'translate(-2px,-2px)':'none',userSelect:'none',borderRadius:0}}>
+            style={{'--kpi-c':s.c+'40',padding:'10px',borderTop:isActive?'0':'2px solid #E4E4E6',borderRight:isActive?'0':'2px solid #E4E4E6',borderBottom:isActive?'0':'2px solid #E4E4E6',borderLeft:isActive?'0':'4px solid '+s.c,cursor:'pointer',background:isActive?'#1C1F35':'transparent',boxShadow:isActive?'4px 4px 0 '+s.c:'none',transform:isActive?'translate(-2px,-2px)':'none',userSelect:'none',borderRadius:0}}>
             <div style={{fontSize:22,fontWeight:900,color:isActive?'#fff':s.c}}>{s.v}</div>
             <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:isActive?'#fff':'#666',marginTop:2}}>{s.l}</div>
           </div>
@@ -4809,7 +4809,7 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit,
           var active = activeKpi === k.id;
           return(
           <div key={k.id} className="kpi-hover" data-active={active?'true':undefined} onClick={function(){loadKpiDetail(k.id);}}
-            style={{background:active?'#1C1F35':'#fff',borderTop:active?'0':'2px solid #E4E4E6',borderRight:active?'0':'2px solid #E4E4E6',borderBottom:active?'0':'2px solid #E4E4E6',borderLeft:active?'0':'5px solid '+k.color,padding:'14px',cursor:'pointer',boxShadow:active?'4px 4px 0 '+k.color:'none',transform:active?'translate(-2px,-2px)':'none',borderRadius:0}}>
+            style={{'--kpi-c':k.color+'40',background:active?'#1C1F35':'#fff',borderTop:active?'0':'2px solid #E4E4E6',borderRight:active?'0':'2px solid #E4E4E6',borderBottom:active?'0':'2px solid #E4E4E6',borderLeft:active?'0':'5px solid '+k.color,padding:'14px',cursor:'pointer',boxShadow:active?'4px 4px 0 '+k.color:'none',transform:active?'translate(-2px,-2px)':'none',borderRadius:0}}>
             <div style={{fontSize:24,fontWeight:900,color:active?'#fff':'#1C1F35'}}>{k.value}</div>
             <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',color:active?'#FFFFFF':'#999',marginTop:4}}>{k.label}</div>
           </div>
