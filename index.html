@@ -4948,8 +4948,8 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit,
   var totalTot = parMois.reduce(function(a,m){return a+m.tot;},0);
   var totalSess = parMois.reduce(function(a,m){return a+m.n;},0);
   var tauxGlobal = totalTot > 0 ? Math.round((totalInt/totalTot)*100) : 0;
-  var tauxColor = tauxGlobal >= 25 ? '#00C218' : tauxGlobal >= 10 ? '#FFE500' : '#FF3D2E';
-  var SEGS = [{key:'int',color:'#00C218',label:'Intéressants'},{key:'inj',color:'#bbb',label:'Injoignables'},{key:'pas',color:'#e8e8e8',label:'Pas intéressés'}];
+  var tauxColor = '#007A10';
+  var SEGS = [{key:'int',color:'#00C218',label:'Intéressants'},{key:'inj',color:'#bbbbbb',label:'Injoignables'},{key:'pas',color:'#FF3D2E',label:'Pas intéressés'}];
 
   return <>
     {/* Header */}
