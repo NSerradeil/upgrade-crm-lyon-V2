@@ -4609,7 +4609,7 @@ function ProspectionContactCard({ sc, idx, updateItem, expanded }) {
   );
 }
 
-function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact, onDelete, isAdmin }) {
+function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact, onDelete, isAdmin, onEditResults, profile }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [confirmDel, setConfirmDel] = useState(false);
@@ -4629,8 +4629,9 @@ function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact, 
       .then(function(res){setRows(res.data||[]);setLoading(false);});
   }, [session.id]);
 
-  var actions = isAdmin ? (
-    <div style={{display:'flex',gap:8,alignItems:'center'}}>
+  var actions = (isAdmin || session.responsable === profile.nom) ? (
+    <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+      <BtnAction variant="edit" icon={ICONS.edit} label="Résultats" onClick={function(){if(onEditResults)onEditResults(session);}}/>
       {!confirmDel
         ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={function(){setConfirmDel(true);}}/>
         : <ConfirmDelete onConfirm={handleDelete} onCancel={function(){setConfirmDel(false);}} loading={deleting}/>}
@@ -5052,6 +5053,7 @@ function ProspectionNew({ contacts, profile, onStart, onBack }) {
 }
 
 function ProspectionActive({ session, contacts, contactMap, profile, onDone, onBack }) {
+  var isEditMode = session.editMode === 'results';
   var spcMap = {};
   (session.spcRows||[]).forEach(function(r){ spcMap[r.contact_id]=r; });
   var sessionContacts = useMemo(function(){
@@ -5165,6 +5167,65 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
     onDone();
   };
 
+  var handleSaveEdits = async function() {
+    setSaving(true);
+    var now = new Date().toISOString();
+    var appeles = items.filter(function(c){return c.status!=='none';});
+
+    // 1. Update contacts (tel, email, etc.)
+    for (var i=0; i<appeles.length; i++) {
+      var sc = appeles[i];
+      var upd = {};
+      if (sc.editTel && sc.editTel !== sc.telephone) upd.telephone = sc.editTel;
+      if (sc.editEmail && sc.editEmail !== sc.email) upd.email = sc.editEmail;
+      if (sc.editLinkedin && sc.editLinkedin !== sc.linkedin) upd.linkedin = sc.editLinkedin;
+      if (sc.editVille && sc.editVille !== sc.ville) upd.ville = sc.editVille;
+      if (sc.editRole && sc.editRole !== sc.role) upd.role = sc.editRole;
+      if (Object.keys(upd).length > 0) await sb.from('contacts').update(upd).eq('id', sc.id);
+    }
+
+    // 2. Update session_prospection_contacts
+    for (var j=0; j<items.length; j++) {
+      var sc2 = items[j];
+      await sb.from('session_prospection_contacts').update({
+        statut: sc2.status, notes: sc2.notes||null,
+        want_relance: sc2.wantRelance, relance_date: sc2.relanceDate||null, relance_note: sc2.relanceNote||null,
+      }).eq('session_id', session.id).eq('contact_id', sc2.id);
+    }
+
+    // 3. Handle relances — load existing, upsert/delete as needed
+    var existingResult = await sb.from('taches').select('id, contact_id').eq('session_prospection_id', session.id);
+    var existingRelances = existingResult.data || [];
+    for (var k=0; k<appeles.length; k++) {
+      var sc3 = appeles[k];
+      var existing = existingRelances.find(function(r){return r.contact_id===sc3.id;});
+      if (sc3.wantRelance && sc3.relanceDate) {
+        if (existing) {
+          await sb.from('taches').update({due_date:sc3.relanceDate, notes:['Session : '+session.nom,sc3.relanceNote||null].filter(Boolean).join('\n')}).eq('id',existing.id);
+        } else {
+          var ins = await sb.from('taches').insert({titre:('Relance '+(sc3.prenom||'')+' '+sc3.nom+' — '+(sc3.groupe||'')).trim(),statut:'a_faire',due_date:sc3.relanceDate,contact_id:sc3.id,session_prospection_id:session.id,notes:['Session : '+session.nom,sc3.relanceNote||null].filter(Boolean).join('\n'),responsable:profile.nom});
+          if(ins.error) toast('Erreur relance : '+ins.error.message,'error');
+        }
+      } else if (!sc3.wantRelance && existing) {
+        await sb.from('taches').delete().eq('id',existing.id);
+      }
+    }
+
+    // 4. Recalculate session stats
+    var newStats = {
+      nb_contacts: appeles.length,
+      nb_interesses: appeles.filter(function(c){return c.status==='interested';}).length,
+      nb_relances: items.filter(function(c){return c.wantRelance&&c.relanceDate;}).length,
+      nb_injoignables: appeles.filter(function(c){return c.status==='unreachable';}).length,
+      updated_at: now,
+    };
+    await sb.from('sessions_prospection').update(newStats).eq('id',session.id);
+
+    setSaving(false);
+    toast('Modifications enregistrées');
+    onDone();
+  };
+
   var current = items[focusIdx];
 
   return (
@@ -5172,20 +5233,26 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,flexWrap:'wrap',gap:8}}>
         <div style={{display:'flex',alignItems:'center',gap:12}}>
           <button onClick={onBack} style={{background:'none',border:'none',cursor:'pointer',color:'#999'}}><Icon d={ICONS.back} size={16}/></button>
-          <span style={{fontSize:16,fontWeight:900,color:'#1C1F35'}}>{session.nom}</span>
+          <span style={{fontSize:16,fontWeight:900,color:'#1C1F35'}}>{isEditMode?'Correction \u00b7 ':''}{session.nom}</span>
           <span style={{fontSize:11,color:'#999'}}>{stats.done}/{items.length} traités</span>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center'}}>
           <button onClick={function(){setView(view==='list'?'focus':'list');}} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:'2px solid #E4E4E6',background:'#fff',cursor:'pointer',borderRadius:0,textTransform:'uppercase'}}>
             {view==='list'?'Vue focus':'Vue liste'}
           </button>
-          <button onClick={function(){
+          {isEditMode ? (
+            <button onClick={handleSaveEdits} disabled={saving} style={{background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #4A7FE5',padding:'8px 16px',fontWeight:900,fontSize:12,textTransform:'uppercase',letterSpacing:'0.04em',cursor:'pointer',borderRadius:0}}>
+              {saving?'Enregistrement...':'Enregistrer les modifications'}
+            </button>
+          ) : (
+            <button onClick={function(){
               var nonTraites = items.filter(function(c){return c.status==='none';}).length;
               if(nonTraites > 0) setShowConfirm(true);
               else handleTerminer();
             }} disabled={saving||stats.done===0} style={{background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #00C218',padding:'8px 16px',fontWeight:900,fontSize:12,textTransform:'uppercase',letterSpacing:'0.04em',cursor:stats.done===0?'not-allowed':'pointer',borderRadius:0,opacity:stats.done===0?0.4:1}}>
-            {saving?'Enregistrement...':'Terminer la session'}
-          </button>
+              {saving?'Enregistrement...':'Terminer la session'}
+            </button>
+          )}
         </div>
       </div>
       <div style={{display:'flex',gap:16,marginBottom:16,fontSize:11,fontWeight:700,alignItems:'center'}}>
@@ -5212,7 +5279,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
           {view==='focus'&&<div style={{fontSize:9,color:'#ccc',marginTop:4}}>Raccourcis : A=Appelé · I=Intéressé · N=iNjoignable · P=Pas intéressé · ←→ Navigation</div>}
         </div>
       ) : null}
-      {showConfirm && <Modal title="Terminer la session ?" onClose={function(){setShowConfirm(false);}} footer={<>
+      {showConfirm && !isEditMode && <Modal title="Terminer la session ?" onClose={function(){setShowConfirm(false);}} footer={<>
         <button onClick={function(){setShowConfirm(false);}} className="px-4 py-2 text-sm text-slate hover:text-carbon">Continuer la session</button>
         <BtnAction variant="close" label="Terminer quand même" onClick={function(){setShowConfirm(false);handleTerminer();}}/>
       </>}>
@@ -5388,6 +5455,14 @@ function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onN
     setActiveSession({...session, existingContactIds: existingIds});
     setScreen('edit');
   };
+  var handleEditResults = async function(session) {
+    var result = await sb.from('session_prospection_contacts').select('*').eq('session_id', session.id).neq('statut','none').order('created_at');
+    var spcRows = result.data || [];
+    var contactIds = spcRows.map(function(r){return r.contact_id;});
+    setActiveSession({...session, contactIds:contactIds, spcRows:spcRows, editMode:'results'});
+    setDetailSession(null);
+    setScreen('active');
+  };
   var handleDeleteSession = async function(session) {
     await sb.from('session_prospection_contacts').delete().eq('session_id', session.id);
     await sb.from('sessions_prospection').delete().eq('id', session.id);
@@ -5401,7 +5476,7 @@ function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onN
       {screen === 'new' && <ProspectionNew contacts={contacts} profile={profile} onStart={function(s){setActiveSession(s);setScreen('active');}} onBack={function(){setScreen('list');}}/>}
       {screen === 'active' && activeSession && <ProspectionActive session={activeSession} contacts={contacts} contactMap={contactMap} profile={profile} onDone={function(){setScreen('list');loadSessions();onRefresh();}} onBack={function(){setScreen('list');}}/>}
       {screen === 'edit' && activeSession && <ProspectionEditContacts session={activeSession} contacts={contacts} profile={profile} onSaved={function(){setScreen('list');loadSessions();}} onBack={function(){setScreen('list');}}/>}
-      {detailSession && <ProspectionDetailPanel session={detailSession} contactMap={contactMap} onClose={function(){setDetailSession(null);}} onNavToContact={onNavToContact} isAdmin={isAdmin} onDelete={function(){setDetailSession(null);loadSessions();}}/>}
+      {detailSession && <ProspectionDetailPanel session={detailSession} contactMap={contactMap} onClose={function(){setDetailSession(null);}} onNavToContact={onNavToContact} isAdmin={isAdmin} onDelete={function(){setDetailSession(null);loadSessions();}} onEditResults={handleEditResults} profile={profile}/>}
     </div>
   );
 }
