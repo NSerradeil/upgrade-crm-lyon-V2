@@ -4664,20 +4664,37 @@ function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact, 
     </div>
   ) : null;
 
+  var [activeFilter, setActiveFilter] = useState('all');
+  var filterCards = [
+    {id:'all',           v:session.nb_contacts||0,   l:'Appelés',       c:'#1C1F35'},
+    {id:'interested',    v:session.nb_interesses||0, l:'Intéressants',  c:'#007A10'},
+    {id:'relance',       v:session.nb_relances||0,   l:'Relances',      c:'#B8A000'},
+    {id:'not_interested',v:rows.filter(function(r){return r.statut==='not_interested';}).length, l:'Pas intéressés', c:'#FF3D2E'},
+  ];
+  var filteredRows = rows;
+  if(activeFilter==='interested') filteredRows=rows.filter(function(r){return r.statut==='interested';});
+  if(activeFilter==='relance') filteredRows=rows.filter(function(r){return r.want_relance&&r.relance_date;});
+  if(activeFilter==='not_interested') filteredRows=rows.filter(function(r){return r.statut==='not_interested';});
+
   return (
     <SidePanel title={session.nom} badge={<span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:0,background:session.statut==='done'?'#E4E4E6':'#FF3D2E',color:session.statut==='done'?'#1C1F35':'#fff',textTransform:'uppercase'}}>{session.statut==='done'?'Terminée':'En cours'}</span>} onClose={onClose} actions={actions}>
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,textAlign:'center'}}>
-        {[{v:session.nb_contacts||0,l:'Appelés',c:'#1C1F35'},{v:session.nb_interesses||0,l:'Intéressants',c:'#007A10'},{v:session.nb_relances||0,l:'Relances',c:'#B8A000'},{v:rows.filter(function(r){return r.statut==='not_interested';}).length,l:'Pas intéressés',c:'#FF3D2E'}].map(function(s){return(
-          <div key={s.l} style={{padding:'10px',border:'2px solid #E4E4E6',borderLeft:'4px solid '+s.c}}>
+        {filterCards.map(function(s){
+          var isActive=activeFilter===s.id;
+          return(
+          <div key={s.id} onClick={function(){setActiveFilter(activeFilter===s.id&&s.id!=='all'?'all':s.id);}}
+            style={{padding:'10px',border:isActive?'2px solid '+s.c:'2px solid #E4E4E6',borderLeft:'4px solid '+s.c,cursor:'pointer',background:isActive?s.c+'12':'transparent',transition:'all 80ms',userSelect:'none'}}>
             <div style={{fontSize:22,fontWeight:900,color:s.c}}>{s.v}</div>
-            <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'#999',marginTop:2}}>{s.l}</div>
+            <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'#666',marginTop:2}}>{s.l}</div>
           </div>
         );})}
       </div>
       <div>
         <div className="text-[11px] font-bold text-slate uppercase tracking-[0.1em] mb-2">Contacts traités</div>
+        <div style={{fontSize:11,color:'#888',marginBottom:8}}>{filteredRows.length} contact{filteredRows.length>1?'s':''}{activeFilter!=='all'?' · '+filterCards.find(function(c){return c.id===activeFilter;}).l:''}</div>
         {loading&&<div className="text-xs text-neutral-300">Chargement...</div>}
-        {rows.map(function(r){
+        {filteredRows.length===0&&!loading&&<div style={{padding:16,textAlign:'center',fontSize:12,color:'#999'}}>Aucun contact dans cette catégorie</div>}
+        {filteredRows.map(function(r){
           var c=contactMap[r.contact_id];
           var cfg=PROSPECT_CALL_STATUTS[r.statut]||PROSPECT_CALL_STATUTS.none;
           return (
