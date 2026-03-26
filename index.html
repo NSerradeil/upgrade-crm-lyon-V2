@@ -5144,7 +5144,7 @@ function ProspectionNew({ contacts, profile, onStart, onBack }) {
   );
 }
 
-function ProspectionActive({ session, contacts, contactMap, profile, onDone, onBack }) {
+function ProspectionActive({ session, contacts, contactMap, profile, onDone, onBack, onEdit, onDelete }) {
   var isEditMode = session.editMode === 'results';
   var spcMap = {};
   (session.spcRows||[]).forEach(function(r){ spcMap[r.contact_id]=r; });
@@ -5362,6 +5362,8 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
           <button onClick={function(){setView(view==='list'?'focus':'list');}} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:'2px solid #E4E4E6',background:'#fff',cursor:'pointer',borderRadius:0,textTransform:'uppercase'}}>
             {view==='list'?'Vue focus':'Vue liste'}
           </button>
+          {!isEditMode&&onEdit&&<button onClick={function(){onEdit(session);}} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:'2px solid #4A7FE5',color:'#4A7FE5',background:'#fff',cursor:'pointer',borderRadius:0,textTransform:'uppercase'}}><Icon d={ICONS.edit} size={12}/> Modifier</button>}
+          {!isEditMode&&onDelete&&<button onClick={function(){if(confirm('Supprimer cette session ?')){onDelete(session);}}} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:'2px solid #FF3D2E',color:'#FF3D2E',background:'#fff',cursor:'pointer',borderRadius:0,textTransform:'uppercase'}}><Icon d={ICONS.delete} size={12}/> Supprimer</button>}
           {isEditMode ? (
             <button onClick={handleSaveEdits} disabled={saving} style={{background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #4A7FE5',padding:'8px 16px',fontWeight:900,fontSize:12,textTransform:'uppercase',letterSpacing:'0.04em',cursor:'pointer',borderRadius:0}}>
               {saving?'Enregistrement...':'Enregistrer les modifications'}
@@ -5613,7 +5615,7 @@ function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onN
     <div className="tab-content">
       {screen === 'list' && <ProspectionList sessions={sessions} loading={loading} onNew={function(){setScreen('new');}} onDetail={setDetailSession} onResume={handleResume} onEdit={handleEdit} onDelete={handleDeleteSession} contactMap={contactMap} onNavToContact={onNavToContact} isAdmin={isAdmin} allProfiles={allProfiles} profile={profile}/>}
       {screen === 'new' && <ProspectionNew contacts={contacts} profile={profile} onStart={function(s){setActiveSession(s);setScreen('active');}} onBack={function(){setScreen('list');}}/>}
-      {screen === 'active' && activeSession && <ProspectionActive session={activeSession} contacts={contacts} contactMap={contactMap} profile={profile} onDone={function(){setScreen('list');loadSessions();onRefresh();}} onBack={function(){setScreen('list');}}/>}
+      {screen === 'active' && activeSession && <ProspectionActive session={activeSession} contacts={contacts} contactMap={contactMap} profile={profile} onDone={function(){setScreen('list');loadSessions();onRefresh();}} onBack={function(){setScreen('list');}} onEdit={function(s){handleEdit(s);}} onDelete={function(s){handleDeleteSession(s);}}/>}
       {screen === 'edit' && activeSession && <ProspectionEditContacts session={activeSession} contacts={contacts} profile={profile} onSaved={function(){setScreen('list');loadSessions();}} onBack={function(){setScreen('list');}}/>}
       {detailSession && <ProspectionDetailPanel session={detailSession} contactMap={contactMap} onClose={function(){setDetailSession(null);}} onNavToContact={onNavToContact} isAdmin={isAdmin} onDelete={function(){setDetailSession(null);loadSessions();}} onEditResults={handleEditResults} profile={profile}/>}
     </div>
