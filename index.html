@@ -130,6 +130,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const TZ='Europe/Paris';
 function getToday() { return new Date().toLocaleDateString('sv-SE',{timeZone:TZ}); }
 const TODAY = getToday();
+function normalizeLinkedinUrl(url) { if(!url)return null; var u=url.trim(); if(!u)return null; if(u.indexOf('http')!==0)u='https://'+u; return u; }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // HELPERS
@@ -933,7 +934,7 @@ function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
   const s = k => e => setF(v=>({...v,[k]:e.target.value}));
   const save = async () => {
     setSaving(true);
-    const upd={ telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, groupe:f.groupe||null, responsable:f.responsable||contact.responsable, linkedin:f.linkedin||null, agence:f.agence||contact.agence, updated_at:new Date().toISOString(), ne_pas_recontacter:f.ne_pas_recontacter||false, ne_pas_recontacter_note:f.ne_pas_recontacter_note||null, ne_pas_recontacter_date:f.ne_pas_recontacter?contact.ne_pas_recontacter_date||(f.ne_pas_recontacter!==contact.ne_pas_recontacter?getToday():null):null };
+    const upd={ telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, groupe:f.groupe||null, responsable:f.responsable||contact.responsable, linkedin:normalizeLinkedinUrl(f.linkedin), agence:f.agence||contact.agence, updated_at:new Date().toISOString(), ne_pas_recontacter:f.ne_pas_recontacter||false, ne_pas_recontacter_note:f.ne_pas_recontacter_note||null, ne_pas_recontacter_date:f.ne_pas_recontacter?contact.ne_pas_recontacter_date||(f.ne_pas_recontacter!==contact.ne_pas_recontacter?getToday():null):null };
     if(['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)) upd.ats=f.ats||null;
     const { error } = await sb.from('contacts').update(upd).eq('id',contact.id);
     if (error) { setErr(error.message); setSaving(false); }
@@ -1341,7 +1342,7 @@ function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
   const save = async () => {
     if (!f.nom.trim()) { setErr('Le nom est obligatoire.'); return; }
     setSaving(true);
-    const ins={ prenom:f.prenom||null, nom:f.nom.trim(), groupe:f.groupe||null, ville:f.ville||null, role:f.role||null, telephone:f.telephone||null, email:f.email||null, linkedin:f.linkedin||null, statut:f.statut, responsable:f.responsable, commentaires:f.commentaires||null, nb_relance:0, updated_at:new Date().toISOString(), agence:profile.agence||'Lyon' };
+    const ins={ prenom:f.prenom||null, nom:f.nom.trim(), groupe:f.groupe||null, ville:f.ville||null, role:f.role||null, telephone:f.telephone||null, email:f.email||null, linkedin:normalizeLinkedinUrl(f.linkedin), statut:f.statut, responsable:f.responsable, commentaires:f.commentaires||null, nb_relance:0, updated_at:new Date().toISOString(), agence:profile.agence||'Lyon' };
     if(['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)) ins.ats=f.ats||null;
     const { data:inserted, error } = await sb.from('contacts').insert(ins).select('id').single();
     if (error) { setErr(error.message); setSaving(false); }
@@ -1394,8 +1395,12 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
   const saved = () => { setModal(null); onRefresh(); };
   const handleDelete = async () => {
     setDeleting(true);
-    await sb.from('historique_actions').insert({ id_prospect:contact.id, date:getToday(), type_action:'Note interne', details:`Contact supprimé par ${profile.nom}`, responsable:profile.nom });
-    await sb.from('contacts').delete().eq('id',contact.id);
+    // Supprimer d'abord les references FK (historique, taches, besoin_candidats) puis le contact
+    await sb.from('historique_actions').delete().eq('id_prospect',contact.id);
+    await sb.from('besoin_candidats').delete().eq('contact_id',contact.id);
+    await sb.from('taches').delete().eq('contact_id',contact.id);
+    var res = await sb.from('contacts').delete().eq('id',contact.id);
+    if(res.error){toast('Erreur : '+res.error.message);setDeleting(false);return;}
     toast('Contact supprimé');onRefresh(); onClose();
   };
   const actions = isOwner && (
@@ -5551,7 +5556,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
       var upd = {};
       if (sc.editTel && sc.editTel !== sc.telephone) upd.telephone = sc.editTel;
       if (sc.editEmail && sc.editEmail !== sc.email) upd.email = sc.editEmail;
-      if (sc.editLinkedin && sc.editLinkedin !== sc.linkedin) upd.linkedin = sc.editLinkedin;
+      if (sc.editLinkedin && sc.editLinkedin !== sc.linkedin) upd.linkedin = normalizeLinkedinUrl(sc.editLinkedin);
       if (sc.editVille && sc.editVille !== sc.ville) upd.ville = sc.editVille;
       if (sc.editRole && sc.editRole !== sc.role) upd.role = sc.editRole;
       if (sc.editAts && sc.editAts !== (sc.ats||sc.recruitee||'')) upd.ats = sc.editAts;
@@ -5623,7 +5628,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
       var upd = {};
       if (sc.editTel && sc.editTel !== sc.telephone) upd.telephone = sc.editTel;
       if (sc.editEmail && sc.editEmail !== sc.email) upd.email = sc.editEmail;
-      if (sc.editLinkedin && sc.editLinkedin !== sc.linkedin) upd.linkedin = sc.editLinkedin;
+      if (sc.editLinkedin && sc.editLinkedin !== sc.linkedin) upd.linkedin = normalizeLinkedinUrl(sc.editLinkedin);
       if (sc.editVille && sc.editVille !== sc.ville) upd.ville = sc.editVille;
       if (sc.editRole && sc.editRole !== sc.role) upd.role = sc.editRole;
       if (sc.editAts && sc.editAts !== (sc.ats||sc.recruitee||'')) upd.ats = sc.editAts;
