@@ -317,15 +317,15 @@ const BADGE_THRESHOLDS = {
   productif:[1,6,16,36], networker:[50,300,600,1000], relanceur:[5,15,35,75],
 };
 const BADGE_META = {
-  prospecteur:{label:'Prospecteur',color:'#4A7FE5',titles:['Prospecteur','Accrocheur','Négociateur','Maître du Pitch'],unit:'contacts appelés'},
-  chasseur:{label:'Chasseur',color:'#FF3D2E',titles:['Éclaireur','Pisteur','Chasseur','Prédateur'],unit:'comptes avec mission'},
-  eleveur:{label:'Éleveur',color:'#00C218',titles:['Semeur','Cultivateur','Éleveur','Patriarche'],unit:'comptes fidélisés'},
-  connaisseur:{label:'Connaisseur',color:'#10B981',titles:['Habitué','Familier','Connaisseur','Référent'],unit:'missions meilleur compte'},
-  recruteur:{label:'Recruteur',color:'#8B5CF6',titles:['Talent Finder','Recruteur','Chasseur de Têtes','DRH Upgrade'],unit:'consultants missionnés'},
-  gestionnaire:{label:'Gestionnaire',color:'#F59E0B',titles:['Coordinateur','Chef de Projet','Gestionnaire','Pilote'],unit:'suivis loggés'},
-  productif:{label:'Productif',color:'#06B6D4',titles:['Lanceur','Transformeur','Closer','Machine à Closer'],unit:'besoins closés'},
-  networker:{label:'Networker',color:'#6366F1',titles:['Connecté','Networker','Hub','Super Connecteur'],unit:'contacts CRM'},
-  relanceur:{label:'Relanceur',color:'#EC4899',titles:['Persévérant','Ténace','Bulldozer','Inépuisable'],unit:'relances effectuées'},
+  prospecteur:{label:'Prospecteur',color:'#4A7FE5',titles:['Prospecteur','Accrocheur','Négociateur','Maître du Pitch'],unit:'contacts appelés',description:"Tu es la voix de l'agence. Là où d'autres hésitent, tu décroches. Chaque appel est une graine — certaines poussent, d'autres non, mais sans toi le jardin reste vide.",xpRule:"+1 XP par contact appelé lors d'une session de prospection (tous statuts sauf « non traité »)"},
+  chasseur:{label:'Chasseur',color:'#FF3D2E',titles:['Éclaireur','Pisteur','Chasseur','Prédateur'],unit:'comptes avec mission',description:"Tu ouvres des territoires vierges. Un nouveau compte, c'est une porte que personne d'autre n'avait franchie — tu l'as fait. Le marché s'agrandit à chaque mission que tu places chez un client inédit.",xpRule:"+1 XP par nouveau compte client distinct dans lequel une première mission est ouverte"},
+  eleveur:{label:'Éleveur',color:'#00C218',titles:['Semeur','Cultivateur','Éleveur','Patriarche'],unit:'comptes fidélisés',description:"Les meilleurs commerciaux ne chassent pas que du nouveau. Toi, tu reviens. Tu construis une relation, tu crées de la confiance, et les clients te rappellent. La fidélisation, c'est ton terrain.",xpRule:"+1 XP par compte client qui franchit le seuil d'une 2ème mission (chaque compte compte une seule fois)"},
+  connaisseur:{label:'Connaisseur',color:'#10B981',titles:['Habitué','Familier','Connaisseur','Référent'],unit:'missions meilleur compte',description:"Un compte, une expertise. Tu connais les interlocuteurs, les enjeux, la culture de l'entreprise. Tu n'es plus un prestataire — tu es un partenaire. Cette profondeur-là ne s'achète pas, elle se mérite mission après mission.",xpRule:"Score = nombre de missions sur ton compte le plus développé. Plus tu approfondis un seul client, plus ton score grandit"},
+  recruteur:{label:'Recruteur',color:'#8B5CF6',titles:['Talent Finder','Recruteur','Chasseur de Têtes','DRH Upgrade'],unit:'consultants missionnés',description:"Tu es le point de rencontre entre un talent et une opportunité. Sans toi, le consultant attend, le client cherche. Avec toi, les carrières avancent et les projets démarrent.",xpRule:"+1 XP par mission ouverte pour un candidat, un consultant CDI, un freelance ou un prestataire depuis un besoin client (staffing réussi)"},
+  gestionnaire:{label:'Gestionnaire',color:'#F59E0B',titles:['Coordinateur','Chef de Projet','Gestionnaire','Pilote'],unit:'suivis loggés',description:"Le suivi, c'est ce qui sépare une bonne mission d'une mauvaise expérience client. Toi, tu n'attends pas que ça se passe mal pour réagir. Tu anticipes, tu documentes, tu pilotes. Tes clients le sentent.",xpRule:"+1 XP par point de suivi logué sur une mission active"},
+  productif:{label:'Productif',color:'#06B6D4',titles:['Lanceur','Transformeur','Closer','Machine à Closer'],unit:'besoins closés',description:"Du brief au démarrage — tu raccourcis tout. Tu transformes les opportunités en deals avant que le pipeline ne s'engorge. Chaque besoin closé, c'est un projet qui existe grâce à toi.",xpRule:"+1 XP par besoin transformé en mission (statut « pourvu »)"},
+  networker:{label:'Networker',color:'#6366F1',titles:['Connecté','Networker','Hub','Super Connecteur'],unit:'contacts CRM',description:"Ton CRM, c'est ton capital. Chaque contact ajouté, c'est une porte de plus dans un couloir qui s'allonge. Tu construis un réseau qui travaille pour toi, même quand tu ne décroches pas le téléphone.",xpRule:"+1 XP par contact créé dans le CRM"},
+  relanceur:{label:'Relanceur',color:'#EC4899',titles:['Persévérant','Ténace','Bulldozer','Inépuisable'],unit:'relances effectuées',description:"La plupart abandonnent au premier refus. Pas toi. Tu sais que le timing fait tout — un « pas maintenant » peut devenir un « oui » trois semaines plus tard. Ta ténacité est une compétence rare.",xpRule:"+1 XP par relance issue d'une session de prospection marquée comme effectuée"},
 };
 const BADGE_LEVEL_LABELS = ['','Junior','Confirmé','Senior','Expert'];
 
@@ -2418,6 +2418,11 @@ function BadgeDetailPanel({ category, score, profile, prefs, onSavePrefs, onClos
             <div style={{height:8,background:meta.color,width:prog.pct+'%',transition:'width 300ms'}}/>
           </div>
           <div style={{fontSize:12,fontWeight:700,color:'#1C1F35'}}>{prog.current}{prog.next?' / '+prog.next:''} <span style={{fontWeight:400,color:'#999'}}>{meta.unit}</span></div>
+        </div>
+        {/* Description + règle XP */}
+        <div style={{margin:'16px 0',padding:12,background:'#F5F5F7',borderLeft:'3px solid '+meta.color}}>
+          <p style={{fontSize:13,color:'#1C1F35',lineHeight:1.5,margin:0}}>{meta.description}</p>
+          <p style={{fontSize:11,color:'#888',fontStyle:'italic',marginTop:8,marginBottom:0,lineHeight:1.5}}>{meta.xpRule}</p>
         </div>
         {/* Levels with Sélectionner per unlocked level */}
         <div style={{marginBottom:20}}>
