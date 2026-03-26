@@ -5003,7 +5003,7 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit,
       {kpiLoading && <div style={{padding:20,textAlign:'center',fontSize:12,color:'#999'}}>Chargement...</div>}
       <div style={{border:'2px solid #E4E4E6'}}>
         {filtered.map(function(s){return(
-          <div key={s.id} onClick={function(){onDetail(s);}} data-detail tabIndex="0" style={{padding:'14px 18px',borderBottom:'1px solid #E4E4E6',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',transition:'background 80ms'}}
+          <div key={s.id} onClick={function(){if(s.statut==='active'){onResume(s);}else{onDetail(s);}}} data-detail tabIndex="0" style={{padding:'14px 18px',borderBottom:'1px solid #E4E4E6',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',transition:'background 80ms'}}
             onMouseEnter={function(e){e.currentTarget.style.background='#f9f9f9';}} onMouseLeave={function(e){e.currentTarget.style.background='#fff';}}>
             <div>
               <div style={{fontWeight:800,fontSize:14,color:'#1C1F35'}}>{s.nom}</div>
@@ -5417,6 +5417,7 @@ function ProspectionEditContacts({ session, contacts, profile, onSaved, onBack }
   var [agence, setAgence] = useState('');
   var [delai, setDelai] = useState(0);
   var [saving, setSaving] = useState(false);
+  var [sessionNom, setSessionNom] = useState(session.nom||'');
   var today = new Date();
 
   // Contacts filtrés pour l'ajout (recherche + filtres)
@@ -5445,6 +5446,10 @@ function ProspectionEditContacts({ session, contacts, profile, onSaved, onBack }
 
   var handleSave = async function() {
     setSaving(true);
+    // Sauvegarder le nom si modifié
+    if (sessionNom.trim() && sessionNom.trim() !== session.nom) {
+      await sb.from('sessions_prospection').update({nom:sessionNom.trim()}).eq('id',session.id);
+    }
     var currentIds = [...selected];
     var toAdd = currentIds.filter(function(id){return existingIds.indexOf(id)<0;});
     var toRemove = existingIds.filter(function(id){return currentIds.indexOf(id)<0;});
@@ -5475,13 +5480,21 @@ function ProspectionEditContacts({ session, contacts, profile, onSaved, onBack }
       {/* Header */}
       <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
         <button onClick={onBack} style={{background:'none',border:'none',cursor:'pointer',fontSize:14,color:'#999'}}><Icon d={ICONS.back} size={16}/> Retour</button>
-        <span style={{fontSize:16,fontWeight:900,color:'#1C1F35',textTransform:'uppercase'}}>Modifier : {session.nom}</span>
+        <span style={{fontSize:16,fontWeight:900,color:'#1C1F35',textTransform:'uppercase'}}>Modifier la session</span>
         <span style={{fontSize:11,fontWeight:700,color:'#999',marginLeft:'auto'}}>{selected.size} contacts</span>
         {(added>0||removed>0)&&<span style={{fontSize:11,fontWeight:700}}>
           {added>0&&<span style={{color:'#00C218'}}>+{added}</span>}
           {added>0&&removed>0&&' '}
           {removed>0&&<span style={{color:'#FF3D2E'}}>-{removed}</span>}
         </span>}
+      </div>
+
+      {/* Nom de la session */}
+      <div style={{marginBottom:16}}>
+        <label style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',color:'#999',display:'block',marginBottom:4}}>Nom de la session</label>
+        <input type="text" value={sessionNom} onChange={function(e){setSessionNom(e.target.value);}}
+          style={{width:'100%',padding:'8px 12px',border:'2px solid #E4E4E6',borderRadius:0,fontSize:14,fontWeight:700,fontFamily:'Outfit,sans-serif',boxSizing:'border-box'}}
+          placeholder="Nom de la session..."/>
       </div>
 
       {/* Recherche + filtres pour ajouter */}
@@ -5537,7 +5550,7 @@ function ProspectionEditContacts({ session, contacts, profile, onSaved, onBack }
 
       {/* Actions */}
       <div style={{display:'flex',gap:8}}>
-        <BtnAction variant="edit" label={saving?'...':'Sauvegarder'} onClick={handleSave} disabled={saving||(added===0&&removed===0)}/>
+        <BtnAction variant="edit" label={saving?'...':'Sauvegarder'} onClick={handleSave} disabled={saving||(added===0&&removed===0&&sessionNom.trim()===session.nom)}/>
         <button onClick={onBack} style={{fontSize:11,color:'#999',background:'none',border:'none',cursor:'pointer',textTransform:'uppercase'}}>Annuler</button>
       </div>
     </div>
