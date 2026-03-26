@@ -298,6 +298,16 @@ const PROSPECT_CALL_STATUTS = {
   unreachable:    { label:'Pas joignable',  color:'#999',    bg:'#f5f5f5' },
   not_interested: { label:'Pas intéressé',  color:'#FF3D2E', bg:'#FFF0EF' },
 };
+const ENCOURAGEMENTS = {
+  0: ["Allez, on se lance !","La liste n'attend que toi.","Premier call = premier pas."],
+  low: ["Bien démarré !","C'est parti, continue.","Les premières lignes sont les meilleures.","Bon rythme, reste focus."],
+  quarter: ["Déjà 1/4 — t'es lancé.","Le moteur chauffe bien.","Bonne cadence, keep going.","Un quart de fait, trois à venir."],
+  half: ["Moitié chemin — halfway hero.","50% — t'es dans la zone.","La moitié est derrière toi.","Mi-chemin, on lâche rien."],
+  above_half: ["Plus de la moitié — la fin approche.","T'es dans le bon sens.","Chaque appel compte.","La liste fond, c'est bon signe."],
+  almost: ["Sprint final en vue","Dernière ligne droite !","Plus que quelques calls.","T'y es presque — donne tout."],
+  final: ["Tout dernier effort !","Quelques contacts restants — on finit fort.","La fin est là, accroche-toi."],
+  done: ["Session bouclée — GG !","100% — mission accomplie.","Tout le monde a été contacté.","C'est dans la boîte. Belle session !"],
+};
 // ═══════════════════════════════════════════════════════════════════════════════
 // DRAG & DROP LIST REORDER HOOK
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -5180,6 +5190,18 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
     relances: items.filter(function(c){return c.wantRelance&&c.relanceDate;}).length,
   };}, [items]);
 
+  var pct = items.length > 0 ? Math.round((stats.done / items.length) * 100) : 0;
+  var palier = pct === 0 ? '0' : pct < 25 ? 'low' : pct < 50 ? 'quarter' : pct === 50 ? 'half' : pct < 75 ? 'above_half' : pct < 90 ? 'almost' : pct < 100 ? 'final' : 'done';
+  var [encMsg, setEncMsg] = useState(function(){var p=ENCOURAGEMENTS[palier]||ENCOURAGEMENTS.low;return p[Math.floor(Math.random()*p.length)];});
+  var [lastPalier, setLastPalier] = useState(palier);
+  useEffect(function(){
+    if(palier!==lastPalier){
+      var p=ENCOURAGEMENTS[palier]||ENCOURAGEMENTS.low;
+      setEncMsg(p[Math.floor(Math.random()*p.length)]);
+      setLastPalier(palier);
+    }
+  },[palier]);
+
   useEffect(function(){
     var handler = function(e){
       if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT') return;
@@ -5387,6 +5409,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
           <div style={{height:6,background:stats.done===items.length?'#00C218':stats.done>0?'#4A7FE5':'#E4E4E6',width:(items.length>0?Math.round(stats.done/items.length*100):0)+'%',transition:'width 300ms'}}/>
         </div>
         <span style={{fontSize:11,fontWeight:900,color:stats.done===items.length?'#007A10':'#1C1F35'}}>{stats.done}/{items.length}</span>
+        <span style={{fontSize:11,fontStyle:'italic',color:pct===100?'#007A10':'#2C5FC4',marginLeft:8}}>{encMsg}</span>
       </div>
       {view === 'list' ? (
         <div style={{border:'2px solid #E4E4E6'}}>
