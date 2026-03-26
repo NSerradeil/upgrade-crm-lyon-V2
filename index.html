@@ -308,6 +308,82 @@ const ENCOURAGEMENTS = {
   final: ["Tout dernier effort !","Quelques contacts restants — on finit fort.","La fin est là, accroche-toi."],
   done: ["Session bouclée — GG !","100% — mission accomplie.","Tout le monde a été contacté.","C'est dans la boîte. Belle session !"],
 };
+
+// ═══ BADGES & GAMIFICATION ═══
+const BADGE_THRESHOLDS = {
+  prospecteur:[50,250,750,2000], chasseur:[1,5,11,26], eleveur:[1,2,5,10],
+  connaisseur:[2,5,10,20], recruteur:[1,10,15,31], gestionnaire:[10,51,101,301],
+  productif:[1,6,16,36], networker:[50,300,600,1000], relanceur:[5,15,35,75],
+};
+const BADGE_META = {
+  prospecteur:{label:'Prospecteur',color:'#4A7FE5',titles:['Prospecteur','Accrocheur','Négociateur','Maître du Pitch'],unit:'contacts appelés'},
+  chasseur:{label:'Chasseur',color:'#FF3D2E',titles:['Éclaireur','Pisteur','Chasseur','Prédateur'],unit:'comptes avec mission'},
+  eleveur:{label:'Éleveur',color:'#00C218',titles:['Semeur','Cultivateur','Éleveur','Patriarche'],unit:'comptes fidélisés'},
+  connaisseur:{label:'Connaisseur',color:'#10B981',titles:['Habitué','Familier','Connaisseur','Référent'],unit:'missions meilleur compte'},
+  recruteur:{label:'Recruteur',color:'#8B5CF6',titles:['Talent Finder','Recruteur','Chasseur de Têtes','DRH Upgrade'],unit:'consultants missionnés'},
+  gestionnaire:{label:'Gestionnaire',color:'#F59E0B',titles:['Coordinateur','Chef de Projet','Gestionnaire','Pilote'],unit:'suivis loggés'},
+  productif:{label:'Productif',color:'#06B6D4',titles:['Lanceur','Transformeur','Closer','Machine à Closer'],unit:'besoins closés'},
+  networker:{label:'Networker',color:'#6366F1',titles:['Connecté','Networker','Hub','Super Connecteur'],unit:'contacts CRM'},
+  relanceur:{label:'Relanceur',color:'#EC4899',titles:['Persévérant','Ténace','Bulldozer','Inépuisable'],unit:'relances effectuées'},
+};
+const BADGE_LEVEL_LABELS = ['','Junior','Confirmé','Senior','Expert'];
+
+function getBadgeLevel(category, score) {
+  var t = BADGE_THRESHOLDS[category];
+  if (score >= t[3]) return 4;
+  if (score >= t[2]) return 3;
+  if (score >= t[1]) return 2;
+  if (score >= t[0]) return 1;
+  return 0;
+}
+
+function getBadgeProgress(category, score) {
+  var t = BADGE_THRESHOLDS[category];
+  var level = getBadgeLevel(category, score);
+  if (level === 0) return {current:score, next:t[0], pct:Math.min(Math.round(score/t[0]*100),99)};
+  if (level === 4) return {current:score, next:null, pct:100};
+  var low = t[level-1], high = t[level];
+  return {current:score, next:high, pct:Math.round((score-low)/(high-low)*100)};
+}
+
+function resolveTopBadge(achievements) {
+  var best = {category:'prospecteur', level:0, pct:0};
+  Object.keys(BADGE_META).forEach(function(cat){
+    var lv = getBadgeLevel(cat, achievements[cat]||0);
+    var prog = getBadgeProgress(cat, achievements[cat]||0);
+    if (lv > best.level || (lv === best.level && prog.pct > best.pct)) {
+      best = {category:cat, level:lv, pct:prog.pct};
+    }
+  });
+  return best;
+}
+
+async function loadAchievements(profileNom) {
+  var results = await Promise.all([
+    sb.from('session_prospection_contacts').select('id, sessions_prospection!inner(responsable)',{count:'exact',head:true}).eq('sessions_prospection.responsable',profileNom),
+    sb.from('missions').select('contact_referent_id').eq('responsable',profileNom).not('contact_referent_id','is',null),
+    sb.from('missions').select('id',{count:'exact',head:true}).eq('responsable',profileNom).not('besoin_id','is',null),
+    sb.from('historique_missions').select('id',{count:'exact',head:true}).eq('responsable',profileNom),
+    sb.from('besoins').select('id',{count:'exact',head:true}).eq('statut','Besoin Gagné').eq('responsable',profileNom),
+    sb.from('contacts').select('id',{count:'exact',head:true}).eq('responsable',profileNom),
+    sb.from('taches').select('id',{count:'exact',head:true}).eq('statut','fait').eq('responsable',profileNom).not('session_prospection_id','is',null),
+  ]);
+  var byClient = {};
+  (results[1].data||[]).forEach(function(m){byClient[m.contact_referent_id]=(byClient[m.contact_referent_id]||0)+1;});
+  var counts = Object.values(byClient);
+  return {
+    prospecteur: results[0].count||0,
+    chasseur: counts.length,
+    eleveur: counts.filter(function(n){return n>=2;}).length,
+    connaisseur: counts.length>0?Math.max.apply(null,counts):0,
+    recruteur: results[2].count||0,
+    gestionnaire: results[3].count||0,
+    productif: results[4].count||0,
+    networker: results[5].count||0,
+    relanceur: results[6].count||0,
+  };
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // DRAG & DROP LIST REORDER HOOK
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -5661,6 +5737,7 @@ function App() {
   const [tachesNavKey,setTachesNavKey]=useState(0); const [tachesNavEcheance,setTachesNavEcheance]=useState('');
   const navToTaches = echeance => { setTab('taches'); setTachesNavEcheance(echeance); setTachesNavKey(k=>k+1); };
   // Cross-tab navigation
+  const [achievements, setAchievements] = useState({});
   const [navContactId,setNavContactId]=useState(null); const [navContactKey,setNavContactKey]=useState(0);
   const [navBesoinId,setNavBesoinId]=useState(null); const [navBesoinKey,setNavBesoinKey]=useState(0);
   const [navMissionId,setNavMissionId]=useState(null); const [navMissionKey,setNavMissionKey]=useState(0);
@@ -5733,7 +5810,7 @@ function App() {
 
   useEffect(()=>{
     if(!user) return;
-    sb.from('profiles').select('*').eq('id',user.id).single().then(({data:p})=>{setProfile(p);setPrefs(p?.preferences||{});});
+    sb.from('profiles').select('*').eq('id',user.id).single().then(({data:p})=>{setProfile(p);setPrefs(p?.preferences||{});if(p)loadAchievements(p.nom).then(function(a){setAchievements(a);});});
     sb.from('profiles').select('*').order('nom').then(({data:ps})=>setAllProfiles(ps||[]));
     fetchAll();
   },[user]);
