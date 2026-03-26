@@ -384,6 +384,120 @@ async function loadAchievements(profileNom) {
   };
 }
 
+const PIXEL_CROWN = <>{[{x:11,y:4},{x:15,y:2},{x:19,y:1},{x:23,y:2},{x:27,y:4}].map(function(p,i){return <rect key={i} x={p.x} y={p.y} width={3} height={3} fill="#FFD700"/>;})}</>;
+
+const BADGE_ICONS = {
+  prospecteur: function(lv,color) {
+    return <>{/* Phone */}
+      <rect x="9" y="8" width="10" height="7" fill={lv>=3?color:lv>=2?color+'40':'none'} stroke={color} strokeWidth="1.5"/>
+      <rect x="21" y="25" width="10" height="7" fill={lv>=3?color:lv>=2?color+'40':'none'} stroke={color} strokeWidth="1.5"/>
+      <rect x="9" y="13" width="22" height="14" fill={lv>=3?color:lv>=2?color+'30':'none'} stroke={color} strokeWidth="1.5"/>
+      {lv>=3&&[0,1,2].map(function(i){return <rect key={i} x={34} y={14+i*4} width={2} height={3} fill={color}/>;})/*signal*/}
+      {lv===4&&<>{PIXEL_CROWN}<rect x="9" y="8" width="22" height="24" fill="none" stroke="#FFD700" strokeWidth="1"/></>}
+    </>;
+  },
+  chasseur: function(lv,color) {
+    return <>{/* Target */}
+      <circle cx="20" cy="22" r="12" fill="none" stroke={color} strokeWidth="1.5"/>
+      {lv>=2&&<circle cx="20" cy="22" r="7" fill="none" stroke={color} strokeWidth="1.5"/>}
+      <circle cx="20" cy="22" r="3" fill={lv>=2?color:color+'60'} stroke={color} strokeWidth="1"/>
+      {lv>=3&&<><line x1="20" y1="7" x2="20" y2="15" stroke={color} strokeWidth="1.5"/><line x1="20" y1="29" x2="20" y2="37" stroke={color} strokeWidth="1.5"/><line x1="5" y1="22" x2="13" y2="22" stroke={color} strokeWidth="1.5"/><line x1="27" y1="22" x2="35" y2="22" stroke={color} strokeWidth="1.5"/></>}
+      {lv===4&&<>{PIXEL_CROWN}<circle cx="20" cy="22" r="12" fill="none" stroke="#FFD700" strokeWidth="1"/></>}
+    </>;
+  },
+  eleveur: function(lv,color) {
+    return <>{/* Plant */}
+      {lv<=2&&<><rect x="19" y={lv===1?28:20} width="2" height={lv===1?8:16} fill={color}/>
+        <polygon points="19,28 11,22 15,22" fill={lv>=2?color:color+'40'} stroke={color} strokeWidth="1"/>
+        <polygon points="21,28 29,22 25,22" fill={lv>=2?color:color+'40'} stroke={color} strokeWidth="1"/>
+        {lv>=2&&<><polygon points="19,22 11,16 15,20" fill={color+'40'} stroke={color} strokeWidth="1"/><polygon points="21,22 29,16 25,20" fill={color+'40'} stroke={color} strokeWidth="1"/></>}
+      </>}
+      {lv>=3&&<><rect x="17" y="24" width="6" height="12" fill={color}/>
+        <rect x="8" y="10" width="24" height="16" fill={color}/>
+        <rect x="12" y="7" width="16" height="5" fill={color}/>
+      </>}
+      {lv===4&&<>{PIXEL_CROWN}<polygon points="17,36 11,36 17,30" fill={color}/><polygon points="23,36 29,36 23,30" fill={color}/></>}
+    </>;
+  },
+  connaisseur: function(lv,color) {
+    return <>{/* Building */}
+      <rect x="10" y="14" width="20" height="22" fill={lv>=3?color:lv>=2?color+'30':'none'} stroke={color} strokeWidth="1.5"/>
+      <rect x="16" y="10" width="8" height="5" fill={lv>=2?color:'none'} stroke={color} strokeWidth="1.5"/>
+      {[16,21,26].slice(0,lv>=3?3:lv>=2?3:2).map(function(y){return <>{[13,24].map(function(x){return <rect key={x+'_'+y} x={x} y={y} width="3" height="3" fill={lv>=3?(lv===4?'#FFD700':'#fff'):color} stroke={lv<3?color:'none'} strokeWidth="0.5"/>;})}</>;})/*windows*/}
+      <rect x="17" y="30" width="6" height="6" fill={lv>=3?'#fff':'none'} stroke={lv<3?color:'none'} strokeWidth="1"/>
+      {lv>=2&&<><line x1="20" y1="10" x2="20" y2="5" stroke={color} strokeWidth="1.5"/><rect x="20" y="5" width="6" height="3" fill={color}/></>/*flag*/}
+      {lv===4&&<>{PIXEL_CROWN}<rect x="10" y="14" width="20" height="22" fill="none" stroke="#FFD700" strokeWidth="1"/></>}
+    </>;
+  },
+  recruteur: function(lv,color) {
+    return <>{/* Person(s) */}
+      {lv<=2&&<><circle cx="20" cy="13" r="4" fill={lv>=2?color:'none'} stroke={color} strokeWidth="1.5"/>
+        <rect x="15" y="19" width="10" height="11" fill={lv>=2?color:'none'} stroke={color} strokeWidth="1.5"/>
+        {lv>=2&&<polyline points="26,18 28,21 33,16" fill="none" stroke={color} strokeWidth="2"/>/*check*/}
+      </>}
+      {lv===3&&<><circle cx="14" cy="13" r="3.5" fill={color} stroke={color} strokeWidth="1"/><rect x="10" y="18" width="8" height="10" fill={color} stroke={color} strokeWidth="1"/>
+        <circle cx="26" cy="13" r="3.5" fill={color} stroke={color} strokeWidth="1"/><rect x="22" y="18" width="8" height="10" fill={color} stroke={color} strokeWidth="1"/>
+        <line x1="18" y1="23" x2="22" y2="23" stroke={color} strokeWidth="1.5"/></>}
+      {lv===4&&<><circle cx="10" cy="13" r="3" fill={color}/><rect x="7" y="18" width="6" height="9" fill={color}/>
+        <circle cx="20" cy="13" r="3" fill={color}/><rect x="17" y="18" width="6" height="9" fill={color}/>
+        <circle cx="30" cy="13" r="3" fill={color}/><rect x="27" y="18" width="6" height="9" fill={color}/>
+        <line x1="13" y1="22" x2="17" y2="22" stroke={color} strokeWidth="1.5"/><line x1="23" y1="22" x2="27" y2="22" stroke={color} strokeWidth="1.5"/>
+        {PIXEL_CROWN}</>}
+    </>;
+  },
+  gestionnaire: function(lv,color) {
+    return <>{/* Clipboard */}
+      <rect x="8" y="12" width="24" height="24" fill={lv>=3?color:lv>=2?color+'30':'none'} stroke={color} strokeWidth="1.5"/>
+      <rect x="16" y="8" width="8" height="6" fill={lv>=2?color:'none'} stroke={color} strokeWidth="1.5"/>
+      {lv<=2&&<>{[20,24,28].map(function(y){return <line key={y} x1="13" y1={y} x2={y===28?22:27} y2={y} stroke={lv>=2?'#fff':color} strokeWidth="1"/>;})}</>}
+      {lv>=2&&lv<3&&<><polyline points="13,20 15,23 20,18" fill="none" stroke="#fff" strokeWidth="1.5"/><polyline points="13,24 15,27 20,22" fill="none" stroke="#fff" strokeWidth="1.5"/></>}
+      {lv>=3&&<>{[{x:14,h:4},{x:19,h:8},{x:24,h:6}].map(function(b){return <rect key={b.x} x={b.x} y={30-b.h} width="3" height={b.h} fill="#fff"/>;})}</>}
+      {lv===4&&<>{PIXEL_CROWN}<rect x="8" y="12" width="24" height="24" fill="none" stroke="#FFD700" strokeWidth="1"/></>}
+    </>;
+  },
+  productif: function(lv,color) {
+    return <>{/* Rocket */}
+      {lv===1&&<polygon points="24,10 32,10 32,18 18,30 16,28" fill="none" stroke={color} strokeWidth="1.5"/>}
+      {lv>=2&&<><polygon points="20,8 27,22 27,32 13,32 13,22" fill={lv>=3?color:color+'40'} stroke={color} strokeWidth="1.5"/>
+        <polygon points="13,22 8,30 13,30" fill={lv>=3?color:color+'30'} stroke={color} strokeWidth="1"/>
+        <polygon points="27,22 32,30 27,30" fill={lv>=3?color:color+'30'} stroke={color} strokeWidth="1"/>
+        <circle cx="20" cy="20" r="3" fill={lv>=3?'#fff':'none'} stroke={lv<3?color:'#fff'} strokeWidth="1"/>
+      </>}
+      {lv>=3&&<polygon points="14,32 20,40 26,32" fill="#FF3D2E"/>/*flame*/}
+      {lv===4&&<>{PIXEL_CROWN}<polygon points="20,8 27,22 27,32 13,32 13,22" fill="none" stroke="#FFD700" strokeWidth="1"/>{[{x:5,y:10},{x:33,y:14},{x:7,y:24}].map(function(s,i){return <rect key={i} x={s.x} y={s.y} width="2" height="2" fill={color}/>;})}</>}
+    </>;
+  },
+  networker: function(lv,color) {
+    var nodes = lv===1?[{x:20,y:10},{x:11,y:30},{x:29,y:30}]:lv===2?[{x:20,y:10},{x:11,y:30},{x:29,y:30},{x:5,y:20},{x:35,y:20}]:[{x:20,y:20},{x:20,y:8},{x:30,y:14},{x:30,y:26},{x:20,y:32},{x:10,y:26},{x:10,y:14}];
+    return <>{/* Network */}
+      {lv<=2&&<>{nodes.map(function(n,i){return nodes.slice(i+1).map(function(m,j){return <line key={i+'_'+j} x1={n.x} y1={n.y} x2={m.x} y2={m.y} stroke={color} strokeWidth="1" opacity="0.4"/>;});})}</>}
+      {lv>=3&&nodes.slice(1).map(function(n,i){return <line key={i} x1={20} y1={20} x2={n.x} y2={n.y} stroke={color} strokeWidth="1.5"/>;})/*hub lines*/}
+      {nodes.map(function(n,i){return <circle key={i} cx={n.x} cy={n.y} r={i===0&&lv>=3?4:3} fill={lv>=2?color:i===0?color:'none'} stroke={color} strokeWidth="1.5"/>;})/*nodes*/}
+      {lv===4&&<>{PIXEL_CROWN}{[[1,3],[2,5],[4,6]].map(function(p,i){var a=nodes[p[0]],b=nodes[p[1]];return <line key={'x'+i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color} strokeWidth="1" opacity="0.3"/>;})}</>}
+    </>;
+  },
+  relanceur: function(lv,color) {
+    return <>{/* Circular arrows */}
+      <path d="M20 8 A12 12 0 1 1 9 26" fill="none" stroke={color} strokeWidth={lv>=3?2.5:1.5}/>
+      <polygon points="7,22 9,30 15,26" fill={color}/>
+      {lv>=2&&<><path d="M20 32 A12 12 0 1 0 31 14" fill="none" stroke={color} strokeWidth="1.5"/><polygon points="33,18 31,10 25,14" fill={color}/></>}
+      {lv>=3&&<circle cx="20" cy="20" r="3" fill={color}/>}
+      {lv===4&&<>{PIXEL_CROWN}<polygon points="21,15 18,21 21,21 19,25 22,19 19,19" fill="#FFD700"/>/*lightning*/</>}
+    </>;
+  },
+};
+
+function BadgeIcon({ category, level, size, greyed }) {
+  var sz = size || 40;
+  var meta = BADGE_META[category];
+  if (!meta) return null;
+  var color = greyed ? '#CCCCCC' : meta.color;
+  var lv = level || 0;
+  var renderer = BADGE_ICONS[category];
+  if (!renderer) return null;
+  return <svg viewBox="0 0 40 40" width={sz} height={sz} style={{display:'block',flexShrink:0}}>{renderer(lv, color)}</svg>;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // DRAG & DROP LIST REORDER HOOK
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2241,6 +2355,138 @@ function TacheSection({ label, taches, contactMap, besoinMap, missionMap, profil
         })}
       </div>
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BADGE UI COMPONENTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function BadgeCard({ category, score, onClick }) {
+  var meta = BADGE_META[category];
+  var level = getBadgeLevel(category, score);
+  var prog = getBadgeProgress(category, score);
+  var isLocked = level === 0;
+  return (
+    <div onClick={onClick} style={{border:'2px solid '+(isLocked?'#E0E0E0':'#E4E4E6'),padding:16,textAlign:'center',cursor:'pointer',background:isLocked?'#F8F8F8':'#fff',position:'relative',borderRadius:0,transition:'all 120ms'}}
+      onMouseEnter={function(e){if(!isLocked)e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 4px 12px '+(isLocked?'rgba(0,0,0,0.05)':meta.color+'30');}}
+      onMouseLeave={function(e){e.currentTarget.style.transform='none';e.currentTarget.style.boxShadow='none';}}>
+      {isLocked&&<div style={{position:'absolute',top:6,right:6,fontSize:14}}>🔒</div>}
+      <div style={{display:'flex',justifyContent:'center',marginBottom:8,opacity:isLocked?0.3:1}}>
+        {typeof BadgeIcon==='function'?<BadgeIcon category={category} level={Math.max(level,1)} size={48} greyed={isLocked}/>:<div style={{width:48,height:48,background:'#eee'}}/>}
+      </div>
+      <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',color:isLocked?'#bbb':meta.color,marginBottom:4}}>{meta.label}</div>
+      {level>0&&<div style={{fontSize:12,fontWeight:900,color:'#1C1F35',marginBottom:2}}>{meta.titles[level-1]}</div>}
+      {level>0&&<div style={{display:'flex',justifyContent:'center',gap:2,marginBottom:6}}>{[1,2,3,4].map(function(i){return <div key={i} style={{width:8,height:8,background:i<=level?meta.color:'#E4E4E6'}}/>; })}</div>}
+      <div style={{height:4,background:'#E4E4E6',marginBottom:4}}>
+        <div style={{height:4,background:isLocked?'#ccc':meta.color,width:prog.pct+'%',transition:'width 300ms'}}/>
+      </div>
+      <div style={{fontSize:9,color:'#999'}}>{prog.current}{prog.next?' / '+prog.next:''} {meta.unit}</div>
+    </div>
+  );
+}
+
+function BadgeDetailPanel({ category, score, profile, onClose }) {
+  var meta = BADGE_META[category];
+  var level = getBadgeLevel(category, score);
+  var prog = getBadgeProgress(category, score);
+  var t = BADGE_THRESHOLDS[category];
+  return (
+    <div style={{position:'fixed',top:0,right:0,bottom:0,width:400,maxWidth:'100vw',background:'#fff',borderLeft:'2px solid #1C1F35',zIndex:110,overflowY:'auto',boxShadow:'-4px 0 20px rgba(0,0,0,0.1)'}}
+      onClick={function(e){e.stopPropagation();}}>
+      <div style={{padding:24}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20}}>
+          <div style={{display:'flex',gap:12,alignItems:'center'}}>
+            {typeof BadgeIcon==='function'&&<BadgeIcon category={category} level={Math.max(level,1)} size={64} greyed={level===0}/>}
+            <div>
+              <div style={{fontSize:16,fontWeight:900,color:'#1C1F35'}}>{level>0?meta.titles[level-1]:meta.label}</div>
+              <div style={{fontSize:11,color:meta.color,fontWeight:700,textTransform:'uppercase'}}>{meta.label} · {BADGE_LEVEL_LABELS[level]||'Non débloqué'}</div>
+              <div style={{display:'flex',gap:2,marginTop:4}}>{[1,2,3,4].map(function(i){return <div key={i} style={{width:10,height:10,background:i<=level?meta.color:'#E4E4E6'}}/>;})}</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{fontSize:20,background:'none',border:'none',cursor:'pointer',color:'#999'}}>×</button>
+        </div>
+        {/* Progress */}
+        <div style={{marginBottom:20}}>
+          <div style={{height:8,background:'#E4E4E6',marginBottom:6}}>
+            <div style={{height:8,background:meta.color,width:prog.pct+'%',transition:'width 300ms'}}/>
+          </div>
+          <div style={{fontSize:12,fontWeight:700,color:'#1C1F35'}}>{prog.current}{prog.next?' / '+prog.next:''} <span style={{fontWeight:400,color:'#999'}}>{meta.unit}</span></div>
+        </div>
+        {/* Levels */}
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',color:'#999',marginBottom:8}}>Progression</div>
+          {[1,2,3,4].map(function(lv){
+            var reached = level >= lv;
+            return <div key={lv} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid #E4E4E6'}}>
+              <div style={{width:20,height:20,background:reached?meta.color:'#E4E4E6',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#fff',fontWeight:900}}>{reached?'✓':lv}</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:12,fontWeight:reached?800:400,color:reached?'#1C1F35':'#999'}}>{meta.titles[lv-1]}</div>
+                <div style={{fontSize:10,color:'#bbb'}}>{BADGE_LEVEL_LABELS[lv]} · {t[lv-1]}+ {meta.unit}</div>
+              </div>
+            </div>;
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExploitsPage({ profile, achievements, onClose }) {
+  var [detailCat, setDetailCat] = useState(null);
+  var totalBadges = 0;
+  var totalPossible = Object.keys(BADGE_META).length * 4;
+  Object.keys(BADGE_META).forEach(function(cat){ totalBadges += getBadgeLevel(cat, achievements[cat]||0); });
+  var cats = Object.keys(BADGE_META);
+  return (
+    <div style={{position:'fixed',inset:0,background:'#fff',zIndex:100,overflowY:'auto'}}>
+      <div style={{maxWidth:800,margin:'0 auto',padding:'24px 16px'}}>
+        {/* Header */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:24}}>
+          <div>
+            <div style={{fontSize:22,fontWeight:900,color:'#1C1F35',textTransform:'uppercase',letterSpacing:'-0.01em'}}>Exploits</div>
+            <div style={{fontSize:12,color:'#999',marginTop:2}}>{profile.nom} · {profile.agence}</div>
+          </div>
+          <button onClick={onClose} style={{fontSize:24,background:'none',border:'none',cursor:'pointer',color:'#999'}}>×</button>
+        </div>
+        {/* Score global */}
+        <div style={{display:'flex',gap:16,marginBottom:24,flexWrap:'wrap'}}>
+          <div style={{border:'2px solid #1C1F35',padding:'12px 20px',borderRadius:0}}>
+            <div style={{fontSize:28,fontWeight:900,color:'#1C1F35'}}>{totalBadges}</div>
+            <div style={{fontSize:10,fontWeight:700,color:'#999',textTransform:'uppercase'}}>/ {totalPossible} niveaux débloqués</div>
+          </div>
+          <div style={{border:'2px solid #E4E4E6',padding:'12px 20px',borderRadius:0}}>
+            <div style={{fontSize:28,fontWeight:900,color:'#4A7FE5'}}>{cats.filter(function(c){return getBadgeLevel(c,achievements[c]||0)>=4;}).length}</div>
+            <div style={{fontSize:10,fontWeight:700,color:'#999',textTransform:'uppercase'}}>Expert</div>
+          </div>
+        </div>
+        {/* Grid 3x3 */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}>
+          {cats.map(function(cat){return <BadgeCard key={cat} category={cat} score={achievements[cat]||0} onClick={function(){setDetailCat(cat);}}/>;
+          })}
+        </div>
+      </div>
+      {/* Detail panel */}
+      {detailCat&&<BadgeDetailPanel category={detailCat} score={achievements[detailCat]||0} profile={profile} onClose={function(){setDetailCat(null);}}/>}
+    </div>
+  );
+}
+
+function BadgeMiniDisplay({ achievements, prefs, onClick }) {
+  var displayedBadge = (prefs&&prefs.displayedBadge) || 'auto';
+  var top;
+  if (displayedBadge === 'auto') {
+    top = resolveTopBadge(achievements);
+  } else {
+    top = {category:displayedBadge, level:getBadgeLevel(displayedBadge, achievements[displayedBadge]||0)};
+  }
+  if (top.level === 0) return null;
+  var meta = BADGE_META[top.category];
+  return (
+    <button onClick={onClick} style={{display:'flex',alignItems:'center',gap:4,background:'none',border:'none',cursor:'pointer',padding:0}} title="Voir mes exploits">
+      {typeof BadgeIcon==='function'&&<BadgeIcon category={top.category} level={top.level} size={20}/>}
+      <span style={{fontSize:10,fontWeight:700,color:meta.color,textTransform:'uppercase',letterSpacing:'0.04em'}}>{meta.titles[top.level-1]}</span>
+    </button>
   );
 }
 
@@ -5909,6 +6155,7 @@ function App() {
             {tachesRetard.length>0&&<button onClick={()=>navToTaches('retard')} className="text-xs border-2 border-coral-100 text-coral-100 hover:bg-coral-100 hover:text-midnight px-2 py-1 font-medium hidden sm:block transition-colors">{tachesRetard.length} tâche{tachesRetard.length>1?'s':''} en retard</button>}
             <div className="text-xs text-neutral-400 hidden sm:block">{lastRefresh&&`${lastRefresh}`}</div>
             <button onClick={fetchAll} disabled={loading} className="text-xs border border-neutral-300 text-carbon hover:text-midnight hover:border-midnight px-2 sm:px-3 py-1.5 font-medium disabled:opacity-50 transition-colors" title="Raccourci : R"><Icon d={ICONS.refresh} size={14}/><span className="hidden sm:inline"> Refresh</span></button>
+            {Object.keys(achievements).length>0&&<BadgeMiniDisplay achievements={achievements} prefs={prefs} onClick={function(){setTab('exploits');}}/>}
             {/* Avatar dropdown */}
             <div className="relative">
               <button onClick={()=>setShowMenu(!showMenu)} className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 text-xs font-medium border transition-colors ${showMenu?'border-carbon text-carbon':'border-neutral-300 text-carbon hover:text-midnight hover:border-midnight'}`}>
@@ -5974,6 +6221,7 @@ function App() {
         {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} contactMap={contactMap} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache}/>}
         {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navMissionId={navMissionId} navMissionKey={navMissionKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache} prefs={prefs}/>}
         {tab==='settings' &&<TabSettings user={user} profile={profile} taches={vTaches} subTab={settingsSubTab} onSubTabChange={setSettingsSubTab} prefs={prefs} onSavePrefs={savePrefs}/>}
+        {tab==='exploits'&&<ExploitsPage profile={activeProfile} achievements={achievements} onClose={function(){setTab(localStorage.getItem('crm_tab')||'taches');}}/>}
       </div>
       {/* Shortcuts modal */}
       {showShortcuts&&(
