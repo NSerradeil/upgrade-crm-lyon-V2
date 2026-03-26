@@ -3736,8 +3736,9 @@ function EditableJoursCell({ mission, moisKey, moisIdx, curMonthIdx, isDebut, is
 
   // Colors
   const isCurMonth=moisIdx===curMonthIdx;
-  const cellCls=isCurMonth?'text-white font-semibold':(j>0?(rec==='Réceptionné'?'text-jade-100 font-semibold':rec==='Livré'?'text-azure-100':'text-slate'):'text-neutral-200');
-  let cellBg=isCurMonth?'bg-midnight':'';
+  const cellCls=j>0?(rec==='Réceptionné'?'text-jade-100 font-semibold':rec==='Livré'?'text-azure-100':'text-slate'):'text-neutral-200';
+  let cellBg=isCurMonth?'':'';
+  var cellBgStyle=isCurMonth?{background:'#F0F0F2'}:{};
   let cellStyle={};
   if(isDebut&&isFin) cellStyle={background:'linear-gradient(90deg, rgba(34,197,94,0.15) 50%, rgba(239,68,68,'+(finSoon?'0.30':'0.15')+') 50%)'};
   else if(isDebut) cellStyle={background:'rgba(34,197,94,0.15)'};
@@ -3745,7 +3746,7 @@ function EditableJoursCell({ mission, moisKey, moisIdx, curMonthIdx, isDebut, is
   if(isDebut||isFin) cellBg='';
 
   return (
-    <td className={`relative text-right text-xs font-mono ${cellBg} ${saving?'opacity-50':''}`} style={{...cellStyle,padding:'4px 6px',minWidth:'48px'}}
+    <td className={`relative text-right text-xs font-mono ${saving?'opacity-50':''}`} style={{...cellStyle,...cellBgStyle,padding:'4px 6px',minWidth:'48px'}}
       title={rec||(isDebut?'Début mission':'')+(isFin?' Fin mission':'')}>
       <div className="flex items-center justify-end gap-0.5">
         {/* Pastille statut — cliquable */}
@@ -3956,9 +3957,12 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
   const JOURS_OUV = 18.16;
   const missionsAll = missions || [];
   const cdiMissions = missionsAll.filter(m => m.type_contrat==='CDI'||m.statut==='Intercontrat');
+  const CY_IC=new Date().getFullYear();
   const nbCdiParMois = MOIS_KEYS.map((k,i) => cdiMissions.filter(m => {
-    const debut = m.date_debut_mission ? new Date(m.date_debut_mission).getMonth() : 0;
-    const fin = m.date_fin_mission ? new Date(m.date_fin_mission).getMonth() : 11;
+    const dY = m.date_debut_mission ? new Date(m.date_debut_mission).getFullYear() : CY_IC;
+    const fY = m.date_fin_mission ? new Date(m.date_fin_mission).getFullYear() : CY_IC;
+    const debut = m.date_debut_mission ? (dY<CY_IC?0:dY>CY_IC?12:new Date(m.date_debut_mission).getMonth()) : 0;
+    const fin = m.date_fin_mission ? (fY>CY_IC?11:fY<CY_IC?-1:new Date(m.date_fin_mission).getMonth()) : 11;
     return i >= debut && i <= fin;
   }).length);
   const joursInterParMois = MOIS_KEYS.map(k => intercontrat.reduce((s,m) => s+(parseFloat(m[`jours_${k}`])||0),0));
@@ -4102,7 +4106,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
                 <th className="px-1 py-2 text-right">TJM</th>
                 <th className="px-1 py-2 text-left">Statut</th>
                 {MOIS_LABELS.map((m,i)=>(
-                  <th key={i} className={`px-1 py-2 text-right whitespace-nowrap ${i===curMonthIdx?'text-white bg-midnight font-bold':''}`} style={{fontSize:'10px'}}>{m}</th>
+                  <th key={i} className={`px-1 py-2 text-right whitespace-nowrap ${i===curMonthIdx?'font-bold':''}`} style={{fontSize:'10px',background:i===curMonthIdx?'#F0F0F2':'transparent',color:i===curMonthIdx?'#1C1F35':'#999',borderBottom:i===curMonthIdx?'2px solid #1C1F35':'2px solid transparent'}}>{m}</th>
                 ))}
                 <th className="px-2 py-2 text-right">CA</th>
               </tr>
@@ -4114,8 +4118,9 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
                 const mHist=(histMissions||[]).filter(h=>h.mission_id===m.id);
                 const histCount=mHist.length;
                 // Feature 1: mois début/fin commande
-                const debutM=m.date_debut_mission?new Date(m.date_debut_mission).getMonth():-1;
-                const finM=m.date_fin_mission?new Date(m.date_fin_mission).getMonth():-1;
+                const CY=new Date().getFullYear();
+                const debutM=m.date_debut_mission?(new Date(m.date_debut_mission).getFullYear()<CY?0:new Date(m.date_debut_mission).getFullYear()>CY?-1:new Date(m.date_debut_mission).getMonth()):-1;
+                const finM=m.date_fin_mission?(new Date(m.date_fin_mission).getFullYear()>CY?11:new Date(m.date_fin_mission).getFullYear()<CY?-1:new Date(m.date_fin_mission).getMonth()):-1;
                 const finDate=m.date_fin_mission?new Date(m.date_fin_mission):null;
                 const finSoon=finDate&&((finDate-new Date())/(1000*60*60*24))<=30&&((finDate-new Date())/(1000*60*60*24))>=-31;
                 // Feature 2: badge suivi
