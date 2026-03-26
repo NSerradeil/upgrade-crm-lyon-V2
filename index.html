@@ -4546,31 +4546,34 @@ function PreferencesPanel({ prefs, onSave, profileNom }) {
 // PROSPECTION
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function ProspectionContactCard({ sc, idx, updateItem, expanded }) {
+function ProspectionContactCard({ sc, idx, updateItem, defaultExpanded }) {
+  var [open, setOpen] = useState(defaultExpanded || sc.status!=='none');
   var cfg = PROSPECT_CALL_STATUTS[sc.status] || PROSPECT_CALL_STATUTS.none;
+  var isOpen = open || sc.status!=='none';
   return (
-    <div style={{padding:'12px 16px',borderBottom:'1px solid #E4E4E6',background:sc.status!=='none'?cfg.bg:'#fff',borderLeft:'4px solid '+cfg.color,transition:'background 120ms'}}>
+    <div style={{padding:'12px 16px',borderBottom:'1px solid #E4E4E6',background:sc.status!=='none'?cfg.bg:'#fff',borderLeft:'4px solid '+(sc.status!=='none'?cfg.color:'#E4E4E6'),transition:'background 120ms'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
-        <div>
+        <div onClick={function(e){if(e.target.tagName==='BUTTON')return;setOpen(function(v){return !v;});}} style={{cursor:'pointer',userSelect:'none',flex:1,minWidth:0}}>
           <span style={{fontWeight:800,fontSize:14,color:'#1C1F35'}}>{sc.prenom} {sc.nom}</span>
           {sc.groupe&&<span style={{fontSize:11,color:'#999',marginLeft:8}}>{sc.groupe}</span>}
+          <span style={{float:'right',fontSize:9,color:'#ccc',marginTop:2}}>{isOpen?'▲':'▼'}</span>
         </div>
         <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
           {Object.entries(PROSPECT_CALL_STATUTS).filter(function(arr){return arr[0]!=='none';}).map(function(arr){var key=arr[0],val=arr[1];return(
-            <button key={key} onClick={function(){updateItem(idx,{status:sc.status===key?'none':key});}}
+            <button key={key} onClick={function(){updateItem(idx,{status:sc.status===key?'none':key});setOpen(true);}}
               style={{fontSize:10,fontWeight:700,padding:'3px 6px',borderRadius:0,border:'2px solid '+val.color,background:sc.status===key?val.color:'#fff',color:sc.status===key?'#fff':val.color,cursor:'pointer',transition:'all 80ms',textTransform:'uppercase'}}>
               {val.label}
             </button>
           );})}
         </div>
       </div>
-      {sc.status==='none'&&(
+      {!isOpen&&(
         <div style={{display:'flex',gap:12,marginTop:8,fontSize:11,color:'#666'}}>
-          {sc.telephone?<a href={'tel:'+sc.telephone} style={{color:'#4A7FE5'}}>{sc.telephone}</a>:<span style={{color:'#FF3D2E'}}>Pas de tel</span>}
-          {sc.email?<span>{sc.email}</span>:<span style={{color:'#FF3D2E'}}>Pas d email</span>}
+          {sc.telephone?<a href={'tel:'+sc.telephone} style={{color:'#2C5FC4'}}>{sc.telephone}</a>:<span style={{color:'#FF3D2E'}}>Pas de tél</span>}
+          {sc.email?<span>{sc.email}</span>:<span style={{color:'#FF3D2E'}}>Pas d'email</span>}
         </div>
       )}
-      {sc.status!=='none'&&(
+      {isOpen&&(
         <div style={{marginTop:8,display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
           <div>
             <label style={{fontSize:9,fontWeight:700,color:'#999',textTransform:'uppercase',letterSpacing:'0.05em'}}>TELEPHONE</label>
@@ -4604,7 +4607,7 @@ function ProspectionContactCard({ sc, idx, updateItem, expanded }) {
           </div>}
         </div>
       )}
-      {sc.status!=='none'&&(
+      {isOpen&&(
         <div style={{marginTop:8,padding:'8px 10px',background:'#f9f9f9',border:'1px solid #E4E4E6',borderRadius:0}}>
           <div style={{fontSize:9,fontWeight:700,color:'#999',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:4}}>CONTEXTE</div>
           <div style={{fontSize:11,color:'#666'}}>
@@ -4616,7 +4619,7 @@ function ProspectionContactCard({ sc, idx, updateItem, expanded }) {
           {sc.commentaires&&<div style={{fontSize:11,color:'#999',marginTop:4,fontStyle:'italic'}}>{sc.commentaires}</div>}
         </div>
       )}
-      {sc.status!=='none'&&(
+      {isOpen&&(
         <div style={{marginTop:10}}>
           <textarea value={sc.notes} onChange={function(e){updateItem(idx,{notes:e.target.value});}} placeholder="Notes d appel..." rows={2}
             style={{width:'100%',fontSize:12,padding:'6px 8px',border:'2px solid #E4E4E6',borderRadius:0,resize:'vertical',fontFamily:'Outfit,sans-serif'}}/>
@@ -5394,7 +5397,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
             <span style={{fontSize:12,color:'#999',padding:'6px 0'}}>{focusIdx+1} / {items.length}</span>
             <button onClick={function(){setFocusIdx(Math.min(items.length-1,focusIdx+1));}} disabled={focusIdx===items.length-1} style={{padding:'4px 12px',border:'2px solid #E4E4E6',background:'#fff',cursor:'pointer',borderRadius:0,opacity:focusIdx===items.length-1?0.3:1}}>Suivant</button>
           </div>
-          <ProspectionContactCard sc={current} idx={focusIdx} updateItem={updateItem} expanded/>
+          <ProspectionContactCard sc={current} idx={focusIdx} updateItem={updateItem} defaultExpanded/>
           {view==='focus'&&<div style={{fontSize:9,color:'#ccc',marginTop:4}}>Raccourcis : A=Appelé · I=Intéressant · N=iNjoignable · P=Pas intéressé · ←→ Navigation</div>}
         </div>
       ) : null}
