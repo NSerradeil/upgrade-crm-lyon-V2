@@ -315,6 +315,12 @@ const BADGE_THRESHOLDS = {
   prospecteur:[50,250,750,2000], chasseur:[1,5,11,26], eleveur:[1,2,5,10],
   connaisseur:[2,5,10,20], recruteur:[1,10,15,31], gestionnaire:[10,51,101,301],
   productif:[1,6,16,36], networker:[50,300,600,1000], relanceur:[5,15,35,75],
+  tribun:[5,20,40,80],
+  goldmaker:[500000,1000000,3000000,4000000],
+  rentier:[5,20,30,50],
+  architecte:[20,50,100,200],
+  diplomate:[15,40,80,150],
+  speedcloser:[1,4,8,15],
 };
 const BADGE_META = {
   prospecteur:{label:'Prospecteur',color:'#4A7FE5',titles:['Prospecteur','Accrocheur','Négociateur','Maître du Pitch'],unit:'contacts appelés',description:"Tu es la voix de l'agence. Là où d'autres hésitent, tu décroches. Chaque appel est une graine — certaines poussent, d'autres non, mais sans toi le jardin reste vide.",xpRule:"+1 XP par contact appelé lors d'une session de prospection (tous statuts sauf « non traité »)"},
@@ -326,6 +332,12 @@ const BADGE_META = {
   productif:{label:'Productif',color:'#06B6D4',titles:['Lanceur','Transformeur','Closer','Machine à Closer'],unit:'besoins closés',description:"Du brief au démarrage — tu raccourcis tout. Tu transformes les opportunités en deals avant que le pipeline ne s'engorge. Chaque besoin closé, c'est un projet qui existe grâce à toi.",xpRule:"+1 XP par besoin transformé en mission (statut « pourvu »)"},
   networker:{label:'Networker',color:'#6366F1',titles:['Connecté','Networker','Hub','Super Connecteur'],unit:'contacts CRM',description:"Ton CRM, c'est ton capital. Chaque contact ajouté, c'est une porte de plus dans un couloir qui s'allonge. Tu construis un réseau qui travaille pour toi, même quand tu ne décroches pas le téléphone.",xpRule:"+1 XP par contact créé dans le CRM"},
   relanceur:{label:'Relanceur',color:'#EC4899',titles:['Persévérant','Ténace','Bulldozer','Inépuisable'],unit:'relances effectuées',description:"La plupart abandonnent au premier refus. Pas toi. Tu sais que le timing fait tout — un « pas maintenant » peut devenir un « oui » trois semaines plus tard. Ta ténacité est une compétence rare.",xpRule:"+1 XP par relance issue d'une session de prospection marquée comme effectuée"},
+  tribun:{label:'Tribun',color:'#F97316',titles:['Bavard','Loquace','Intarissable','Tribun'],unit:'sessions terminées',description:"La prospection n'est pas un sprint pour toi — c'est un entraînement permanent. Tu te poses, tu décroches, tu recommences. Pendant que d'autres attendent le bon moment, toi tu crées le rythme.",xpRule:"+1 XP par session de prospection terminée (statut « done »)"},
+  goldmaker:{label:'Goldmaker',color:'#EAB308',titles:['Contributeur','Générateur','Producteur','Goldmaker'],unit:'€ CA YTD',description:"Derrière chaque mission, il y a un chiffre. Et derrière ce chiffre, il y a toi — le commercial qui a trouvé le bon profil, convaincu le bon client, et signé au bon moment. Ton CA, c'est la mesure tangible de ton impact.",xpRule:"Score = CA cumulé YTD sur toutes les missions actives et terminées du responsable"},
+  rentier:{label:'Rentier',color:'#10B981',titles:['Équilibré','Rentable','Stratège','Rentier'],unit:'pts de marge',description:"Closer, c'est bien. Closer avec de la marge, c'est mieux. Tu ne remplis pas le pipeline à n'importe quel prix — tu choisis tes deals, tu défends tes conditions, et ton portefeuille reflète cette exigence.",xpRule:"+0,5 pt si marge > 20% · +1 pt si > 30% · +2 pts si > 40%"},
+  architecte:{label:'Architecte',color:'#A78BFA',titles:['Dessinateur','Constructeur','Ingénieur','Architecte'],unit:'besoins créés',description:"Avant de closer, tu construis. Chaque besoin formalisé, c'est une opportunité que tu as eu le flair de cadrer avant qu'elle ne disparaisse dans le flou. Le pipeline ne se remplit pas tout seul — c'est toi qui poses les premières briques.",xpRule:"+1 XP par besoin créé dans le CRM (tous statuts)"},
+  diplomate:{label:'Diplomate',color:'#0EA5E9',titles:['Accessible','Présent','Diplomate','Plénipotentiaire'],unit:'RDV loggés',description:"Le téléphone, c'est bien. La salle de réunion, c'est autre chose. Tu sors du bureau, tu vas chez les clients, tu serres des mains. Ces rendez-vous-là créent quelque chose qu'aucun email ne peut reproduire — une relation.",xpRule:"+1 XP par RDV logué dans les tâches ou l'historique d'actions"},
+  speedcloser:{label:'Speed Closer',color:'#DC2626',titles:['Réactif','Agile','Speed Closer','Éclair'],unit:'deals < 30j',description:"30 jours. C'est tout ce qu'il te faut entre un brief client et une mission démarrée. Tu ne laisses pas le temps à l'opportunité de refroidir. Là où d'autres s'enlisent dans les allers-retours, toi tu exécutes.",xpRule:"+1 XP par besoin passé au statut « pourvu » en moins de 30 jours après sa création"},
 };
 const BADGE_LEVEL_LABELS = ['','Junior','Confirmé','Senior','Expert'];
 
@@ -368,20 +380,77 @@ async function loadAchievements(profileNom) {
     sb.from('besoins').select('id',{count:'exact',head:true}).eq('statut','Besoin Gagné').eq('responsable',profileNom),
     sb.from('contacts').select('id',{count:'exact',head:true}).eq('responsable',profileNom),
     sb.from('taches').select('id',{count:'exact',head:true}).eq('statut','fait').eq('responsable',profileNom).not('session_prospection_id','is',null),
+    // 10. TRIBUN : sessions terminées
+    sb.from('sessions_prospection').select('id',{count:'exact',head:true}).eq('statut','done').eq('responsable',profileNom),
+    // 11. GOLDMAKER + RENTIER : missions avec TJM
+    sb.from('missions').select('tjm, cjm, jours_jan, jours_fev, jours_mar, jours_avr, jours_mai, jours_jun, jours_jul, jours_aou, jours_sep, jours_oct, jours_nov, jours_dec').eq('responsable',profileNom).not('tjm','is',null),
+    // 12. ARCHITECTE : tous les besoins créés
+    sb.from('besoins').select('id',{count:'exact',head:true}).eq('responsable',profileNom),
+    // 13. DIPLOMATE taches RDV
+    sb.from('taches').select('id',{count:'exact',head:true}).eq('responsable',profileNom).ilike('type','%RDV%'),
+    // 14. DIPLOMATE actions RDV
+    sb.from('historique_actions').select('id',{count:'exact',head:true}).eq('responsable',profileNom).ilike('type_action','%RDV%'),
+    // 15. SPEED CLOSER : besoins pourvus with dates
+    sb.from('besoins').select('created_at, updated_at').eq('responsable',profileNom).eq('statut','pourvu'),
   ]);
+  var rProsp = results[0];
+  var rMissions = results[1];
+  var rRecruteur = results[2];
+  var rGest = results[3];
+  var rProductif = results[4];
+  var rNetwork = results[5];
+  var rRelance = results[6];
+  var rTribun = results[7];
+  var rMissionsV2 = results[8];
+  var rArchitecte = results[9];
+  var rDiplomTaches = results[10];
+  var rDiplomActions = results[11];
+  var rSpeedCloser = results[12];
   var byClient = {};
-  (results[1].data||[]).forEach(function(m){byClient[m.contact_referent_id]=(byClient[m.contact_referent_id]||0)+1;});
+  (rMissions.data||[]).forEach(function(m){byClient[m.contact_referent_id]=(byClient[m.contact_referent_id]||0)+1;});
   var counts = Object.values(byClient);
+  // GOLDMAKER : CA YTD (use monthly days columns)
+  var currentYear = new Date().getFullYear();
+  var monthKeys = ['jours_jan','jours_fev','jours_mar','jours_avr','jours_mai','jours_jun','jours_jul','jours_aou','jours_sep','jours_oct','jours_nov','jours_dec'];
+  var currentMonth = new Date().getMonth(); // 0-based
+  var caYTD = 0;
+  (rMissionsV2.data || []).forEach(function(m) {
+    if (!m.tjm) return;
+    for (var mi = 0; mi <= currentMonth; mi++) {
+      var jours = parseFloat(m[monthKeys[mi]]) || 0;
+      caYTD += m.tjm * jours;
+    }
+  });
+  // RENTIER : points de marge pondérés
+  var margeScore = 0;
+  (rMissionsV2.data || []).forEach(function(m) {
+    if (!m.tjm || !m.cjm || m.tjm === 0) return;
+    var taux = (m.cjm / m.tjm) * 100;
+    if (taux > 40) margeScore += 2;
+    else if (taux > 30) margeScore += 1;
+    else if (taux > 20) margeScore += 0.5;
+  });
+  // SPEED CLOSER
+  var speedCloserScore = (rSpeedCloser.data || []).filter(function(b) {
+    var days = (new Date(b.updated_at) - new Date(b.created_at)) / (1000 * 60 * 60 * 24);
+    return days < 30;
+  }).length;
   return {
-    prospecteur: results[0].count||0,
+    prospecteur: rProsp.count||0,
     chasseur: counts.length,
     eleveur: counts.filter(function(n){return n>=2;}).length,
     connaisseur: counts.length>0?Math.max.apply(null,counts):0,
-    recruteur: results[2].count||0,
-    gestionnaire: results[3].count||0,
-    productif: results[4].count||0,
-    networker: results[5].count||0,
-    relanceur: results[6].count||0,
+    recruteur: rRecruteur.count||0,
+    gestionnaire: rGest.count||0,
+    productif: rProductif.count||0,
+    networker: rNetwork.count||0,
+    relanceur: rRelance.count||0,
+    tribun: rTribun.count||0,
+    goldmaker: Math.round(caYTD),
+    rentier: margeScore,
+    architecte: rArchitecte.count||0,
+    diplomate: (rDiplomTaches.count||0) + (rDiplomActions.count||0),
+    speedcloser: speedCloserScore,
   };
 }
 
@@ -484,6 +553,82 @@ const BADGE_ICONS = {
       {lv>=2&&<><path d="M20 32 A12 12 0 1 0 31 14" fill="none" stroke={color} strokeWidth="1.5"/><polygon points="33,18 31,10 25,14" fill={color}/></>}
       {lv>=3&&<circle cx="20" cy="20" r="3" fill={color}/>}
       {lv===4&&<>{PIXEL_CROWN}<polygon points="21,15 18,21 21,21 19,25 22,19 19,19" fill="#FFD700"/>/*lightning*/</>}
+    </>;
+  },
+  tribun: function(lv,color) {
+    return <>{/* Phone + speech bubble */}
+      <rect x="6" y="14" width="8" height="6" fill={lv>=3?color:lv>=2?color+'40':'none'} stroke={color} strokeWidth="1.5"/>
+      <rect x="16" y="26" width="8" height="6" fill={lv>=3?color:lv>=2?color+'40':'none'} stroke={color} strokeWidth="1.5"/>
+      <rect x="6" y="18" width="18" height="10" fill={lv>=3?color:lv>=2?color+'30':'none'} stroke={color} strokeWidth="1.5"/>
+      {/* Speech bubble */}
+      <rect x="26" y="8" width="12" height="10" fill={lv>=3?color:lv>=2?color+'20':'none'} stroke={color} strokeWidth="1.5"/>
+      <polygon points="27,18 30,18 27,22" fill={lv>=3?color:lv>=2?color+'20':'none'} stroke={color} strokeWidth="1"/>
+      {lv>=2&&[0,1].map(function(i){return <rect key={i} x={29} y={11+i*3} width={6} height={1.5} fill={lv>=3?'#fff':color}/>;})/*text lines*/}
+      {lv>=3&&<rect x={29} y={17} width={4} height={1.5} fill="#fff"/>}
+      {lv===4&&<>{PIXEL_CROWN}<rect x="6" y="14" width="18" height="18" fill="none" stroke="#FFD700" strokeWidth="1"/></>}
+    </>;
+  },
+  goldmaker: function(lv,color) {
+    return <>{/* Coin stack */}
+      <rect x="12" y="26" width="16" height="6" fill={lv>=3?color:lv>=2?color+'40':'none'} stroke={color} strokeWidth="1.5"/>
+      {lv>=2&&<rect x="10" y="20" width="20" height="6" fill={lv>=3?color:color+'40'} stroke={color} strokeWidth="1.5"/>}
+      {lv>=3&&<rect x="12" y="14" width="16" height="6" fill={color} stroke={color} strokeWidth="1.5"/>}
+      {/* € symbol */}
+      <text x="20" y={lv>=3?19:lv>=2?25:31} textAnchor="middle" fontSize={lv>=3?8:9} fontWeight="900" fill={lv>=3?'#fff':color} fontFamily="Outfit,sans-serif">€</text>
+      {lv===4&&<>{PIXEL_CROWN}<rect x="10" y="14" width="20" height="18" fill="none" stroke="#FFD700" strokeWidth="1"/><text x="20" y="19" textAnchor="middle" fontSize="8" fontWeight="900" fill="#FFD700" fontFamily="Outfit,sans-serif">€</text></>}
+    </>;
+  },
+  rentier: function(lv,color) {
+    return <>{/* % + bars */}
+      {/* % symbol left side */}
+      <circle cx="12" cy="14" r="3" fill={lv>=3?color:'none'} stroke={color} strokeWidth="1.5"/>
+      <circle cx="20" cy="26" r="3" fill={lv>=3?color:'none'} stroke={color} strokeWidth="1.5"/>
+      <line x1="8" y1="30" x2="24" y2="10" stroke={color} strokeWidth="2"/>
+      {/* Rising bars right side */}
+      {lv>=2&&<rect x="28" y="28" width="4" height="6" fill={lv>=3?color:color+'40'} stroke={color} strokeWidth="1"/>}
+      {lv>=2&&<rect x="33" y="22" width="4" height="12" fill={lv>=3?color:color+'40'} stroke={color} strokeWidth="1"/>}
+      {lv>=3&&<rect x="28" y="16" width="4" height="18" fill={color} stroke={color} strokeWidth="1"/>}
+      {lv>=3&&<rect x="33" y="10" width="4" height="24" fill={color} stroke={color} strokeWidth="1"/>}
+      {lv===4&&<>{PIXEL_CROWN}<circle cx="12" cy="14" r="3" fill="none" stroke="#FFD700" strokeWidth="1"/><circle cx="20" cy="26" r="3" fill="none" stroke="#FFD700" strokeWidth="1"/></>}
+    </>;
+  },
+  architecte: function(lv,color) {
+    return <>{/* Ruler + set square */}
+      {/* Ruler horizontal */}
+      <rect x="4" y="22" width="32" height="6" fill={lv>=3?color:lv>=2?color+'40':'none'} stroke={color} strokeWidth="1.5"/>
+      {/* Graduations */}
+      {[10,16,22,28].slice(0,lv>=3?4:lv>=2?4:3).map(function(gx,i){return <rect key={i} x={gx} y={22} width="1.5" height="3" fill={lv>=3?'#fff':color}/>;})/*ticks*/}
+      {/* Set square L2+ */}
+      {lv>=2&&<><line x1="8" y1="10" x2="8" y2="22" stroke={color} strokeWidth="1.5"/><line x1="8" y1="22" x2="20" y2="22" stroke={color} strokeWidth="1.5"/><line x1="8" y1="10" x2="20" y2="22" stroke={lv>=3?color:color+'60'} strokeWidth="1"/></>}
+      {/* Pencil L3+ */}
+      {lv>=3&&<><rect x="30" y="8" width="3" height="10" fill={color} stroke={color} strokeWidth="1"/><polygon points="30,18 31.5,22 33,18" fill={color}/></>}
+      {lv===4&&<>{PIXEL_CROWN}<rect x="4" y="22" width="32" height="6" fill="none" stroke="#FFD700" strokeWidth="1"/></>}
+    </>;
+  },
+  diplomate: function(lv,color) {
+    return <>{/* Handshake */}
+      {/* Left hand */}
+      <rect x="4" y="16" width="12" height="7" fill={lv>=3?color:lv>=2?color+'40':'none'} stroke={color} strokeWidth="1.5"/>
+      {lv>=2&&<><rect x="4" y="12" width="3" height="5" fill={lv>=3?color:color+'40'} stroke={color} strokeWidth="1"/><rect x="8" y="11" width="3" height="5" fill={lv>=3?color:color+'40'} stroke={color} strokeWidth="1"/><rect x="12" y="12" width="3" height="4" fill={lv>=3?color:color+'40'} stroke={color} strokeWidth="1"/></>}
+      {/* Right hand */}
+      <rect x="24" y="16" width="12" height="7" fill={lv>=3?color:lv>=2?color+'40':'none'} stroke={color} strokeWidth="1.5"/>
+      {lv>=2&&<><rect x="33" y="12" width="3" height="5" fill={lv>=3?color:color+'40'} stroke={color} strokeWidth="1"/><rect x="29" y="11" width="3" height="5" fill={lv>=3?color:color+'40'} stroke={color} strokeWidth="1"/><rect x="25" y="12" width="3" height="4" fill={lv>=3?color:color+'40'} stroke={color} strokeWidth="1"/></>}
+      {/* Central grip */}
+      <rect x="14" y="16" width="12" height="7" fill={lv>=3?color:lv>=2?color+'30':'none'} stroke={color} strokeWidth="1.5"/>
+      {/* Cuffs L3+ */}
+      {lv>=3&&<><rect x="4" y="23" width="12" height="4" fill={color} stroke={color} strokeWidth="1"/><rect x="24" y="23" width="12" height="4" fill={color} stroke={color} strokeWidth="1"/></>}
+      {lv===4&&<>{PIXEL_CROWN}<rect x="4" y="16" width="32" height="7" fill="none" stroke="#FFD700" strokeWidth="1"/></>}
+    </>;
+  },
+  speedcloser: function(lv,color) {
+    return <>{/* Lightning + chrono */}
+      {/* Lightning bolt */}
+      <polygon points="24,6 18,20 22,20 17,36 27,18 23,18" fill={lv>=3?color:lv>=2?color+'40':'none'} stroke={color} strokeWidth="1.5"/>
+      {/* Chrono L2+ */}
+      {lv>=2&&<><circle cx="10" cy="24" r="6" fill={lv>=3?color+'30':'none'} stroke={color} strokeWidth="1.5"/><rect x="9" y="16" width="3" height="2" fill={color}/><line x1="10" y1="24" x2="10" y2="20" stroke={lv>=3?'#fff':color} strokeWidth="1.5"/><line x1="10" y1="24" x2="13" y2="24" stroke={lv>=3?'#fff':color} strokeWidth="1.5"/></>}
+      {/* Speed lines L3+ */}
+      {lv>=3&&<><line x1="4" y1="14" x2="14" y2="14" stroke={color} strokeWidth="1" opacity="0.5"/><line x1="6" y1="18" x2="14" y2="18" stroke={color} strokeWidth="1" opacity="0.5"/></>}
+      {lv===4&&<>{PIXEL_CROWN}<polygon points="24,6 18,20 22,20 17,36 27,18 23,18" fill="none" stroke="#FFD700" strokeWidth="1"/></>}
     </>;
   },
 };
@@ -2386,7 +2531,11 @@ function BadgeCard({ category, score, onClick }) {
       <div style={{height:4,background:'#E4E4E6',marginBottom:4}}>
         <div style={{height:4,background:isLocked?'#ccc':meta.color,width:prog.pct+'%',transition:'width 300ms'}}/>
       </div>
-      <div style={{fontSize:9,color:'#999'}}>{prog.current}{prog.next?' / '+prog.next:''} {meta.unit}</div>
+      {(function(){
+        var displayScore = category==='goldmaker' ? prog.current.toLocaleString('fr-FR')+' €' : category==='rentier' ? prog.current.toFixed(1).replace('.',',')+' pts' : prog.current;
+        var displayNext = !prog.next ? '' : category==='goldmaker' ? ' / '+prog.next.toLocaleString('fr-FR')+' €' : category==='rentier' ? ' / '+prog.next+' pts' : ' / '+prog.next;
+        return <div style={{fontSize:9,color:'#999'}}>{displayScore}{displayNext} {meta.unit}</div>;
+      })()}
     </div>
   );
 }
@@ -2417,7 +2566,11 @@ function BadgeDetailPanel({ category, score, profile, prefs, onSavePrefs, onClos
           <div style={{height:8,background:'#E4E4E6',marginBottom:6}}>
             <div style={{height:8,background:meta.color,width:prog.pct+'%',transition:'width 300ms'}}/>
           </div>
-          <div style={{fontSize:12,fontWeight:700,color:'#1C1F35'}}>{prog.current}{prog.next?' / '+prog.next:''} <span style={{fontWeight:400,color:'#999'}}>{meta.unit}</span></div>
+          {(function(){
+            var displayScore = category==='goldmaker' ? prog.current.toLocaleString('fr-FR')+' €' : category==='rentier' ? prog.current.toFixed(1).replace('.',',')+' pts' : prog.current;
+            var displayNext = !prog.next ? '' : category==='goldmaker' ? ' / '+prog.next.toLocaleString('fr-FR')+' €' : category==='rentier' ? ' / '+prog.next+' pts' : ' / '+prog.next;
+            return <div style={{fontSize:12,fontWeight:700,color:'#1C1F35'}}>{displayScore}{displayNext} <span style={{fontWeight:400,color:'#999'}}>{meta.unit}</span></div>;
+          })()}
         </div>
         {/* Description + règle XP */}
         <div style={{margin:'16px 0',padding:12,background:'#F5F5F7',borderLeft:'3px solid '+meta.color}}>
