@@ -4540,8 +4540,8 @@ function ChangePasswordModal({ onClose }) {
 }
 
 // ── TabSettings — Page Paramètres ──────────────────────────────────────────────
-function TabSettings({ user, profile, taches, subTab, onSubTabChange, prefs, onSavePrefs, achievements }) {
-  const SUB_TABS=[{id:'profil',label:'Profil & Sécurité'},{id:'calendrier',label:'Calendrier ICS'},{id:'preferences',label:'Préférences'},{id:'exploits',label:'Exploits'}];
+function TabSettings({ user, profile, taches, subTab, onSubTabChange, prefs, onSavePrefs, achievements, viewAs }) {
+  const SUB_TABS=viewAs?[{id:'exploits',label:'Exploits'}]:[{id:'profil',label:'Profil & Sécurité'},{id:'calendrier',label:'Calendrier ICS'},{id:'preferences',label:'Préférences'},{id:'exploits',label:'Exploits'}];
   // Password change (inline)
   const [pwd,setPwd]=useState(''); const [pwd2,setPwd2]=useState('');
   const [pwdSaving,setPwdSaving]=useState(false); const [pwdErr,setPwdErr]=useState(''); const [pwdOk,setPwdOk]=useState(false);
@@ -5988,6 +5988,9 @@ function App() {
   const navToTaches = echeance => { setTab('taches'); setTachesNavEcheance(echeance); setTachesNavKey(k=>k+1); };
   // Cross-tab navigation
   const [achievements, setAchievements] = useState({});
+  const [viewAsAchievements, setViewAsAchievements] = useState({});
+  useEffect(function(){if(viewAs){loadAchievements(viewAs.nom).then(function(a){setViewAsAchievements(a);});}else{setViewAsAchievements({});}},[viewAs]);
+  const activeAchievements = viewAs ? viewAsAchievements : achievements;
   const [navContactId,setNavContactId]=useState(null); const [navContactKey,setNavContactKey]=useState(0);
   const [navBesoinId,setNavBesoinId]=useState(null); const [navBesoinKey,setNavBesoinKey]=useState(0);
   const [navMissionId,setNavMissionId]=useState(null); const [navMissionKey,setNavMissionKey]=useState(0);
@@ -6135,7 +6138,7 @@ function App() {
   const besoinsPipeActifs=vBesoins.filter(b=>b.statut!=='Besoin Perdu');
   const TAB_COLORS={taches:'#0BA600',prospects:'#5090FE',prospection:'#FF3D2E',besoins:'#FFEA2F',pipe:'#823DE8',tdb:'#FF78FD',historique:'#565861',settings:'#A4A6AB'};
   const activeColor=TAB_COLORS[tab]||'#5090FE';
-  var _bdResolved=(function(){var dp=(prefs&&prefs.displayedBadge)||'auto';if(dp==='auto')return resolveTopBadge(achievements);var parts=dp.split(':');var cat=parts[0];var lv=parseInt(parts[1])||0;var cur=getBadgeLevel(cat,achievements[cat]||0);if(cur===0)return resolveTopBadge(achievements);return{category:cat,level:Math.min(lv,cur)};}());
+  var _bdResolved=(function(){var ach=activeAchievements;var dp=(prefs&&prefs.displayedBadge)||'auto';if(viewAs)dp='auto';if(dp==='auto')return resolveTopBadge(ach);var parts=dp.split(':');var cat=parts[0];var lv=parseInt(parts[1])||0;var cur=getBadgeLevel(cat,ach[cat]||0);if(cur===0)return resolveTopBadge(ach);return{category:cat,level:Math.min(lv,cur)};}());
   var badgeCategory=_bdResolved.category;var badgeLevel=_bdResolved.level;var badgeMeta=BADGE_META[badgeCategory];
   const TABS=[
     {id:'taches',     label:<><Icon d={ICONS.check} size={14}/> Tâches ({tachesActives.length}){tachesRetard.length>0&&<span className="w-2 h-2 bg-coral-100 rounded-full inline-block ml-1"/>}</>},
@@ -6183,7 +6186,7 @@ function App() {
                       <span className="text-[10px] text-slate">{profile.agence}</span>
                     </div>
                   </div>
-                  {Object.keys(achievements).length>0&&badgeLevel>0&&badgeMeta?<div className="border-b border-neutral-100">
+                  {Object.keys(activeAchievements).length>0&&badgeLevel>0&&badgeMeta?<div className="border-b border-neutral-100">
                     <button onClick={function(){setTab('settings');setSettingsSubTab('exploits');setShowMenu(false);}} style={{display:'flex',alignItems:'center',gap:6,width:'100%',padding:'8px 16px',cursor:'pointer',border:'none',background:badgeMeta.color+'08',textAlign:'left'}}>
                       <BadgeIcon category={badgeCategory} level={badgeLevel} size={20}/>
                       <span style={{fontSize:11,fontWeight:700,flex:1,color:badgeMeta.color,letterSpacing:'0.06em',textTransform:'uppercase'}}>{badgeMeta.titles[badgeLevel-1]}</span>
@@ -6236,7 +6239,7 @@ function App() {
         {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} prefs={prefs}/>}
         {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} contactMap={contactMap} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache}/>}
         {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navMissionId={navMissionId} navMissionKey={navMissionKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache} prefs={prefs}/>}
-        {tab==='settings' &&<TabSettings user={user} profile={profile} taches={vTaches} subTab={settingsSubTab} onSubTabChange={setSettingsSubTab} prefs={prefs} onSavePrefs={savePrefs} achievements={achievements}/>}
+        {tab==='settings' &&<TabSettings user={user} profile={activeProfile} taches={vTaches} subTab={settingsSubTab} onSubTabChange={setSettingsSubTab} prefs={prefs} onSavePrefs={viewAs?null:savePrefs} achievements={activeAchievements} viewAs={!!viewAs}/>}
       </div>
       {/* Shortcuts modal */}
       {showShortcuts&&(
