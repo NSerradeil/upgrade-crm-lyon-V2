@@ -6131,6 +6131,9 @@ function App() {
   const besoinsPipeActifs=vBesoins.filter(b=>b.statut!=='Besoin Perdu');
   const TAB_COLORS={taches:'#0BA600',prospects:'#5090FE',prospection:'#FF3D2E',besoins:'#FFEA2F',pipe:'#823DE8',tdb:'#FF78FD',historique:'#565861',settings:'#A4A6AB'};
   const activeColor=TAB_COLORS[tab]||'#5090FE';
+  var _bdPref=(prefs&&prefs.displayedBadge)||'auto';
+  var _bdResolved=_bdPref==='auto'?resolveTopBadge(achievements):{category:_bdPref,level:getBadgeLevel(_bdPref,achievements[_bdPref]||0)};
+  var badgeCategory=_bdResolved.category;var badgeLevel=_bdResolved.level;var badgeMeta=BADGE_META[badgeCategory];
   const TABS=[
     {id:'taches',     label:<><Icon d={ICONS.check} size={14}/> Tâches ({tachesActives.length}){tachesRetard.length>0&&<span className="w-2 h-2 bg-coral-100 rounded-full inline-block ml-1"/>}</>},
     {id:'prospects',  label:<><Icon d={ICONS.person} size={14}/> Contacts ({vContacts.length})</>},
@@ -6157,9 +6160,13 @@ function App() {
             <button onClick={fetchAll} disabled={loading} className="text-xs border border-neutral-300 text-carbon hover:text-midnight hover:border-midnight px-2 sm:px-3 py-1.5 font-medium disabled:opacity-50 transition-colors" title="Raccourci : R"><Icon d={ICONS.refresh} size={14}/><span className="hidden sm:inline"> Refresh</span></button>
             {/* Avatar dropdown */}
             <div className="relative">
-              <button onClick={()=>setShowMenu(!showMenu)} className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 text-xs font-medium border transition-colors ${showMenu?'border-carbon text-carbon':'border-neutral-300 text-carbon hover:text-midnight hover:border-midnight'}`}>
+              <button onClick={()=>setShowMenu(!showMenu)} className={`flex items-center gap-2 px-2 sm:px-3 py-1.5 text-xs font-medium border transition-colors ${showMenu?'border-carbon text-carbon':'border-neutral-300 text-carbon hover:text-midnight hover:border-midnight'}`}>
                 <span className="w-6 h-6 flex items-center justify-center text-xs font-bold text-midnight" style={{background:activeColor}}>{(profile.nom||'?')[0]}</span>
-                <span className="hidden sm:inline">{profile.nom}</span>
+                <span className="hidden sm:inline" style={{display:'none'}}/>
+                <div className="hidden sm:flex flex-col items-start" style={{gap:2}}>
+                  <span style={{fontSize:13,fontWeight:600,color:'#1C1F35',lineHeight:1}}>{profile.nom}</span>
+                  {badgeLevel>0&&badgeMeta&&<span style={{display:'flex',alignItems:'center',gap:3}}><BadgeIcon category={badgeCategory} level={badgeLevel} size={14}/><span style={{fontSize:10,fontWeight:700,lineHeight:1,color:badgeMeta.color,letterSpacing:'0.05em',textTransform:'uppercase'}}>{badgeMeta.titles[badgeLevel-1]}</span></span>}
+                </div>
                 <span className="text-neutral-400">▾</span>
               </button>
               {showMenu&&<>
