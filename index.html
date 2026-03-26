@@ -1800,7 +1800,7 @@ function CompleteTaskModal({ task, contact, profile, onClose, onSaved }) {
   const save=async()=>{
     if(createRelance&&!relanceDate) return;
     setSaving(true);
-    await sb.from('taches').update({statut:'fait',date_completion:getToday()}).eq('id',task.id);
+    await sb.from('taches').update({statut:'fait',date_completion:getToday(),updated_at:new Date().toISOString()}).eq('id',task.id);
     if(task.contact_id){
       const details=note?`✅ ${task.titre} — ${note}`:`✅ ${task.titre}`;
       await sb.from('historique_actions').insert({id_prospect:task.contact_id,date:getToday(),type_action:'Tâche accomplie',details,responsable:profile.nom,tache_id:task.id,besoin_id:task.besoin_id||null});
@@ -1886,7 +1886,7 @@ function EditTacheModal({ task, contacts, besoins, missions, profile, allProfile
   const save=async()=>{
     if(!f.titre.trim())return;
     setSaving(true);
-    const{error}=await sb.from('taches').update({ titre:f.titre.trim(), due_date:combineDT(f.due_date,f.due_time)||null, statut:f.due_date?'en_cours':'a_faire', notes:f.notes||null, responsable:f.responsable, contact_id:f.contact_id?parseInt(f.contact_id):null, mission_id:f.mission_id||null, besoin_id:f.besoin_id||null }).eq('id',task.id);
+    const{error}=await sb.from('taches').update({ titre:f.titre.trim(), due_date:combineDT(f.due_date,f.due_time)||null, statut:f.due_date?'en_cours':'a_faire', notes:f.notes||null, responsable:f.responsable, contact_id:f.contact_id?parseInt(f.contact_id):null, mission_id:f.mission_id||null, besoin_id:f.besoin_id||null, updated_at:new Date().toISOString() }).eq('id',task.id);
     if(!error)onSaved();else setSaving(false);
   };
   return (
