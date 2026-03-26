@@ -2585,7 +2585,7 @@ function BadgeDetailPanel({ category, score, profile, prefs, onSavePrefs, onClos
             var levelKey = category+':'+lv;
             var isThisSelected = currentDisplayed===levelKey;
             return <div key={lv} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid #E4E4E6'}}>
-              <div style={{width:20,height:20,background:reached?meta.color:'#E4E4E6',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#fff',fontWeight:900}}>{reached?'✓':lv}</div>
+              <BadgeIcon category={category} level={lv} size={28} greyed={!reached}/>
               <div style={{flex:1}}>
                 <div style={{fontSize:12,fontWeight:reached?800:400,color:reached?'#1C1F35':'#999'}}>{meta.titles[lv-1]}</div>
                 <div style={{fontSize:10,color:'#bbb'}}>{BADGE_LEVEL_LABELS[lv]} · {t[lv-1]}+ {meta.unit}</div>
