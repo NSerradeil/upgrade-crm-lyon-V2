@@ -425,7 +425,7 @@ async function loadAchievements(profileNom) {
   var margeScore = 0;
   (rMissionsV2.data || []).forEach(function(m) {
     if (!m.tjm || !m.cjm || m.tjm === 0) return;
-    var taux = (m.cjm / m.tjm) * 100;
+    var taux = ((m.tjm - m.cjm) / m.tjm) * 100;
     if (taux > 40) margeScore += 2;
     else if (taux > 30) margeScore += 1;
     else if (taux > 20) margeScore += 0.5;
