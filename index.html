@@ -131,6 +131,7 @@ const TZ='Europe/Paris';
 function getToday() { return new Date().toLocaleDateString('sv-SE',{timeZone:TZ}); }
 const TODAY = getToday();
 function normalizeLinkedinUrl(url) { if(!url)return null; var u=url.trim(); if(!u)return null; if(u.indexOf('http')!==0)u='https://'+u; return u; }
+function norm(s) { return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // HELPERS
@@ -1209,9 +1210,9 @@ function CompteSearchField({ contacts, value, onChange, placeholder }) {
   const [open,setOpen] = useState(false);
   const comptes = useMemo(()=>[...new Set(contacts.map(c=>c.groupe).filter(Boolean))].sort(),[contacts]);
   const filtered = useMemo(()=>{
-    const q=query.trim().toLowerCase();
+    const q=norm(query.trim());
     if(!q) return comptes.slice(0,15);
-    return comptes.filter(c=>c.toLowerCase().includes(q)).slice(0,15);
+    return comptes.filter(c=>norm(c).includes(q)).slice(0,15);
   },[query,comptes]);
   if(value) return (
     <div className="flex items-center gap-2 px-3 py-2 border border-blue-200 rounded-lg bg-azure-20">
@@ -1252,9 +1253,9 @@ function ContactPicker({ contacts, value, onChange, filterCompte }) {
   const selected = value ? cMap[value] : null;
 
   const results = useMemo(()=>{
-    const q=query.trim().toLowerCase();
+    const q=norm(query.trim());
     if(q.length<2) return [];
-    return pool.filter(c=>[c.prenom,c.nom,c.groupe,c.ville].some(v=>(v||'').toLowerCase().includes(q))).slice(0,7);
+    return pool.filter(c=>[c.prenom,c.nom,c.groupe,c.ville].some(v=>norm(v).includes(q))).slice(0,7);
   },[query,pool]);
 
   const pick = (cid)=>{ onChange(String(cid)); setQuery(''); setOpen(false); };
@@ -1307,9 +1308,9 @@ function MissionPicker({ missions, value, onChange }) {
   const mMap = useMemo(()=>Object.fromEntries((missions||[]).map(m=>[String(m.id),m])),[missions]);
   const selected = value ? mMap[value] : null;
   const results = useMemo(()=>{
-    const q=query.trim().toLowerCase();
+    const q=norm(query.trim());
     if(q.length<2) return [];
-    return (missions||[]).filter(m=>[m.consultant,m.client,m.projet].some(v=>(v||'').toLowerCase().includes(q))).slice(0,7);
+    return (missions||[]).filter(m=>[m.consultant,m.client,m.projet].some(v=>norm(v).includes(q))).slice(0,7);
   },[query,missions]);
   const pick = (mid)=>{ onChange(String(mid)); setQuery(''); setOpen(false); };
   const clear = ()=>{ onChange(''); setQuery(''); };
@@ -1359,9 +1360,9 @@ function BesoinPicker({ besoins, value, onChange, contactId }) {
   const filtered = useMemo(()=>{
     let pool = besoins||[];
     if(contactId) pool = pool.filter(b=>String(b.contact_id)===String(contactId));
-    const q=query.trim().toLowerCase();
+    const q=norm(query.trim());
     if(q.length<2) return pool.slice(0,7);
-    return pool.filter(b=>[b.titre,b.compte,b.statut].some(v=>(v||'').toLowerCase().includes(q))).slice(0,7);
+    return pool.filter(b=>[b.titre,b.compte,b.statut].some(v=>norm(v).includes(q))).slice(0,7);
   },[query,besoins,contactId]);
   const pick = (bid)=>{ onChange(String(bid)); setQuery(''); setOpen(false); };
   const clear = ()=>{ onChange(''); setQuery(''); };
@@ -2027,7 +2028,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
         if(!filterMine&&filterResp&&c.responsable!==filterResp) return false;
         if(filterPeriode==='7j'&&c.jours>7) return false;
         if(filterPeriode==='30j'&&c.jours>30) return false;
-        if(q&&![c.prenom,c.nom,c.groupe,c.ville,c.role,c.besoins].some(v=>(v||'').toLowerCase().includes(q))) return false;
+        if(q&&![c.prenom,c.nom,c.groupe,c.ville,c.role,c.besoins].some(v=>norm(v).includes(norm(q)))) return false;
         return true;
       });
     rows.sort((a,b)=>{
@@ -2676,7 +2677,7 @@ function TabTaches({ taches, contacts, contactMap, besoins, missions, historique
     if(filterEcheance==='retard'&&!t.overdue) return false;
     if(filterEcheance==='today'&&t._date!==TODAY) return false;
     if(filterEcheance==='semaine'&&!(t._date&&t._date>=TODAY&&t._date<=endOfWeek)) return false;
-    if(search&&!(t.titre||'').toLowerCase().includes(search.toLowerCase())) return false;
+    if(search&&!norm(t.titre).includes(norm(search))) return false;
     return true;
   }),[allActives,search,filterEcheance,endOfWeek]);
 
@@ -3597,7 +3598,7 @@ function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique
           const cand=contactMap[b.candidat_id];
           const bCands=(besoinCandidats||[]).filter(bc=>bc.besoin_id===b.id).map(bc=>contactMap[bc.contact_id]).filter(Boolean);
           const candNames=bCands.flatMap(c=>[c.prenom,c.nom]);
-          if(![b.titre,b.compte,b.responsable,c?.prenom,c?.nom,c?.groupe,cand?.prenom,cand?.nom,...candNames].some(v=>(v||'').toLowerCase().includes(q))) return false;
+          if(![b.titre,b.compte,b.responsable,c?.prenom,c?.nom,c?.groupe,cand?.prenom,cand?.nom,...candNames].some(v=>norm(v).includes(norm(q)))) return false;
         }
         return true;
       })
@@ -3754,7 +3755,7 @@ function TabHistorique({ historique, contacts, contactMap, taches, besoins, prof
       if(!q)return true;
       const c=h.id_prospect?contactMap[h.id_prospect]:null;
       const nom=c?`${c.prenom||''} ${c.nom||''} ${c.groupe||''}`:'';
-      return[h.type_action,h.details,h.responsable,h.date,nom].some(v=>(v||'').toLowerCase().includes(q));
+      return[h.type_action,h.details,h.responsable,h.date,nom].some(v=>norm(v).includes(norm(q)));
     });
   },[historique,search,filterResp,filterType,contactMap]);
 
@@ -4405,7 +4406,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
       if(filterStatut&&m.statut!==filterStatut) return false;
       if(filterAgence&&m.agence!==filterAgence) return false;
       if(filterResp&&m.responsable!==filterResp) return false;
-      if(q&&![(m.consultant||''),(m.client||'')].some(v=>v.toLowerCase().includes(q))) return false;
+      if(q&&![(m.consultant||''),(m.client||'')].some(v=>norm(v).includes(norm(q)))) return false;
       return true;
     });
   },[missions,search,filterStatut,filterAgence,filterResp]);
