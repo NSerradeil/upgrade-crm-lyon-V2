@@ -1992,8 +1992,9 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
 
 // ── Onglet Prospects ──────────────────────────────────────────────────────────
 function TabProspects({ contacts, contactMap, historique, taches, missions, besoins, profile, allProfiles, commerciauxParAgence, onRefresh, navContactId, navContactKey, onNavToBesoin, onNavToMission, onNavToTache, prefs }) {
-  const prefResp=prefs?.filter_responsable==='moi'?profile.nom:(prefs?.filter_responsable||'');
-  const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
+  const prefResp=prefs?.contacts_filter_responsable==='moi'?profile.nom:(prefs?.contacts_filter_responsable==='all'?'':(prefs?.filter_responsable==='moi'?profile.nom:(prefs?.filter_responsable||'')));
+  const prefStatut=prefs?.contacts_filter_statut&&prefs.contacts_filter_statut!=='all'?prefs.contacts_filter_statut:'';
+  const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState(prefStatut);
   const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState(prefResp);
   const [filterAgence,setFilterAgence]=useState('');
   const [filterMine,setFilterMine]=useState(false);
@@ -2640,7 +2641,7 @@ function TabTaches({ taches, contacts, contactMap, besoins, missions, historique
   const tPrefResp=prefs?.filter_responsable==='moi'?profile.nom:(prefs?.filter_responsable||profile.nom);
   const [search,setSearch]=useState(''); const [showAdd,setShowAdd]=useState(false);
   const [filterResp,setFilterResp]=useState(tPrefResp);
-  const [filterEcheance,setFilterEcheance]=useState('');
+  const [filterEcheance,setFilterEcheance]=useState(prefs?.taches_filter_echeance&&prefs.taches_filter_echeance!=='all'?prefs.taches_filter_echeance:'');
   const [viewMode,setViewMode]=useState(prefs?.taches_view||'list');
   const [detailTask,setDetailTask]=useState(null);
   useEffect(()=>{ if(navEcheance) setFilterEcheance(navEcheance); },[navKey]);
@@ -3852,7 +3853,8 @@ function besoinValeurBrute(b,bCandidats){
 function TabPipe({ besoins, contacts, contactMap, besoinCandidats, historique, taches, missions, profile, allProfiles, onRefresh, prefs }) {
   const isAdmin=profile.role==='admin';
   const [filterAgence,setFilterAgence]=useState('');
-  const [filterResp,setFilterResp]=useState(isAdmin?'':profile.nom);
+  const pipeDefaultResp=prefs?.pipe_filter_responsable==='all'?'':(prefs?.pipe_filter_responsable==='moi'||prefs?.pipe_filter_responsable===undefined)?profile.nom:'';
+  const [filterResp,setFilterResp]=useState(isAdmin?pipeDefaultResp:profile.nom);
   const [ventilation,setVentilation]=useState(prefs?.pipe_ventilation||'agence');
   const [riskFilter,setRiskFilter]=useState(false);
   const [donutFilter,setDonutFilter]=useState('');
@@ -4698,8 +4700,224 @@ function ChangePasswordModal({ onClose }) {
 }
 
 // ── TabSettings — Page Paramètres ──────────────────────────────────────────────
-function TabSettings({ user, profile, taches, subTab, onSubTabChange, prefs, onSavePrefs, achievements, viewAs }) {
-  const SUB_TABS=viewAs?[{id:'exploits',label:'Exploits'}]:[{id:'profil',label:'Profil & Sécurité'},{id:'calendrier',label:'Calendrier ICS'},{id:'preferences',label:'Préférences'},{id:'exploits',label:'Exploits'}];
+function AdminPanel({ orgDefaults, allProfiles, profile, onSave }) {
+  var [scope, setScope] = useState('global');
+  var [scopeValue, setScopeValue] = useState('');
+  var [saving, setSaving] = useState(false);
+  var [saved, setSaved] = useState(false);
+  // Form fields matching user prefs
+  var [defaultTab, setDefaultTab] = useState('taches');
+  var [filtResp, setFiltResp] = useState('');
+  var [filtBesAgence, setFiltBesAgence] = useState('');
+  var [filtMisAgence, setFiltMisAgence] = useState('');
+  var [filtMisStatut, setFiltMisStatut] = useState('');
+  var [tachesView, setTachesView] = useState('list');
+  var [besoinsView, setBesoinsView] = useState('list');
+  var [pipeVent, setPipeVent] = useState('agence');
+  var [tdbChart, setTdbChart] = useState('ca');
+
+  var AGENCES = ['Lyon', 'Paris', 'Bordeaux', 'Nantes'];
+  var TAB_OPTIONS = [{v:'taches',l:'Tâches'},{v:'prospects',l:'Contacts'},{v:'prospection',l:'Prospection'},{v:'besoins',l:'Besoins'},{v:'pipe',l:'Pipe'},{v:'tdb',l:'Missions'},{v:'historique',l:'Historique'}];
+
+  function loadFromOrgDefaults(s, sv) {
+    var row = null;
+    if(s === 'global') row = orgDefaults.find(function(r){return r.scope==='global';});
+    else if(s === 'agence') row = orgDefaults.find(function(r){return r.scope==='agence'&&r.scope_value===sv;});
+    else if(s === 'responsable') row = orgDefaults.find(function(r){return r.scope==='responsable'&&r.scope_value===sv;});
+    var p = row ? (row.preferences||{}) : {};
+    setDefaultTab(p.default_tab||'taches');
+    setFiltResp(p.filter_responsable||'');
+    setFiltBesAgence(p.besoins_filter_agence||'');
+    setFiltMisAgence(p.missions_filter_agence||'');
+    setFiltMisStatut(p.missions_filter_statut||'');
+    setTachesView(p.taches_view||'list');
+    setBesoinsView(p.besoins_view||'list');
+    setPipeVent(p.pipe_ventilation||'agence');
+    setTdbChart(p.tdb_default_chart||'ca');
+  }
+
+  function handleScopeChange(s) {
+    setScope(s);
+    var sv = s==='agence' ? AGENCES[0] : (s==='responsable' ? (allProfiles.filter(function(p){return p.role!=='admin';})[0]||allProfiles[0]||{nom:''}).nom : '');
+    setScopeValue(sv);
+    loadFromOrgDefaults(s, sv);
+  }
+
+  function handleScopeValueChange(sv) {
+    setScopeValue(sv);
+    loadFromOrgDefaults(scope, sv);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    var prefs = {
+      default_tab: defaultTab,
+      filter_responsable: filtResp,
+      besoins_filter_agence: filtBesAgence,
+      missions_filter_agence: filtMisAgence,
+      missions_filter_statut: filtMisStatut,
+      taches_view: tachesView,
+      besoins_view: besoinsView,
+      pipe_ventilation: pipeVent,
+      tdb_default_chart: tdbChart,
+    };
+    var row = {
+      scope: scope,
+      scope_value: scope==='global' ? null : scopeValue,
+      preferences: prefs,
+      updated_by: profile.nom,
+      updated_at: new Date().toISOString(),
+    };
+    var res = await sb.from('org_preferences').upsert(row, {onConflict:'scope,scope_value'}).select();
+    setSaving(false);
+    if(res.error){toast('Erreur: '+res.error.message,'error');}
+    else{setSaved(true);setTimeout(function(){setSaved(false);},1600);if(onSave)onSave(res.data);}
+  }
+
+  var inputCls = 'w-full border-2 border-neutral-200 px-3 py-2 text-sm bg-white focus:border-midnight focus:outline-none';
+  var btnScope = function(active) {
+    return 'px-4 py-2 text-sm font-semibold border-2 transition-colors ' + (active ? 'border-midnight bg-midnight text-white' : 'border-neutral-200 text-carbon hover:border-midnight');
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white border-2 border-neutral-200 p-6">
+        <h3 className="font-bold text-midnight text-sm mb-1 uppercase tracking-wide">Valeurs par défaut — Organisation</h3>
+        <p className="text-xs text-slate mb-5">Définissez des préférences par défaut pour tous les utilisateurs, par agence ou par commercial. Les préférences personnelles priment toujours.</p>
+
+        {/* Scope selector */}
+        <div className="mb-5">
+          <label className="block text-xs font-bold text-carbon uppercase tracking-wide mb-2">Portée</label>
+          <div className="flex gap-0">
+            <button onClick={function(){handleScopeChange('global');}} className={btnScope(scope==='global')}>Global</button>
+            <button onClick={function(){handleScopeChange('agence');}} className={btnScope(scope==='agence')}>Agence</button>
+            <button onClick={function(){handleScopeChange('responsable');}} className={btnScope(scope==='responsable')}>Commercial</button>
+          </div>
+        </div>
+
+        {/* Scope value selector */}
+        {scope==='agence'&&(
+          <div className="mb-5">
+            <label className="block text-xs font-bold text-carbon uppercase tracking-wide mb-2">Agence</label>
+            <select value={scopeValue} onChange={function(e){handleScopeValueChange(e.target.value);}} className={inputCls}>
+              {AGENCES.map(function(a){return <option key={a} value={a}>{a}</option>;})}
+            </select>
+          </div>
+        )}
+        {scope==='responsable'&&(
+          <div className="mb-5">
+            <label className="block text-xs font-bold text-carbon uppercase tracking-wide mb-2">Commercial</label>
+            <select value={scopeValue} onChange={function(e){handleScopeValueChange(e.target.value);}} className={inputCls}>
+              {allProfiles.map(function(p){return <option key={p.nom} value={p.nom}>{p.nom} ({p.agence})</option>;})}
+            </select>
+          </div>
+        )}
+
+        {/* Pref fields */}
+        <div className="space-y-4 border-t-2 border-neutral-100 pt-5">
+          <div>
+            <label className="block text-xs font-bold text-carbon uppercase tracking-wide mb-1">Onglet au démarrage</label>
+            <select value={defaultTab} onChange={function(e){setDefaultTab(e.target.value);}} className={inputCls}>
+              {TAB_OPTIONS.map(function(o){return <option key={o.v} value={o.v}>{o.l}</option>;})}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-carbon uppercase tracking-wide mb-1">Filtre responsable (Tâches &amp; Contacts)</label>
+            <select value={filtResp} onChange={function(e){setFiltResp(e.target.value);}} className={inputCls}>
+              <option value="">Tous</option>
+              <option value="moi">Soi-même (moi)</option>
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-carbon uppercase tracking-wide mb-1">Agence — Besoins</label>
+              <select value={filtBesAgence} onChange={function(e){setFiltBesAgence(e.target.value);}} className={inputCls}>
+                <option value="">Toutes agences</option>
+                {AGENCES.map(function(a){return <option key={a} value={a}>{a}</option>;})}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-carbon uppercase tracking-wide mb-1">Agence — Missions</label>
+              <select value={filtMisAgence} onChange={function(e){setFiltMisAgence(e.target.value);}} className={inputCls}>
+                <option value="">Toutes agences</option>
+                {AGENCES.map(function(a){return <option key={a} value={a}>{a}</option>;})}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-carbon uppercase tracking-wide mb-1">Statut — Missions</label>
+            <select value={filtMisStatut} onChange={function(e){setFiltMisStatut(e.target.value);}} className={inputCls}>
+              <option value="">Tous les statuts</option>
+              <option value="En cours">En cours</option>
+              <option value="New">New</option>
+              <option value="Intercontrat">Intercontrat</option>
+              <option value="Terminée">Terminée</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-carbon uppercase tracking-wide mb-1">Vue Tâches par défaut</label>
+            <div className="flex gap-0">
+              <button onClick={function(){setTachesView('list');}} className={btnScope(tachesView==='list')}>Liste</button>
+              <button onClick={function(){setTachesView('calendrier');}} className={btnScope(tachesView==='calendrier')}>Calendrier</button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-carbon uppercase tracking-wide mb-1">Vue Besoins par défaut</label>
+            <div className="flex gap-0">
+              <button onClick={function(){setBesoinsView('list');}} className={btnScope(besoinsView==='list')}>Liste</button>
+              <button onClick={function(){setBesoinsView('kanban');}} className={btnScope(besoinsView==='kanban')}>Kanban</button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-carbon uppercase tracking-wide mb-1">Pipe — Ventilation</label>
+            <div className="flex gap-0">
+              <button onClick={function(){setPipeVent('agence');}} className={btnScope(pipeVent==='agence')}>Agence</button>
+              <button onClick={function(){setPipeVent('responsable');}} className={btnScope(pipeVent==='responsable')}>Responsable</button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-carbon uppercase tracking-wide mb-1">Missions — KPI par défaut</label>
+            <div className="flex gap-0">
+              <button onClick={function(){setTdbChart('ca');}} className={btnScope(tdbChart==='ca')}>CA</button>
+              <button onClick={function(){setTdbChart('marge');}} className={btnScope(tdbChart==='marge')}>Marge</button>
+              <button onClick={function(){setTdbChart('inter');}} className={btnScope(tdbChart==='inter')}>Inter.</button>
+              <button onClick={function(){setTdbChart('missions');}} className={btnScope(tdbChart==='missions')}>Missions</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 flex items-center gap-3">
+          <button onClick={handleSave} disabled={saving} className="px-5 py-2 bg-midnight text-white text-sm font-bold border-2 border-midnight hover:bg-carbon disabled:opacity-50 btn-brutal">
+            {saving ? 'Sauvegarde...' : 'Enregistrer les valeurs par défaut →'}
+          </button>
+          {saved&&<span className="text-sm text-jade-100 font-semibold">✓ Sauvegardé</span>}
+        </div>
+      </div>
+
+      {/* Current org defaults overview */}
+      {orgDefaults.length>0&&(
+        <div className="bg-white border-2 border-neutral-200 p-6">
+          <h4 className="font-bold text-midnight text-xs uppercase tracking-wide mb-3">Valeurs par défaut configurées</h4>
+          <div className="space-y-2">
+            {orgDefaults.map(function(r){
+              return (
+                <div key={r.id} className="flex items-center gap-3 text-sm border border-neutral-100 px-3 py-2">
+                  <span className="font-bold text-carbon uppercase text-xs tracking-wide w-24">{r.scope}</span>
+                  {r.scope_value&&<span className="text-slate text-xs">{r.scope_value}</span>}
+                  <span className="text-neutral-300 text-xs ml-auto">màj par {r.updated_by||'?'}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TabSettings({ user, profile, taches, subTab, onSubTabChange, prefs, onSavePrefs, achievements, viewAs, orgDefaults, allProfiles, onSaveOrgDefaults }) {
+  const SUB_TABS=viewAs?[{id:'exploits',label:'Exploits'}]:[{id:'profil',label:'Profil & Sécurité'},{id:'calendrier',label:'Calendrier ICS'},{id:'preferences',label:'Préférences'},{id:'exploits',label:'Exploits'},...(profile.role==='admin'?[{id:'admin',label:'Admin'}]:[])];
+
   // Password change (inline)
   const [pwd,setPwd]=useState(''); const [pwd2,setPwd2]=useState('');
   const [pwdSaving,setPwdSaving]=useState(false); const [pwdErr,setPwdErr]=useState(''); const [pwdOk,setPwdOk]=useState(false);
@@ -4855,6 +5073,7 @@ function TabSettings({ user, profile, taches, subTab, onSubTabChange, prefs, onS
           <ExploitsGrid achievements={ach} profile={profile} prefs={prefs} onSavePrefs={onSavePrefs}/>
         </div>;
       }())}
+      {subTab==='admin'&&profile.role==='admin'&&<AdminPanel orgDefaults={orgDefaults||[]} allProfiles={allProfiles||[]} profile={profile} onSave={onSaveOrgDefaults}/>}
     </div>
   );
 }
@@ -4869,11 +5088,25 @@ function PreferencesPanel({ prefs, onSave, profileNom }) {
   const [filtBesAgence,setFiltBesAgence]=useState(prefs.besoins_filter_agence||'');
   const [filtMisAgence,setFiltMisAgence]=useState(prefs.missions_filter_agence||'');
   const [filtMisStatut,setFiltMisStatut]=useState(prefs.missions_filter_statut||'');
+  // New filter prefs
+  const [filtContactsStatut,setFiltContactsStatut]=useState(prefs.contacts_filter_statut||'all');
+  const [filtContactsResp,setFiltContactsResp]=useState(prefs.contacts_filter_responsable||'all');
+  const [filtTachesEcheance,setFiltTachesEcheance]=useState(prefs.taches_filter_echeance||'all');
+  const [filtPipeResp,setFiltPipeResp]=useState(prefs.pipe_filter_responsable||'moi');
+  const [prospectionFocus,setProspectionFocus]=useState(!!prefs.prospection_focus_mode);
   const [saving,setSaving]=useState(false);
   const [saved,setSaved]=useState(false);
+  // Section collapse state (all open by default)
+  const [secNav,setSecNav]=useState(true);
+  const [secVues,setSecVues]=useState(true);
+  const [secContacts,setSecContacts]=useState(true);
+  const [secTaches,setSecTaches]=useState(true);
+  const [secMissions,setSecMissions]=useState(true);
+  const [secPipe,setSecPipe]=useState(true);
+  const [secComportement,setSecComportement]=useState(true);
 
-  const buildPrefs=()=>({default_tab:defaultTab,taches_view:tachesView,besoins_view:besoinsView,pipe_ventilation:pipeVent,tdb_default_chart:tdbChart,filter_responsable:filtResp,besoins_filter_agence:filtBesAgence,missions_filter_agence:filtMisAgence,missions_filter_statut:filtMisStatut});
-  const origPrefs=()=>({default_tab:prefs.default_tab||'taches',taches_view:prefs.taches_view||'list',besoins_view:prefs.besoins_view||'list',pipe_ventilation:prefs.pipe_ventilation||'agence',tdb_default_chart:prefs.tdb_default_chart||'ca',filter_responsable:prefs.filter_responsable===undefined?'moi':prefs.filter_responsable,besoins_filter_agence:prefs.besoins_filter_agence||'',missions_filter_agence:prefs.missions_filter_agence||'',missions_filter_statut:prefs.missions_filter_statut||''});
+  const buildPrefs=()=>({default_tab:defaultTab,taches_view:tachesView,besoins_view:besoinsView,pipe_ventilation:pipeVent,tdb_default_chart:tdbChart,filter_responsable:filtResp,besoins_filter_agence:filtBesAgence,missions_filter_agence:filtMisAgence,missions_filter_statut:filtMisStatut,contacts_filter_statut:filtContactsStatut,contacts_filter_responsable:filtContactsResp,taches_filter_echeance:filtTachesEcheance,pipe_filter_responsable:filtPipeResp,prospection_focus_mode:prospectionFocus});
+  const origPrefs=()=>({default_tab:prefs.default_tab||'taches',taches_view:prefs.taches_view||'list',besoins_view:prefs.besoins_view||'list',pipe_ventilation:prefs.pipe_ventilation||'agence',tdb_default_chart:prefs.tdb_default_chart||'ca',filter_responsable:prefs.filter_responsable===undefined?'moi':prefs.filter_responsable,besoins_filter_agence:prefs.besoins_filter_agence||'',missions_filter_agence:prefs.missions_filter_agence||'',missions_filter_statut:prefs.missions_filter_statut||'',contacts_filter_statut:prefs.contacts_filter_statut||'all',contacts_filter_responsable:prefs.contacts_filter_responsable||'all',taches_filter_echeance:prefs.taches_filter_echeance||'all',pipe_filter_responsable:prefs.pipe_filter_responsable||'moi',prospection_focus_mode:!!prefs.prospection_focus_mode});
   const hasChanges=JSON.stringify(buildPrefs())!==JSON.stringify(origPrefs());
 
   const handleSave=async()=>{
@@ -4886,6 +5119,7 @@ function PreferencesPanel({ prefs, onSave, profileNom }) {
     const o=origPrefs();
     setDefaultTab(o.default_tab);setTachesView(o.taches_view);setBesoinsView(o.besoins_view);setPipeVent(o.pipe_ventilation);setTdbChart(o.tdb_default_chart);
     setFiltResp(o.filter_responsable);setFiltBesAgence(o.besoins_filter_agence);setFiltMisAgence(o.missions_filter_agence);setFiltMisStatut(o.missions_filter_statut);
+    setFiltContactsStatut(o.contacts_filter_statut);setFiltContactsResp(o.contacts_filter_responsable);setFiltTachesEcheance(o.taches_filter_echeance);setFiltPipeResp(o.pipe_filter_responsable);setProspectionFocus(o.prospection_focus_mode);
   };
 
   const TAB_OPTIONS=[{v:'taches',l:'Tâches'},{v:'prospects',l:'Contacts'},{v:'prospection',l:'Prospection'},{v:'besoins',l:'Besoins'},{v:'pipe',l:'Pipe'},{v:'tdb',l:'Missions'},{v:'historique',l:'Historique'}];
@@ -4900,91 +5134,170 @@ function PreferencesPanel({ prefs, onSave, profileNom }) {
     <div className="max-w-2xl mx-auto space-y-5 pb-24">
       {/* Card 1 — Navigation */}
       <div className={cardCls}>
-        <div className="flex items-start gap-3 mb-5">
-          <div style={{background:'#eff6ff',borderRadius:10,padding:'8px 10px',lineHeight:1}}>
-            <span style={{fontSize:18}}>🧭</span>
+        <div className="flex items-start justify-between gap-3 mb-1 cursor-pointer" onClick={()=>setSecNav(function(v){return !v;})}>
+          <div className="flex items-start gap-3">
+            <div style={{background:'#eff6ff',borderRadius:10,padding:'8px 10px',lineHeight:1}}>
+              <span style={{fontSize:18}}>🧭</span>
+            </div>
+            <div>
+              <h3 className="font-bold text-midnight text-sm">Navigation</h3>
+              <p className="text-xs text-neutral-300 mt-0.5">Choisissez votre point d'entrée dans le CRM</p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-bold text-midnight text-sm">Navigation</h3>
-            <p className="text-xs text-neutral-300 mt-0.5">Choisissez votre point d'entrée dans le CRM</p>
-          </div>
+          <span className="text-neutral-300 text-xs mt-1">{secNav?'▲':'▼'}</span>
         </div>
-        <div>
+        {secNav&&<div className="mt-4">
           <label className="block text-sm font-medium text-carbon mb-1.5">Onglet au démarrage</label>
           <select value={defaultTab} onChange={e=>setDefaultTab(e.target.value)} style={selectStyle}>
             {TAB_OPTIONS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
           </select>
           <p className="text-xs text-neutral-300 mt-1.5">L'onglet affiché dès que vous ouvrez le CRM</p>
-        </div>
+        </div>}
       </div>
 
       {/* Card 2 — Vues par défaut */}
       <div className={cardCls}>
-        <div className="flex items-start gap-3 mb-5">
-          <div style={{background:'#f0fdf4',borderRadius:10,padding:'8px 10px',lineHeight:1}}>
-            <span style={{fontSize:18}}>🎛️</span>
+        <div className="flex items-start justify-between gap-3 mb-1 cursor-pointer" onClick={()=>setSecVues(function(v){return !v;})}>
+          <div className="flex items-start gap-3">
+            <div style={{background:'#f0fdf4',borderRadius:10,padding:'8px 10px',lineHeight:1}}>
+              <span style={{fontSize:18}}>🎛️</span>
+            </div>
+            <div>
+              <h3 className="font-bold text-midnight text-sm">Vues par défaut</h3>
+              <p className="text-xs text-neutral-300 mt-0.5">Mode d'affichage à l'ouverture de chaque onglet</p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-bold text-midnight text-sm">Vues par défaut</h3>
-            <p className="text-xs text-neutral-300 mt-0.5">Mode d'affichage à l'ouverture de chaque onglet</p>
-          </div>
+          <span className="text-neutral-300 text-xs mt-1">{secVues?'▲':'▼'}</span>
         </div>
-        <div className="space-y-0 divide-y divide-gray-50">
-          <div className="flex items-center justify-between py-3">
-            <span className="text-sm text-carbon font-medium">Tâches</span>
-            <div style={segGroup}>
-              <button onClick={()=>setTachesView('list')} style={segBtn(tachesView==='list')}><Icon d={ICONS.list} size={12}/> Liste</button>
-              <button onClick={()=>setTachesView('calendrier')} style={segBtn(tachesView==='calendrier')}><Icon d={ICONS.calendar} size={12}/> Calendrier</button>
+        {secVues&&<div>
+          <div className="space-y-0 divide-y divide-gray-50 mt-4">
+            <div className="flex items-center justify-between py-3">
+              <span className="text-sm text-carbon font-medium">Tâches</span>
+              <div style={segGroup}>
+                <button onClick={()=>setTachesView('list')} style={segBtn(tachesView==='list')}><Icon d={ICONS.list} size={12}/> Liste</button>
+                <button onClick={()=>setTachesView('calendrier')} style={segBtn(tachesView==='calendrier')}><Icon d={ICONS.calendar} size={12}/> Calendrier</button>
+              </div>
+            </div>
+            <div className="flex items-center justify-between py-3">
+              <span className="text-sm text-carbon font-medium">Besoins</span>
+              <div style={segGroup}>
+                <button onClick={()=>setBesoinsView('list')} style={segBtn(besoinsView==='list')}><Icon d={ICONS.list} size={12}/> Liste</button>
+                <button onClick={()=>setBesoinsView('kanban')} style={segBtn(besoinsView==='kanban')}>⬛ Kanban</button>
+              </div>
+            </div>
+            <div className="flex items-center justify-between py-3">
+              <span className="text-sm text-carbon font-medium">Missions — KPI</span>
+              <div style={segGroup}>
+                <button onClick={()=>setTdbChart('ca')} style={segBtn(tdbChart==='ca')}>CA</button>
+                <button onClick={()=>setTdbChart('marge')} style={segBtn(tdbChart==='marge')}>Marge</button>
+                <button onClick={()=>setTdbChart('inter')} style={segBtn(tdbChart==='inter')}>Inter.</button>
+                <button onClick={()=>setTdbChart('missions')} style={segBtn(tdbChart==='missions')}>Missions</button>
+              </div>
+            </div>
+            <div className="flex items-center justify-between py-3">
+              <span className="text-sm text-carbon font-medium">Pipe — Ventilation</span>
+              <div style={segGroup}>
+                <button onClick={()=>setPipeVent('agence')} style={segBtn(pipeVent==='agence')}><Icon d={ICONS.building} size={12}/> Agence</button>
+                <button onClick={()=>setPipeVent('responsable')} style={segBtn(pipeVent==='responsable')}><Icon d={ICONS.person} size={12}/> Resp.</button>
+              </div>
             </div>
           </div>
-          <div className="flex items-center justify-between py-3">
-            <span className="text-sm text-carbon font-medium">Besoins</span>
-            <div style={segGroup}>
-              <button onClick={()=>setBesoinsView('list')} style={segBtn(besoinsView==='list')}><Icon d={ICONS.list} size={12}/> Liste</button>
-              <button onClick={()=>setBesoinsView('kanban')} style={segBtn(besoinsView==='kanban')}>⬛ Kanban</button>
-            </div>
+          <div className="mt-4 rounded-lg px-3 py-2.5" style={{background:'#eff6ff',border:'1px solid #bfdbfe'}}>
+            <p className="text-xs" style={{color:'#1e40af'}}>Changer de vue manuellement dans l'interface ne modifie pas cette préférence — c'est une navigation temporaire.</p>
           </div>
-          <div className="flex items-center justify-between py-3">
-            <span className="text-sm text-carbon font-medium">Missions — KPI</span>
-            <div style={segGroup}>
-              <button onClick={()=>setTdbChart('ca')} style={segBtn(tdbChart==='ca')}>CA</button>
-              <button onClick={()=>setTdbChart('marge')} style={segBtn(tdbChart==='marge')}>Marge</button>
-              <button onClick={()=>setTdbChart('inter')} style={segBtn(tdbChart==='inter')}>Inter.</button>
-              <button onClick={()=>setTdbChart('missions')} style={segBtn(tdbChart==='missions')}>Missions</button>
-            </div>
-          </div>
-          <div className="flex items-center justify-between py-3">
-            <span className="text-sm text-carbon font-medium">Pipe — Ventilation</span>
-            <div style={segGroup}>
-              <button onClick={()=>setPipeVent('agence')} style={segBtn(pipeVent==='agence')}><Icon d={ICONS.building} size={12}/> Agence</button>
-              <button onClick={()=>setPipeVent('responsable')} style={segBtn(pipeVent==='responsable')}><Icon d={ICONS.person} size={12}/> Resp.</button>
-            </div>
-          </div>
-        </div>
-        <div className="mt-4 rounded-lg px-3 py-2.5" style={{background:'#eff6ff',border:'1px solid #bfdbfe'}}>
-          <p className="text-xs" style={{color:'#1e40af'}}>Changer de vue manuellement dans l'interface ne modifie pas cette préférence — c'est une navigation temporaire.</p>
-        </div>
+        </div>}
       </div>
 
-      {/* Card 3 — Filtres par défaut */}
+      {/* Card 3 — Filtres Contacts */}
       <div className={cardCls}>
-        <div className="flex items-start gap-3 mb-5">
-          <div style={{background:'#fef3c7',borderRadius:10,padding:'8px 10px',lineHeight:1}}>
-            <Icon d={ICONS.search} size={18}/>
+        <div className="flex items-start justify-between gap-3 mb-1 cursor-pointer" onClick={()=>setSecContacts(function(v){return !v;})}>
+          <div className="flex items-start gap-3">
+            <div style={{background:'#fef3c7',borderRadius:10,padding:'8px 10px',lineHeight:1}}>
+              <Icon d={ICONS.search} size={18}/>
+            </div>
+            <div>
+              <h3 className="font-bold text-midnight text-sm">Filtres — Contacts</h3>
+              <p className="text-xs text-neutral-300 mt-0.5">Pré-remplissage à l'ouverture de l'onglet Contacts</p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-bold text-midnight text-sm">Filtres par défaut</h3>
-            <p className="text-xs text-neutral-300 mt-0.5">Pré-remplissage des filtres à l'ouverture de chaque onglet</p>
-          </div>
+          <span className="text-neutral-300 text-xs mt-1">{secContacts?'▲':'▼'}</span>
         </div>
-        <div className="space-y-4">
+        {secContacts&&<div className="space-y-4 mt-4">
           <div>
-            <label className="block text-sm font-medium text-carbon mb-1.5">Responsable — Tâches & Contacts</label>
-            <select value={filtResp} onChange={e=>setFiltResp(e.target.value)} style={selectStyle}>
-              <option value="">Tous les responsables</option>
+            <label className="block text-sm font-medium text-carbon mb-1.5">Responsable</label>
+            <select value={filtContactsResp} onChange={e=>setFiltContactsResp(e.target.value)} style={selectStyle}>
+              <option value="all">Tous les responsables</option>
               <option value="moi">{profileNom} (moi)</option>
             </select>
-            <p className="text-xs text-neutral-300 mt-1.5">Pré-filtre le responsable sur les onglets Tâches et Contacts</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-carbon mb-1.5">Statut</label>
+            <select value={filtContactsStatut} onChange={e=>setFiltContactsStatut(e.target.value)} style={selectStyle}>
+              <option value="all">Tous les statuts</option>
+              <option value="Client">Client</option>
+              <option value="Prospect">Prospect</option>
+              <option value="Candidat">Candidat</option>
+              <option value="Consultant CDI">Consultant CDI</option>
+              <option value="Freelance">Freelance</option>
+              <option value="Prestataire">Prestataire</option>
+              <option value="Lead">Lead</option>
+              <option value="Froid">Froid</option>
+            </select>
+          </div>
+        </div>}
+      </div>
+
+      {/* Card 4 — Filtres Taches */}
+      <div className={cardCls}>
+        <div className="flex items-start justify-between gap-3 mb-1 cursor-pointer" onClick={()=>setSecTaches(function(v){return !v;})}>
+          <div className="flex items-start gap-3">
+            <div style={{background:'#fef3c7',borderRadius:10,padding:'8px 10px',lineHeight:1}}>
+              <Icon d={ICONS.search} size={18}/>
+            </div>
+            <div>
+              <h3 className="font-bold text-midnight text-sm">Filtres — Tâches</h3>
+              <p className="text-xs text-neutral-300 mt-0.5">Pré-remplissage à l'ouverture de l'onglet Tâches</p>
+            </div>
+          </div>
+          <span className="text-neutral-300 text-xs mt-1">{secTaches?'▲':'▼'}</span>
+        </div>
+        {secTaches&&<div className="space-y-4 mt-4">
+          <div>
+            <label className="block text-sm font-medium text-carbon mb-1.5">Échéance</label>
+            <select value={filtTachesEcheance} onChange={e=>setFiltTachesEcheance(e.target.value)} style={selectStyle}>
+              <option value="all">Toutes les échéances</option>
+              <option value="retard">En retard</option>
+              <option value="today">Aujourd'hui</option>
+              <option value="semaine">Cette semaine</option>
+            </select>
+          </div>
+        </div>}
+      </div>
+
+      {/* Card 5 — Filtres Missions */}
+      <div className={cardCls}>
+        <div className="flex items-start justify-between gap-3 mb-1 cursor-pointer" onClick={()=>setSecMissions(function(v){return !v;})}>
+          <div className="flex items-start gap-3">
+            <div style={{background:'#fef3c7',borderRadius:10,padding:'8px 10px',lineHeight:1}}>
+              <Icon d={ICONS.search} size={18}/>
+            </div>
+            <div>
+              <h3 className="font-bold text-midnight text-sm">Filtres — Missions</h3>
+              <p className="text-xs text-neutral-300 mt-0.5">Pré-remplissage à l'ouverture de l'onglet Missions</p>
+            </div>
+          </div>
+          <span className="text-neutral-300 text-xs mt-1">{secMissions?'▲':'▼'}</span>
+        </div>
+        {secMissions&&<div className="space-y-4 mt-4">
+          <div>
+            <label className="block text-sm font-medium text-carbon mb-1.5">Statut</label>
+            <select value={filtMisStatut} onChange={e=>setFiltMisStatut(e.target.value)} style={selectStyle}>
+              <option value="">Tous les statuts</option>
+              <option value="En cours">En cours</option>
+              <option value="New">New</option>
+              <option value="Intercontrat">Intercontrat</option>
+              <option value="Terminée">Terminée</option>
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -5002,17 +5315,67 @@ function PreferencesPanel({ prefs, onSave, profileNom }) {
               </select>
             </div>
           </div>
+        </div>}
+      </div>
+
+      {/* Card 6 — Filtres Pipe */}
+      <div className={cardCls}>
+        <div className="flex items-start justify-between gap-3 mb-1 cursor-pointer" onClick={()=>setSecPipe(function(v){return !v;})}>
+          <div className="flex items-start gap-3">
+            <div style={{background:'#fef3c7',borderRadius:10,padding:'8px 10px',lineHeight:1}}>
+              <Icon d={ICONS.search} size={18}/>
+            </div>
+            <div>
+              <h3 className="font-bold text-midnight text-sm">Filtres — Pipe</h3>
+              <p className="text-xs text-neutral-300 mt-0.5">Pré-remplissage à l'ouverture de l'onglet Pipe</p>
+            </div>
+          </div>
+          <span className="text-neutral-300 text-xs mt-1">{secPipe?'▲':'▼'}</span>
+        </div>
+        {secPipe&&<div className="space-y-4 mt-4">
           <div>
-            <label className="block text-sm font-medium text-carbon mb-1.5">Statut — Missions</label>
-            <select value={filtMisStatut} onChange={e=>setFiltMisStatut(e.target.value)} style={selectStyle}>
-              <option value="">Tous les statuts</option>
-              <option value="En cours">En cours</option>
-              <option value="New">New</option>
-              <option value="Intercontrat">Intercontrat</option>
-              <option value="Terminée">Terminée</option>
+            <label className="block text-sm font-medium text-carbon mb-1.5">Responsable — Pipe</label>
+            <select value={filtPipeResp} onChange={e=>setFiltPipeResp(e.target.value)} style={selectStyle}>
+              <option value="moi">{profileNom} (moi)</option>
+              <option value="all">Tous les responsables</option>
             </select>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-carbon mb-1.5">Responsable — Tâches &amp; Contacts (héritage)</label>
+            <select value={filtResp} onChange={e=>setFiltResp(e.target.value)} style={selectStyle}>
+              <option value="">Tous les responsables</option>
+              <option value="moi">{profileNom} (moi)</option>
+            </select>
+            <p className="text-xs text-neutral-300 mt-1.5">Pré-filtre le responsable sur les onglets Tâches et Contacts</p>
+          </div>
+        </div>}
+      </div>
+
+      {/* Card 7 — Comportement */}
+      <div className={cardCls}>
+        <div className="flex items-start justify-between gap-3 mb-1 cursor-pointer" onClick={()=>setSecComportement(function(v){return !v;})}>
+          <div className="flex items-start gap-3">
+            <div style={{background:'#f5f3ff',borderRadius:10,padding:'8px 10px',lineHeight:1}}>
+              <span style={{fontSize:18}}>⚡</span>
+            </div>
+            <div>
+              <h3 className="font-bold text-midnight text-sm">Comportement</h3>
+              <p className="text-xs text-neutral-300 mt-0.5">Options de comportement de l'interface</p>
+            </div>
+          </div>
+          <span className="text-neutral-300 text-xs mt-1">{secComportement?'▲':'▼'}</span>
         </div>
+        {secComportement&&<div className="mt-4">
+          <div className="flex items-center justify-between py-3 border-t border-gray-50">
+            <div>
+              <span className="text-sm text-carbon font-medium">Mode focus — Prospection</span>
+              <p className="text-xs text-neutral-300 mt-0.5">Masque les contacts déjà traités pour se concentrer sur les nouveaux</p>
+            </div>
+            <button onClick={()=>setProspectionFocus(function(v){return !v;})} style={{width:44,height:24,borderRadius:12,border:'none',cursor:'pointer',background:prospectionFocus?'#1d4ed8':'#e2e8f0',transition:'background .2s',position:'relative',flexShrink:0}}>
+              <span style={{position:'absolute',top:3,left:prospectionFocus?22:3,width:18,height:18,borderRadius:'50%',background:'white',boxShadow:'0 1px 3px rgba(0,0,0,.2)',transition:'left .2s'}}/>
+            </button>
+          </div>
+        </div>}
       </div>
 
       {/* Save bar flottante */}
@@ -6136,10 +6499,10 @@ function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onN
 function App() {
   const [user,setUser]=useState(undefined); const [profile,setProfile]=useState(null);
   const [prefs,setPrefs]=useState({});
+  const [orgDefaults,setOrgDefaults]=useState([]);
   const [data,setData]=useState(null); const [loading,setLoading]=useState(false);
-  const [error,setError]=useState(null); const [tab,setTab]=useState(()=>localStorage.getItem('crm_tab')||'taches');
-  useEffect(()=>{if(tab!=='settings')localStorage.setItem('crm_tab',tab);},[tab]);
-  useEffect(()=>{if(prefs.default_tab&&!localStorage.getItem('crm_tab'))setTab(prefs.default_tab);},[prefs.default_tab]);
+  const [error,setError]=useState(null); const [tab,setTab]=useState('taches');
+
   const [lastRefresh,setLastRefresh]=useState(null);
   const [viewAs,setViewAs]=useState(null); const [allProfiles,setAllProfiles]=useState([]);
   const [tachesNavKey,setTachesNavKey]=useState(0); const [tachesNavEcheance,setTachesNavEcheance]=useState('');
@@ -6221,8 +6584,34 @@ function App() {
 
   useEffect(()=>{
     if(!user) return;
-    sb.from('profiles').select('*').eq('id',user.id).single().then(({data:p})=>{setProfile(p);setPrefs(p?.preferences||{});if(p)loadAchievements(p.nom).then(function(a){setAchievements(a);});});
-    sb.from('profiles').select('*').order('nom').then(({data:ps})=>setAllProfiles(ps||[]));
+    sb.from('profiles').select('*').eq('id',user.id).single().then(function(res){
+      var p=res.data;
+      setProfile(p);
+      if(p){
+        loadAchievements(p.nom).then(function(a){setAchievements(a);});
+        if(p.preferences&&p.preferences.default_tab)setTab(p.preferences.default_tab);
+        // After profile load, fetch org defaults
+        sb.from('org_preferences').select('*').then(function(orgRes){
+          var rows=orgRes.data||[];
+          var globalDef={};
+          var agenceDef={};
+          var respDef={};
+          rows.forEach(function(r){
+            if(r.scope==='global') globalDef=r.preferences||{};
+            else if(r.scope==='agence'&&r.scope_value===p.agence) agenceDef=r.preferences||{};
+            else if(r.scope==='responsable'&&r.scope_value===p.nom) respDef=r.preferences||{};
+          });
+          // Store org defaults in state for Admin panel
+          setOrgDefaults(rows);
+          // Resolve effective prefs: user > responsable > agence > global > fallback
+          var effective=Object.assign({},globalDef,agenceDef,respDef,p.preferences||{});
+          setPrefs(effective);
+        });
+      } else {
+        setPrefs({});
+      }
+    });
+    sb.from('profiles').select('*').order('nom').then(function(res){setAllProfiles(res.data||[]);});
     fetchAll();
   },[user]);
 
@@ -6231,6 +6620,10 @@ function App() {
     if(err){toast('Erreur sauvegarde préférences: '+err.message,'error');return false;}
     setPrefs(newPrefs);toast('Préférences sauvegardées');return true;
   },[user]);
+  const handleSaveOrgDefaults=useCallback(function(rows){
+    if(rows)setOrgDefaults(rows);
+    toast('Valeurs par défaut sauvegardées');
+  },[]);
   const [showMenu,setShowMenu]=useState(false);
   const [showShortcuts,setShowShortcuts]=useState(false);
   const [settingsSubTab,setSettingsSubTab]=useState('profil');
@@ -6397,7 +6790,7 @@ function App() {
         {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} prefs={prefs}/>}
         {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} contactMap={contactMap} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache}/>}
         {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navMissionId={navMissionId} navMissionKey={navMissionKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache} prefs={prefs}/>}
-        {tab==='settings' &&<TabSettings user={user} profile={activeProfile} taches={vTaches} subTab={settingsSubTab} onSubTabChange={setSettingsSubTab} prefs={prefs} onSavePrefs={viewAs?null:savePrefs} achievements={activeAchievements} viewAs={!!viewAs}/>}
+        {tab==='settings' &&<TabSettings user={user} profile={activeProfile} taches={vTaches} subTab={settingsSubTab} onSubTabChange={setSettingsSubTab} prefs={prefs} onSavePrefs={viewAs?null:savePrefs} achievements={activeAchievements} viewAs={!!viewAs} orgDefaults={orgDefaults} allProfiles={allProfiles} onSaveOrgDefaults={handleSaveOrgDefaults}/>}
       </div>
       {/* Shortcuts modal */}
       {showShortcuts&&(
