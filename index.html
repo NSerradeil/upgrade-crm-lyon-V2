@@ -1408,7 +1408,7 @@ function AddTacheModal({ contacts, besoins, missions, profile, allProfiles, onCl
   const [f,setF] = useState({ type:'', titre:'', due_date:'', due_time:DEFAULT_TASK_TIME, contact_id:defaultContactId?String(defaultContactId):'', notes:'', responsable:profile.nom, mission_id:defaultMissionId||'', besoin_id:defaultBesoinId||'' });
   const [saving,setSaving]=useState(false);
   const myContacts = useMemo(()=>contacts.filter(c=>isAdmin||c.responsable===profile.nom).sort((a,b)=>(a.nom||'').localeCompare(b.nom||'')),[contacts,profile,isAdmin]);
-  const contactMap = useMemo(()=>Object.fromEntries(myContacts.map(c=>[String(c.id),c])),[myContacts]);
+  const contactMap = useMemo(()=>Object.fromEntries(myContacts.map(c=>[c.id,c])),[myContacts]);
   const selContact = f.contact_id ? contactMap[f.contact_id] : null;
   const types = useMemo(()=>tacheTypesFor(selContact),[selContact]);
 
@@ -6275,7 +6275,7 @@ function App() {
   if(error) return <div className="flex items-center justify-center min-h-screen"><div className="bg-coral-20 border border-coral-20 p-6 max-w-md text-center"><div className="text-3xl mb-3">❌</div><div className="font-semibold text-coral-100">Erreur Supabase</div><div className="text-sm text-coral-100 mt-2 font-mono">{error}</div><button onClick={fetchAll} className="mt-4 px-4 py-2 bg-coral-100 text-white rounded-lg text-sm">Réessayer</button></div></div>;
 
   const {contacts,historique,taches,besoins,missions,histMissions,besoinCandidats}=data;
-  const contactMap = Object.fromEntries(contacts.map(c=>[String(c.id),c]));
+  const contactMap = Object.fromEntries(contacts.map(c=>[c.id,c]));
   const commerciauxParAgence={};
   allProfiles.forEach(p=>{if(p.agence&&p.nom){if(!commerciauxParAgence[p.agence])commerciauxParAgence[p.agence]=[];commerciauxParAgence[p.agence].push(p.nom);}});
   Object.values(commerciauxParAgence).forEach(arr=>arr.sort());
@@ -6289,7 +6289,7 @@ function App() {
   const vHistorique = activeIsAdmin ? historique : historique.filter(h=>h.responsable===activeProfile.nom);
   const vTaches     = activeIsAdmin ? taches     : taches.filter(t=>t.responsable===activeProfile.nom);
   const vMissions   = activeIsAdmin ? missions   : missions.filter(m=>m.responsable===activeProfile.nom);
-  const vBesoins    = activeIsAdmin ? besoins    : besoins.filter(b=>contactAgenceMap[String(b.contact_id)]===activeProfile.agence||b.agence===activeProfile.agence);
+  const vBesoins    = activeIsAdmin ? besoins    : besoins.filter(b=>contactAgenceMap[b.contact_id]===activeProfile.agence||b.agence===activeProfile.agence);
   const vHistMiss   = histMissions; // filtré par missions déjà
 
   const tachesActives=vTaches.filter(t=>t.statut!=='fait'&&t.statut!=='annule');
