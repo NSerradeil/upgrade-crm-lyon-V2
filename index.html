@@ -5368,12 +5368,13 @@ function PreferencesPanel({ prefs, onSave, profileNom }) {
         {secComportement&&<div className="mt-4">
           <div className="flex items-center justify-between py-3 border-t border-gray-50">
             <div>
-              <span className="text-sm text-carbon font-medium">Mode focus — Prospection</span>
-              <p className="text-xs text-neutral-300 mt-0.5">Masque les contacts déjà traités pour se concentrer sur les nouveaux</p>
+              <span className="text-sm text-carbon font-medium">Vue par défaut — Session de prospection</span>
+              <p className="text-xs text-neutral-300 mt-0.5">Liste = tous les contacts en tableau · Focus = un contact à la fois avec navigation</p>
             </div>
-            <button onClick={()=>setProspectionFocus(function(v){return !v;})} style={{width:44,height:24,borderRadius:12,border:'none',cursor:'pointer',background:prospectionFocus?'#1d4ed8':'#e2e8f0',transition:'background .2s',position:'relative',flexShrink:0}}>
-              <span style={{position:'absolute',top:3,left:prospectionFocus?22:3,width:18,height:18,borderRadius:'50%',background:'white',boxShadow:'0 1px 3px rgba(0,0,0,.2)',transition:'left .2s'}}/>
-            </button>
+            <div style={{display:'flex',gap:0}}>
+              <button onClick={()=>setProspectionFocus(false)} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:'2px solid #E4E4E6',borderRight:'none',background:!prospectionFocus?'#1C1F35':'#fff',color:!prospectionFocus?'#fff':'#999',cursor:'pointer'}}>Liste</button>
+              <button onClick={()=>setProspectionFocus(true)} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:'2px solid #E4E4E6',background:prospectionFocus?'#1C1F35':'#fff',color:prospectionFocus?'#fff':'#999',cursor:'pointer'}}>Focus</button>
+            </div>
           </div>
         </div>}
       </div>
@@ -6001,7 +6002,7 @@ function ProspectionNew({ contacts, profile, onStart, onBack }) {
   );
 }
 
-function ProspectionActive({ session, contacts, contactMap, profile, onDone, onBack, onEdit, onDelete }) {
+function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDone, onBack, onEdit, onDelete }) {
   var isEditMode = session.editMode === 'results';
   var spcMap = {};
   (session.spcRows||[]).forEach(function(r){ spcMap[r.contact_id]=r; });
@@ -6026,7 +6027,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, onDone, onB
   const [items, setItems] = useState(sessionContacts);
   const [saving, setSaving] = useState(false);
   const [focusIdx, setFocusIdx] = useState(0);
-  const [view, setView] = useState('list');
+  const [view, setView] = useState(prefs&&prefs.prospection_focus_mode?'focus':'list');
   var [showConfirm, setShowConfirm] = useState(false);
 
   var updateItem = function(idx, patch){setItems(function(prev){return prev.map(function(it,i){return i===idx?{...it,...patch}:it;});});};
@@ -6432,7 +6433,7 @@ function ProspectionEditContacts({ session, contacts, profile, onSaved, onBack }
   );
 }
 
-function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onNavToContact, allProfiles }) {
+function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onNavToContact, allProfiles, prefs }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState('list');
@@ -6485,7 +6486,7 @@ function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onN
     <div className="tab-content">
       {screen === 'list' && <ProspectionList sessions={sessions} loading={loading} onNew={function(){setScreen('new');}} onDetail={setDetailSession} onResume={handleResume} onEdit={handleEdit} onDelete={handleDeleteSession} contactMap={contactMap} onNavToContact={onNavToContact} isAdmin={isAdmin} allProfiles={allProfiles} profile={profile}/>}
       {screen === 'new' && <ProspectionNew contacts={contacts} profile={profile} onStart={function(s){setActiveSession(s);setScreen('active');}} onBack={function(){setScreen('list');}}/>}
-      {screen === 'active' && activeSession && <ProspectionActive session={activeSession} contacts={contacts} contactMap={contactMap} profile={profile} onDone={function(){setScreen('list');loadSessions();onRefresh();}} onBack={function(){setScreen('list');}} onEdit={function(s){handleEdit(s);}} onDelete={function(s){handleDeleteSession(s);}}/>}
+      {screen === 'active' && activeSession && <ProspectionActive session={activeSession} contacts={contacts} contactMap={contactMap} profile={profile} prefs={prefs} onDone={function(){setScreen('list');loadSessions();onRefresh();}} onBack={function(){setScreen('list');}} onEdit={function(s){handleEdit(s);}} onDelete={function(s){handleDeleteSession(s);}}/>}
       {screen === 'edit' && activeSession && <ProspectionEditContacts session={activeSession} contacts={contacts} profile={profile} onSaved={function(){setScreen('list');loadSessions();}} onBack={function(){setScreen('list');}}/>}
       {detailSession && <ProspectionDetailPanel session={detailSession} contactMap={contactMap} onClose={function(){setDetailSession(null);}} onNavToContact={onNavToContact} isAdmin={isAdmin} onDelete={function(){setDetailSession(null);loadSessions();}} onEditResults={handleEditResults} profile={profile}/>}
     </div>
@@ -6784,7 +6785,7 @@ function App() {
       )}
       <div id="main-content" role="main" className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-6">
         {tab==='prospects'&&<TabProspects contacts={vContacts} contactMap={contactMap} historique={vHistorique} taches={vTaches} missions={vMissions} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navContactId={navContactId} navContactKey={navContactKey} onNavToBesoin={navToBesoin} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
-        {tab==='prospection'&&<TabProspection profile={activeProfile} contacts={vContacts} contactMap={contactMap} onRefresh={fetchAll} isAdmin={activeIsAdmin} onNavToContact={navToContact} allProfiles={allProfiles}/>}
+        {tab==='prospection'&&<TabProspection profile={activeProfile} contacts={vContacts} contactMap={contactMap} onRefresh={fetchAll} isAdmin={activeIsAdmin} onNavToContact={navToContact} allProfiles={allProfiles} prefs={prefs}/>}
         {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} contactMap={contactMap} besoins={vBesoins} missions={vMissions} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance} navTacheId={navTacheId} navTacheKey={navTacheKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToMission={navToMission} prefs={prefs}/>}
         {tab==='besoins'  &&<TabBesoins  contacts={vContacts} contactMap={contactMap} besoins={vBesoins} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navBesoinId={navBesoinId} navBesoinKey={navBesoinKey} onNavToContact={navToContact} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
         {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} prefs={prefs}/>}
