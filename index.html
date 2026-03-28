@@ -4212,15 +4212,14 @@ function EditableJoursCell({ mission, moisKey, moisIdx, curMonthIdx, isDebut, is
   const isCurMonth=moisIdx===curMonthIdx;
   const cellCls=j>0?(rec==='Réceptionné'?'text-jade-100 font-semibold':rec==='Livré'?'text-azure-100':'text-slate'):'text-neutral-200';
   let cellBg=isCurMonth?'':'';
-  var cellBgStyle=isCurMonth?{background:'#F0F0F2'}:{};
   let cellStyle={};
   if(isDebut&&isFin) cellStyle={background:'linear-gradient(90deg, rgba(34,197,94,0.15) 50%, rgba(239,68,68,'+(finSoon?'0.30':'0.15')+') 50%)'};
   else if(isDebut) cellStyle={background:'rgba(34,197,94,0.15)'};
   else if(isFin) cellStyle={background:'rgba(239,68,68,'+(finSoon?'0.30':'0.15')+')'};
-  if(isDebut||isFin) cellBg='';
+  else if(isCurMonth) cellStyle={background:'#F0F0F2'};
 
   return (
-    <td className={`relative text-right text-xs font-mono ${saving?'opacity-50':''}`} style={{...cellStyle,...cellBgStyle,padding:'4px 6px',minWidth:'48px'}}
+    <td className={`relative text-right text-xs font-mono ${saving?'opacity-50':''}`} style={{...cellStyle,padding:'4px 6px',minWidth:'48px',borderBottom:isCurMonth?'2px solid #1C1F35':'none'}}
       title={rec||(isDebut?'Début mission':'')+(isFin?' Fin mission':'')}>
       <div className="flex items-center justify-end gap-0.5">
         {/* Pastille statut — cliquable */}
