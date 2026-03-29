@@ -5060,6 +5060,10 @@ function TabSettings({ user, profile, taches, subTab, onSubTabChange, prefs, onS
         cats.forEach(function(cat){totalBadges+=getBadgeLevel(cat,ach[cat]||0);});
         var totalPossible=cats.length*4;
         return <div>
+          <div style={{marginBottom:28,paddingBottom:24,borderBottom:'1px solid #E5E7EB'}}>
+            <p style={{fontSize:15,fontWeight:500,color:'#111827',lineHeight:1.6,marginBottom:10,maxWidth:680,margin:'0 0 10px'}}>Dans l'arène commerciale, chaque appel passé, chaque mission ouverte, chaque candidat placé forge une réputation. Les Exploits tracent ton parcours — de la première prise de contact jusqu'au statut de légende de l'agence. Débloque des titres, gravis les rangs, et montre ce que tu vaux vraiment.</p>
+            <p style={{fontSize:13,fontStyle:'italic',color:'#6B7280',lineHeight:1.55,maxWidth:620,margin:0}}>Les scores sont calculés automatiquement à partir de ton activité dans le CRM. Appels passés, missions ouvertes, besoins créés, candidats placés… tout est pris en compte sur l'année en cours (janvier – décembre 2026). Les niveaux se débloquent en temps réel au fil de ta progression.</p>
+          </div>
           <div style={{display:'flex',gap:16,marginBottom:24,flexWrap:'wrap',alignItems:'center'}}>
             <div style={{border:'2px solid #1C1F35',padding:'12px 20px'}}>
               <div style={{fontSize:28,fontWeight:900,color:'#1C1F35'}}>{totalBadges}</div>
