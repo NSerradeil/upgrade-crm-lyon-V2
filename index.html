@@ -2551,6 +2551,8 @@ function BadgeDetailPanel({ category, score, profile, prefs, onSavePrefs, onClos
   var [showDetail, setShowDetail] = useState(false);
   var [detailData, setDetailData] = useState(null);
   var [detailLoading, setDetailLoading] = useState(false);
+  var [detailCat, setDetailCat] = useState(category);
+  if(detailCat!==category){setDetailCat(category);setDetailData(null);setShowDetail(false);}
   function loadDetail() {
     if(detailData){setShowDetail(!showDetail);return;}
     setDetailLoading(true);setShowDetail(true);
