@@ -4445,13 +4445,15 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
 
   const missionsFiltrees=useMemo(()=>{
     const q=search.toLowerCase();
-    return missions.filter(m=>{
+    var rows=missions.filter(m=>{
       if(filterStatut&&m.statut!==filterStatut) return false;
       if(filterAgence&&m.agence!==filterAgence) return false;
       if(filterResp&&m.responsable!==filterResp) return false;
       if(q&&![(m.consultant||''),(m.client||'')].some(v=>norm(v).includes(norm(q)))) return false;
       return true;
     });
+    rows.sort(function(a,b){var da=a.date_demarrage_initiale||'0';var db=b.date_demarrage_initiale||'0';return da>db?-1:da<db?1:0;});
+    return rows;
   },[missions,search,filterStatut,filterAgence,filterResp]);
   const hasFilter=search||filterStatut||filterResp||(isAdmin?filterAgence!=='':filterAgence!==profile.agence);
   const resetAll=()=>{setSearch('');setFilterStatut('');setFilterResp('');setFilterAgence(isAdmin?'':profile.agence);};
