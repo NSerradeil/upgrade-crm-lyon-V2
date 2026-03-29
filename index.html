@@ -1730,15 +1730,13 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, on
           <Field label="Référent client"><ContactSearchField contacts={contacts||[]} value={f.contact_referent_id} onChange={(id,name)=>setF(v=>({...v,contact_referent_id:id,referent:name||v.referent}))} statuts={['Client','Prospect','Decision Maker']} placeholder="Rechercher contact client..."/></Field>
         </div>
         {!prefillBesoinId&&<Field label="Besoin lié">
-          <BesoinPicker besoins={besoins||[]} value={f.besoin_id} onChange={function(bid){
+          <BesoinPicker besoins={(besoins||[]).filter(function(b){return b.statut==='Besoin Gagné';})} value={f.besoin_id} onChange={function(bid){
             if(!bid){setF(function(v){return Object.assign({},v,{besoin_id:''});});return;}
             var b=(besoins||[]).find(function(x){return String(x.id)===String(bid);});
             if(!b){setF(function(v){return Object.assign({},v,{besoin_id:bid});});return;}
-            var consultantC=b.consultant_id?(contacts||[]).find(function(c){return c.id===b.consultant_id;}):null;
             var contactRef=b.contact_id?(contacts||[]).find(function(c){return c.id===b.contact_id;}):null;
-            var patch={besoin_id:bid,projet:b.titre||'',client:b.compte||'',tjm:b.tjm_vente||'',cjm:b.cjm_achat||'',date_debut_mission:b.date_demarrage||'',date_fin_mission:b.date_fin||''};
-            if(consultantC){patch.contact_consultant_id=consultantC.id;patch.consultant=consultantC.prenom+' '+consultantC.nom;}
-            if(contactRef){patch.contact_referent_id=contactRef.id;patch.referent=contactRef.prenom+' '+contactRef.nom;}
+            var patch={besoin_id:bid};
+            if(contactRef&&!f.contact_referent_id){patch.contact_referent_id=contactRef.id;patch.referent=contactRef.prenom+' '+contactRef.nom;}
             setF(function(v){return Object.assign({},v,patch);});
           }}/>
         </Field>}
