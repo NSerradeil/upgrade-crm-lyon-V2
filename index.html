@@ -2548,6 +2548,33 @@ function BadgeDetailPanel({ category, score, profile, prefs, onSavePrefs, onClos
   var prog = getBadgeProgress(category, score);
   var t = BADGE_THRESHOLDS[category];
   var currentDisplayed = (prefs&&prefs.displayedBadge)||'auto';
+  var [showDetail, setShowDetail] = useState(false);
+  var [detailData, setDetailData] = useState(null);
+  var [detailLoading, setDetailLoading] = useState(false);
+  function loadDetail() {
+    if(detailData){setShowDetail(!showDetail);return;}
+    setDetailLoading(true);setShowDetail(true);
+    var nom = profile.nom;
+    var cat = category;
+    var p;
+    if(cat==='prospecteur') p=sb.from('session_prospection_contacts').select('id,contact_id,statut_appel,sessions_prospection!inner(responsable,date_session)').eq('sessions_prospection.responsable',nom).then(function(r){return{type:'list',label:'Contacts appelés en session',items:(r.data||[]).length,note:score+' contacts comptabilisés'};});
+    else if(cat==='chasseur') p=sb.from('missions').select('id,consultant,client,contact_referent_id').eq('responsable',nom).not('contact_referent_id','is',null).gte('date_debut_mission','2026-01-01').then(function(r){var byC={};(r.data||[]).forEach(function(m){if(!byC[m.contact_referent_id])byC[m.contact_referent_id]=[];byC[m.contact_referent_id].push(m);});var keys=Object.keys(byC);return{type:'table',label:'Comptes clients distincts (2026)',items:keys.map(function(k){var ms=byC[k];return ms[0].client+' — '+ms.length+' mission'+(ms.length>1?'s':'');}),note:keys.length+' comptes ouverts'};});
+    else if(cat==='eleveur') p=sb.from('missions').select('id,consultant,client,contact_referent_id').eq('responsable',nom).not('contact_referent_id','is',null).gte('date_debut_mission','2026-01-01').then(function(r){var byC={};(r.data||[]).forEach(function(m){if(!byC[m.contact_referent_id])byC[m.contact_referent_id]=[];byC[m.contact_referent_id].push(m);});var keys=Object.keys(byC).filter(function(k){return byC[k].length>=2;});return{type:'table',label:'Comptes avec ≥2 missions (2026)',items:keys.map(function(k){var ms=byC[k];return ms[0].client+' — '+ms.length+' missions';}),note:keys.length+' comptes fidélisés'};});
+    else if(cat==='connaisseur') p=sb.from('missions').select('id,consultant,client,contact_referent_id').eq('responsable',nom).not('contact_referent_id','is',null).gte('date_debut_mission','2026-01-01').then(function(r){var byC={};(r.data||[]).forEach(function(m){if(!byC[m.contact_referent_id])byC[m.contact_referent_id]=[];byC[m.contact_referent_id].push(m);});var best=null;var bestN=0;Object.keys(byC).forEach(function(k){if(byC[k].length>bestN){bestN=byC[k].length;best=byC[k];}});return{type:'table',label:'Meilleur compte (2026)',items:best?best.map(function(m){return m.consultant+' chez '+m.client;}):[],note:bestN+' missions sur le même compte'};});
+    else if(cat==='recruteur') p=sb.from('missions').select('id,consultant,client,besoin_id').eq('responsable',nom).not('besoin_id','is',null).gte('date_debut_mission','2026-01-01').then(function(r){return{type:'table',label:'Missions issues d\'un besoin (2026)',items:(r.data||[]).map(function(m){return m.consultant+' chez '+m.client;}),note:(r.data||[]).length+' placements'};});
+    else if(cat==='gestionnaire') p=sb.from('historique_missions').select('id,date,type_action,details,mission_id').eq('responsable',nom).order('date',{ascending:false}).limit(20).then(function(r){return{type:'table',label:'Derniers suivis (20 plus récents)',items:(r.data||[]).map(function(h){return(h.date||'').slice(0,10)+' — '+(h.type_action||'')+(h.details?' : '+h.details.slice(0,40):'');}),note:score+' suivis loggés au total'};});
+    else if(cat==='productif') p=sb.from('besoins').select('id,titre,compte,statut').eq('statut','Besoin Gagné').eq('responsable',nom).then(function(r){return{type:'table',label:'Besoins gagnés',items:(r.data||[]).map(function(b){return(b.titre||b.compte||'?')+' — '+(b.compte||'');}),note:(r.data||[]).length+' besoins transformés'};});
+    else if(cat==='networker') p=Promise.resolve({type:'list',label:'Contacts dans le CRM',items:score,note:score+' contacts dont tu es responsable'});
+    else if(cat==='relanceur') p=sb.from('taches').select('id,titre,statut,due_date').eq('statut','fait').eq('responsable',nom).not('session_prospection_id','is',null).order('due_date',{ascending:false}).limit(20).then(function(r){return{type:'table',label:'Dernières relances effectuées (20)',items:(r.data||[]).map(function(t2){return(t2.due_date||'').slice(0,10)+' — '+(t2.titre||'Relance');}),note:score+' relances au total'};});
+    else if(cat==='tribun') p=sb.from('sessions_prospection').select('id,date_session,objectif,statut').eq('statut','done').eq('responsable',nom).order('date_session',{ascending:false}).then(function(r){return{type:'table',label:'Sessions de prospection terminées',items:(r.data||[]).map(function(s2){return(s2.date_session||'?')+' — objectif '+s2.objectif+' contacts';}),note:(r.data||[]).length+' sessions'};});
+    else if(cat==='goldmaker') p=sb.from('missions').select('consultant,client,tjm,jours_jan,jours_fev,jours_mar,jours_avr,jours_mai,jours_jun,jours_jul,jours_aou,jours_sep,jours_oct,jours_nov,jours_dec').eq('responsable',nom).not('tjm','is',null).gte('date_debut_mission','2026-01-01').then(function(r){var mk=['jours_jan','jours_fev','jours_mar','jours_avr','jours_mai','jours_jun','jours_jul','jours_aou','jours_sep','jours_oct','jours_nov','jours_dec'];var cm=new Date().getMonth();return{type:'table',label:'CA YTD par mission (2026)',items:(r.data||[]).map(function(m){var j=0;for(var i=0;i<=cm;i++)j+=parseFloat(m[mk[i]])||0;var ca=m.tjm*j;return m.consultant+' chez '+m.client+' — '+j+'j × '+m.tjm+'€ = '+Math.round(ca).toLocaleString('fr-FR')+'€';}),note:'CA YTD total : '+score.toLocaleString('fr-FR')+' €'};});
+    else if(cat==='rentier') p=sb.from('missions').select('consultant,client,tjm,cjm').eq('responsable',nom).not('tjm','is',null).not('cjm','is',null).gte('date_debut_mission','2026-01-01').then(function(r){return{type:'table',label:'Missions avec marge (2026)',items:(r.data||[]).filter(function(m){return m.tjm>0;}).map(function(m){var tx=((m.tjm-m.cjm)/m.tjm*100).toFixed(1);var pts=tx>40?2:tx>30?1:tx>20?0.5:0;return m.consultant+' chez '+m.client+' — marge '+tx+'% → '+pts+' pt'+(pts>1?'s':'');}),note:score.toFixed(1)+' pts de marge au total'};});
+    else if(cat==='architecte') p=sb.from('besoins').select('id,titre,compte,statut,created_at').eq('responsable',nom).order('created_at',{ascending:false}).limit(20).then(function(r){return{type:'table',label:'Derniers besoins créés (20)',items:(r.data||[]).map(function(b){return(b.created_at||'').slice(0,10)+' — '+(b.titre||b.compte||'?')+' ['+b.statut+']';}),note:score+' besoins créés au total'};});
+    else if(cat==='diplomate') p=Promise.all([sb.from('taches').select('id,titre,due_date').eq('responsable',nom).ilike('type','%RDV%').order('due_date',{ascending:false}).limit(15),sb.from('historique_actions').select('id,date,details').eq('responsable',nom).ilike('type_action','%RDV%').order('date',{ascending:false}).limit(15)]).then(function(res){var items=[];(res[0].data||[]).forEach(function(t2){items.push('Tâche — '+(t2.due_date||'').slice(0,10)+' — '+(t2.titre||'RDV'));});(res[1].data||[]).forEach(function(h){items.push('Action — '+(h.date||'').slice(0,10)+' — '+(h.details||'RDV').slice(0,50));});return{type:'table',label:'RDV loggés (30 derniers)',items:items.slice(0,30),note:score+' RDV au total'};});
+    else if(cat==='speedcloser') p=sb.from('besoins').select('id,titre,compte,created_at,updated_at').eq('responsable',nom).eq('statut','pourvu').then(function(r){return{type:'table',label:'Besoins closés < 30 jours',items:(r.data||[]).map(function(b){var days=Math.round((new Date(b.updated_at)-new Date(b.created_at))/(1000*60*60*24));return(b.titre||b.compte||'?')+' — '+days+'j'+(days<30?' ✓':' (> 30j)');}),note:score+' deals rapides'};});
+    else p=Promise.resolve({type:'list',label:'Score',items:score,note:''});
+    p.then(function(d){setDetailData(d);setDetailLoading(false);});
+  }
   return (
     <div style={{position:'fixed',top:0,right:0,bottom:0,width:400,maxWidth:'100vw',background:'#fff',borderLeft:'2px solid #1C1F35',zIndex:110,overflowY:'auto',boxShadow:'-4px 0 20px rgba(0,0,0,0.1)'}}
       onClick={function(e){e.stopPropagation();}}>
@@ -2595,6 +2622,19 @@ function BadgeDetailPanel({ category, score, profile, prefs, onSavePrefs, onClos
               {reached&&onSavePrefs&&(isThisSelected?<span style={{fontSize:10,fontWeight:700,padding:'3px 8px',border:'1px solid '+meta.color,background:meta.color+'15',color:meta.color,letterSpacing:'0.04em',whiteSpace:'nowrap'}}>✓ Sélectionné</span>:<button onClick={function(){onSavePrefs(Object.assign({},prefs||{},{displayedBadge:levelKey}));}} style={{fontSize:10,fontWeight:700,padding:'3px 8px',border:'1px solid #1C1F35',background:'#1C1F35',color:'#fff',cursor:'pointer',letterSpacing:'0.04em',whiteSpace:'nowrap'}}>Sélectionner</button>)}
             </div>;
           })}
+        </div>
+        {/* Détail du score */}
+        <div style={{marginBottom:20}}>
+          <button onClick={loadDetail} style={{fontSize:11,fontWeight:700,padding:'6px 14px',border:'2px solid #E4E4E6',background:showDetail?'#1C1F35':'#fff',color:showDetail?'#fff':'#1C1F35',cursor:'pointer',letterSpacing:'0.04em',textTransform:'uppercase',width:'100%'}}>
+            {detailLoading?'Chargement...':showDetail?'▲ Masquer le détail':'▼ Voir le détail du score'}
+          </button>
+          {showDetail&&detailData&&<div style={{marginTop:12,border:'1px solid #E4E4E6',padding:12}}>
+            <div style={{fontSize:11,fontWeight:700,color:meta.color,textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>{detailData.label}</div>
+            {detailData.type==='table'&&detailData.items&&detailData.items.length>0?<div style={{maxHeight:200,overflowY:'auto'}}>
+              {detailData.items.map(function(item,i){return <div key={i} style={{fontSize:11,color:'#1C1F35',padding:'4px 0',borderBottom:i<detailData.items.length-1?'1px solid #F0F0F2':'none'}}>{item}</div>;})}
+            </div>:<div style={{fontSize:11,color:'#999',fontStyle:'italic'}}>Aucune donnée</div>}
+            {detailData.note&&<div style={{fontSize:10,fontWeight:700,color:'#999',marginTop:8,textTransform:'uppercase'}}>{detailData.note}</div>}
+          </div>}
         </div>
       </div>
     </div>
