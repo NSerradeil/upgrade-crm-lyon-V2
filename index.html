@@ -3016,7 +3016,7 @@ function BesoinCandidatsList({ besoinId, candidats, contacts, contactMap, profil
 function ContactSearchField({ contacts, value, onChange, statuts, placeholder }) {
   const [q,setQ]=useState('');
   const pool=useMemo(()=>contacts.filter(c=>statuts.includes(c.statut)),[contacts,statuts]);
-  const selected=pool.find(c=>c.id===value);
+  const selected=value?(pool.find(c=>c.id===value||String(c.id)===String(value))||contacts.find(c=>c.id===value||String(c.id)===String(value))):null;
   const filtered=useMemo(()=>{if(!q)return pool.slice(0,20);const s=q.toLowerCase();return pool.filter(c=>[c.prenom,c.nom,c.groupe].some(v=>(v||'').toLowerCase().includes(s))).slice(0,20);},[pool,q]);
   if(selected) return (
     <div className="flex items-center gap-2">
