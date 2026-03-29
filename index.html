@@ -375,8 +375,8 @@ function resolveTopBadge(achievements) {
 async function loadAchievements(profileNom) {
   var results = await Promise.all([
     sb.from('session_prospection_contacts').select('id, sessions_prospection!inner(responsable)',{count:'exact',head:true}).eq('sessions_prospection.responsable',profileNom),
-    sb.from('missions').select('contact_referent_id').eq('responsable',profileNom).not('contact_referent_id','is',null),
-    sb.from('missions').select('id',{count:'exact',head:true}).eq('responsable',profileNom).not('besoin_id','is',null),
+    sb.from('missions').select('contact_referent_id').eq('responsable',profileNom).not('contact_referent_id','is',null).gte('date_debut_mission','2026-01-01'),
+    sb.from('missions').select('id',{count:'exact',head:true}).eq('responsable',profileNom).not('besoin_id','is',null).gte('date_debut_mission','2026-01-01'),
     sb.from('historique_missions').select('id',{count:'exact',head:true}).eq('responsable',profileNom),
     sb.from('besoins').select('id',{count:'exact',head:true}).eq('statut','Besoin Gagné').eq('responsable',profileNom),
     sb.from('contacts').select('id',{count:'exact',head:true}).eq('responsable',profileNom),
@@ -384,7 +384,7 @@ async function loadAchievements(profileNom) {
     // 10. TRIBUN : sessions terminées
     sb.from('sessions_prospection').select('id',{count:'exact',head:true}).eq('statut','done').eq('responsable',profileNom),
     // 11. GOLDMAKER + RENTIER : missions avec TJM
-    sb.from('missions').select('tjm, cjm, jours_jan, jours_fev, jours_mar, jours_avr, jours_mai, jours_jun, jours_jul, jours_aou, jours_sep, jours_oct, jours_nov, jours_dec').eq('responsable',profileNom).not('tjm','is',null),
+    sb.from('missions').select('tjm, cjm, jours_jan, jours_fev, jours_mar, jours_avr, jours_mai, jours_jun, jours_jul, jours_aou, jours_sep, jours_oct, jours_nov, jours_dec').eq('responsable',profileNom).not('tjm','is',null).gte('date_debut_mission','2026-01-01'),
     // 12. ARCHITECTE : tous les besoins créés
     sb.from('besoins').select('id',{count:'exact',head:true}).eq('responsable',profileNom),
     // 13. DIPLOMATE taches RDV
