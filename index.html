@@ -3207,8 +3207,8 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
   const [deleting,setDeleting]=useState(false);
   const contact=contacts.find(c=>c.id===besoin.contact_id);
   const candidat=contacts.find(c=>c.id===besoin.candidat_id);
-  const mesCandidats=(besoinCandidats||[]).filter(bc=>bc.besoin_id===besoin.id);
-  const besoinHist=historique.filter(h=>h.besoin_id===besoin.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const mesCandidats=useMemo(()=>(besoinCandidats||[]).filter(bc=>bc.besoin_id===besoin.id),[besoinCandidats,besoin.id]);
+  const besoinHist=useMemo(()=>historique.filter(h=>h.besoin_id===besoin.id).sort((a,b)=>(b.date||'').localeCompare(a.date||'')),[historique,besoin.id]);
   const besoinTaches=taches.filter(t=>t.besoin_id===besoin.id&&t.statut!=='fait'&&t.statut!=='annule');
   // Indicateurs Besoin Gagné
   const nbJours=joursOuvres(f.date_demarrage,f.date_fin);
@@ -3587,7 +3587,7 @@ function KanbanBesoins({ besoins, contacts, contactMap, besoinCandidats, onSelec
             <div className="kanban-items" style={{minHeight:40}}>
               {items.map(b=>{
                 const contact=contactMap[b.contact_id];
-                const bCandidats=(besoinCandidats||[]).filter(bc=>bc.besoin_id===b.id);
+                const bCandidats=(candsByBesoinId&&candsByBesoinId[b.id]||[]);
                 const candidatLegacy=contactMap[b.candidat_id];
                 const nbJ=b.statut==='Besoin Gagné'?joursOuvres(b.date_demarrage,b.date_fin):0;
                 const ca=nbJ*(b.tjm_vente||0);
@@ -3644,7 +3644,7 @@ function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique
         if(q){
           const c=contactMap[b.contact_id];
           const cand=contactMap[b.candidat_id];
-          const bCands=(besoinCandidats||[]).filter(bc=>bc.besoin_id===b.id).map(bc=>contactMap[bc.contact_id]).filter(Boolean);
+          const bCands=(candsByBesoinId&&candsByBesoinId[b.id]||[]).map(bc=>contactMap[bc.contact_id]).filter(Boolean);
           const candNames=bCands.flatMap(c=>[c.prenom,c.nom]);
           if(![b.titre,b.compte,b.responsable,c?.prenom,c?.nom,c?.groupe,cand?.prenom,cand?.nom,...candNames].some(v=>norm(v).includes(norm(q)))) return false;
         }
@@ -3723,7 +3723,7 @@ function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique
                   </div>
                   <div className="space-y-2" onDragOver={e=>e.preventDefault()} onDrop={e=>reorder.onDropReorder(e,statut,items)}>{orderedItems.map(b=>{
                     const contact=contactMap[b.contact_id];
-                    const bCandidats=(besoinCandidats||[]).filter(bc=>bc.besoin_id===b.id);
+                    const bCandidats=(candsByBesoinId&&candsByBesoinId[b.id]||[]);
                     const candidatLegacy=contactMap[b.candidat_id];
                     const nbJ=b.statut==='Besoin Gagné'?joursOuvres(b.date_demarrage,b.date_fin):0;
                     const ca=nbJ*(b.tjm_vente||0);
@@ -4639,7 +4639,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
               {missionsTri.map((m,idx)=>{
                 const joursTotal=MOIS_KEYS.reduce((s,k)=>s+(parseFloat(m[`jours_${k}`])||0),0);
                 const caTotal=joursTotal*(parseFloat(m.tjm)||0);
-                const mHist=(histMissions||[]).filter(h=>h.mission_id===m.id);
+                const mHist=(histByMissionId&&histByMissionId[m.id]||[]);
                 const histCount=mHist.length;
                 // Feature 1: mois début/fin commande
                 const CY=new Date().getFullYear();
@@ -6599,8 +6599,8 @@ function App() {
         {data:missions,  error:e5},{data:histMiss,  error:e6},
         {data:besoinCandidats,error:e7},
       ] = await Promise.all([
-        sb.from('contacts').select('*').order('id').limit(10000),
-        sb.from('historique_actions').select('*').order('date',{ascending:false}).limit(10000),
+        sb.from('contacts').select('id,prenom,nom,groupe,ville,role,telephone,email,linkedin,ats,statut,responsable,agence,commentaires,nb_relance,date_dernier,ne_pas_recontacter,ne_pas_recontacter_note,ne_pas_recontacter_date,created_at,updated_at').order('id').limit(10000),
+        sb.from('historique_actions').select('id,id_prospect,date,type_action,details,responsable,besoin_id,tache_id').order('date',{ascending:false}).limit(10000),
         sb.from('taches').select('*').order('due_date',{ascending:true,nullsFirst:false}).limit(10000),
         sb.from('besoins').select('*').order('created_at',{ascending:false}).limit(10000),
         sb.from('missions').select('*').order('consultant').limit(5000),
@@ -6641,6 +6641,20 @@ function App() {
       setLastRefresh(new Date().toLocaleTimeString('fr-FR'));
     } catch(err){ setError(err.message); } finally{ setLoading(false); }
   },[]);
+  const refreshTable=useCallback(async function(table){
+    if(!data)return fetchAll();
+    var q;
+    if(table==='contacts')q=sb.from('contacts').select('id,prenom,nom,groupe,ville,role,telephone,email,linkedin,ats,statut,responsable,agence,commentaires,nb_relance,date_dernier,ne_pas_recontacter,ne_pas_recontacter_note,ne_pas_recontacter_date,created_at,updated_at').order('id').limit(10000);
+    else if(table==='historique')q=sb.from('historique_actions').select('id,id_prospect,date,type_action,details,responsable,besoin_id,tache_id').order('date',{ascending:false}).limit(10000);
+    else if(table==='taches')q=sb.from('taches').select('*').order('due_date',{ascending:true,nullsFirst:false}).limit(10000);
+    else if(table==='besoins')q=sb.from('besoins').select('*').order('created_at',{ascending:false}).limit(10000);
+    else if(table==='missions')q=sb.from('missions').select('*').order('consultant').limit(5000);
+    else return fetchAll();
+    var res=await q;
+    if(res.error)return fetchAll();
+    setData(function(d){var nd={};for(var k in d)nd[k]=d[k];nd[table]=res.data;return nd;});
+    setLastRefresh(new Date().toLocaleTimeString('fr-FR'));
+  },[data,fetchAll]);
 
   useEffect(()=>{
     if(!user) return;
@@ -6708,6 +6722,8 @@ function App() {
 
   const {contacts,historique,taches,besoins,missions,histMissions,besoinCandidats}=data;
   const contactMap = useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
+  const candsByBesoinId = useMemo(()=>{var m={};(besoinCandidats||[]).forEach(function(bc){if(!m[bc.besoin_id])m[bc.besoin_id]=[];m[bc.besoin_id].push(bc);});return m;},[besoinCandidats]);
+  const histByMissionId = useMemo(()=>{var m={};(histMissions||[]).forEach(function(h){if(!m[h.mission_id])m[h.mission_id]=[];m[h.mission_id].push(h);});return m;},[histMissions]);
   const commerciauxParAgence=useMemo(()=>{var m={};allProfiles.forEach(p=>{if(p.agence&&p.nom){if(!m[p.agence])m[p.agence]=[];m[p.agence].push(p.nom);}});Object.values(m).forEach(arr=>arr.sort());return m;},[allProfiles]);
   const isAdmin=profile.role==='admin';
 
@@ -6824,10 +6840,10 @@ function App() {
         {tab==='prospects'&&<TabProspects contacts={vContacts} contactMap={contactMap} historique={vHistorique} taches={vTaches} missions={vMissions} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navContactId={navContactId} navContactKey={navContactKey} onNavToBesoin={navToBesoin} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
         {tab==='prospection'&&<TabProspection profile={activeProfile} contacts={vContacts} contactMap={contactMap} onRefresh={fetchAll} isAdmin={activeIsAdmin} onNavToContact={navToContact} allProfiles={allProfiles} prefs={prefs}/>}
         {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} contactMap={contactMap} besoins={vBesoins} missions={vMissions} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance} navTacheId={navTacheId} navTacheKey={navTacheKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToMission={navToMission} prefs={prefs}/>}
-        {tab==='besoins'  &&<TabBesoins  contacts={vContacts} contactMap={contactMap} besoins={vBesoins} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navBesoinId={navBesoinId} navBesoinKey={navBesoinKey} onNavToContact={navToContact} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
-        {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} prefs={prefs}/>}
+        {tab==='besoins'  &&<TabBesoins  contacts={vContacts} contactMap={contactMap} besoins={vBesoins} besoinCandidats={besoinCandidats} candsByBesoinId={candsByBesoinId} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navBesoinId={navBesoinId} navBesoinKey={navBesoinKey} onNavToContact={navToContact} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
+        {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} besoinCandidats={besoinCandidats} candsByBesoinId={candsByBesoinId} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} prefs={prefs}/>}
         {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} contactMap={contactMap} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache}/>}
-        {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navMissionId={navMissionId} navMissionKey={navMissionKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache} prefs={prefs}/>}
+        {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} histByMissionId={histByMissionId} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navMissionId={navMissionId} navMissionKey={navMissionKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache} prefs={prefs}/>}
         {tab==='settings' &&<TabSettings user={user} profile={activeProfile} taches={vTaches} subTab={settingsSubTab} onSubTabChange={setSettingsSubTab} prefs={prefs} onSavePrefs={viewAs?null:savePrefs} achievements={activeAchievements} viewAs={!!viewAs}/>}
       </div>
       {/* Shortcuts modal */}
