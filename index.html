@@ -1542,10 +1542,10 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
   const [modal,setModal] = useState(null);
   const [deleting,setDeleting] = useState(false);
   const isOwner = profile.role==='admin' || contact.responsable===profile.nom;
-  const hist = historique.filter(h=>h.id_prospect===contact.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  const tachesContact = taches.filter(t=>t.contact_id===contact.id&&t.statut!=='fait'&&t.statut!=='annule');
-  const besoinsContact = (besoins||[]).filter(b=>String(b.contact_id)===String(contact.id)||String(b.candidat_id)===String(contact.id));
-  const missionsContact = (missions||[]).filter(m=>{const n=(contact.prenom+' '+contact.nom).trim().toUpperCase();return (m.consultant||'').toUpperCase()===n;});
+  const hist = useMemo(()=>historique.filter(h=>h.id_prospect===contact.id).sort((a,b)=>(b.date||'').localeCompare(a.date||'')),[historique,contact.id]);
+  const tachesContact = useMemo(()=>taches.filter(t=>t.contact_id===contact.id&&t.statut!=='fait'&&t.statut!=='annule'),[taches,contact.id]);
+  const besoinsContact = useMemo(()=>(besoins||[]).filter(b=>String(b.contact_id)===String(contact.id)||String(b.candidat_id)===String(contact.id)),[besoins,contact.id]);
+  const missionsContact = useMemo(()=>(missions||[]).filter(m=>{const n=(contact.prenom+' '+contact.nom).trim().toUpperCase();return (m.consultant||'').toUpperCase()===n;}),[missions,contact.prenom,contact.nom]);
   const saved = () => { setModal(null); onRefresh(); };
   const handleDelete = async () => {
     setDeleting(true);
@@ -1997,6 +1997,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
   const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState(prefResp);
   const [filterAgence,setFilterAgence]=useState('');
   const [filterMine,setFilterMine]=useState(false);
+  const [visibleCount,setVisibleCount]=useState(100);
   const [sortCol,setSortCol]=useState('date_dernier'); const [sortDir,setSortDir]=useState('desc');
   const [selected,setSelected]=useState(null); const [showAdd,setShowAdd]=useState(false);
   useEffect(()=>{ if(navContactId){ const c=contacts.find(x=>x.id===navContactId||String(x.id)===String(navContactId)); if(c) setSelected(c); } },[navContactKey]);
@@ -2048,7 +2049,9 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
   },[contacts,search,filterStatut,filterPeriode,filterResp,filterAgence,filterMine,profile.nom,sortCol,sortDir]);
 
   const hasFilter=search||filterStatut||filterPeriode||filterResp||filterAgence||filterMine;
+  useEffect(function(){setVisibleCount(100);},[search,filterStatut,filterPeriode,filterResp,filterAgence,filterMine]);
   const resetAll=()=>{setSearch('');setFilterStatut('');setFilterPeriode('');setFilterResp('');setFilterAgence('');setFilterMine(false);};
+  const visible=filtered.slice(0,visibleCount);
   const thCls="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-azure-100 whitespace-nowrap";
   return (
     <div className="tab-content">
@@ -2078,10 +2081,10 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
         <button onClick={function(){setFilterMine(!filterMine);if(!filterMine){setFilterAgence('');setFilterResp('');}}} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:filterMine?'0':'2px solid #E4E4E6',background:filterMine?'#1C1F35':'#fff',color:filterMine?'#fff':'#1C1F35',cursor:'pointer',borderRadius:0,textTransform:'uppercase',boxShadow:filterMine?'3px 3px 0 #FFE500':'none',transition:'all 120ms'}}>Mes contacts ({contacts.filter(function(c){return c.responsable===profile.nom;}).length})</button>
         {hasFilter&&<button onClick={resetAll} className="px-2 sm:px-3 py-2 text-sm text-slate hover:text-carbon">✕</button>}
       </div>
-      <div className="text-xs text-neutral-300 mb-2">{filtered.length} contact{filtered.length>1?'s':''}</div>
+      <div className="text-xs text-neutral-300 mb-2">{filtered.length} contact{filtered.length>1?'s':''}{filtered.length>visibleCount&&<span> · {visibleCount} affichés</span>}</div>
       {/* Vue cartes mobile */}
       <div className="md:hidden space-y-2">
-        {filtered.map(c=>(
+        {visible.map(c=>(
           <div key={c.id} onClick={()=>setSelected(c)} data-detail tabIndex="0" className="bg-white border-2 border-neutral-200 hover:border-midnight p-3 cursor-pointer active:bg-azure-20 focus:outline-none focus:border-midnight transition-colors">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -2110,7 +2113,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
             <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('responsable')}>Responsable<SortIcon col="responsable"/></th>
             <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('date_dernier')}>Dernier contact<SortIcon col="date_dernier"/></th>
           </tr></thead>
-          <tbody>{filtered.map(c=>(
+          <tbody>{visible.map(c=>(
             <tr key={c.id} onClick={()=>setSelected(c)} data-detail tabIndex="0" className={`border-t border-neutral-50 hover:bg-lemon-20 focus:bg-azure-20 focus:outline-none cursor-pointer transition-colors${selected&&selected.id===c.id?' bg-azure-20':''}`}>
               <td className="px-4 py-3"><div className="font-medium text-midnight">{c.prenom} {c.nom}</div>{c.role&&<div className="text-xs text-neutral-300">{c.role}</div>}</td>
               <td className="px-4 py-3 text-slate">{c.groupe}</td>
@@ -2122,6 +2125,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
           ))}</tbody>
         </table>
       </div>
+      {filtered.length>visibleCount&&<div className="flex justify-center py-4"><button onClick={function(){setVisibleCount(function(v){return v+100;});}} style={{fontSize:12,fontWeight:700,padding:'8px 20px',border:'2px solid #E4E4E6',background:'#fff',cursor:'pointer',color:'#1C1F35'}}>Voir plus ({filtered.length-visibleCount} restants)</button></div>}
       {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} missions={missions} besoins={besoins} profile={profile} allProfiles={allProfiles} onRefresh={()=>{onRefresh();setSelected(null);}} onClose={()=>setSelected(null)} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache}/>}
       {showAdd&&<AddContactModal profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
     </div>
@@ -3840,7 +3844,7 @@ function TabHistorique({ historique, contacts, contactMap, taches, besoins, prof
           const contact=h.id_prospect?contactMap[h.id_prospect]:null;
           const s=TYPE_COLORS[h.type_action]||TYPE_COLORS['Autre'];
           return (
-            <div key={i} className="px-4 py-3 hover:bg-neutral-50 transition-colors">
+            <div key={h.id||i} className="px-4 py-3 hover:bg-neutral-50 transition-colors">
               <div className="flex items-baseline gap-2 mb-1 flex-wrap">
                 <span className="text-[11px] text-neutral-300 tabular-nums whitespace-nowrap">{fmtDateParis(h.date)}</span>
                 <span style={{backgroundColor:s.bg,color:s.color,padding:'2px 8px',borderRadius:0,fontSize:11,fontWeight:700,whiteSpace:'nowrap',textTransform:'uppercase',letterSpacing:'0.04em'}}>{h.type_action}</span>
@@ -6696,16 +6700,14 @@ function App() {
   if(error) return <div className="flex items-center justify-center min-h-screen"><div className="bg-coral-20 border border-coral-20 p-6 max-w-md text-center"><div className="text-3xl mb-3">❌</div><div className="font-semibold text-coral-100">Erreur Supabase</div><div className="text-sm text-coral-100 mt-2 font-mono">{error}</div><button onClick={fetchAll} className="mt-4 px-4 py-2 bg-coral-100 text-white rounded-lg text-sm">Réessayer</button></div></div>;
 
   const {contacts,historique,taches,besoins,missions,histMissions,besoinCandidats}=data;
-  const contactMap = Object.fromEntries(contacts.map(c=>[c.id,c]));
-  const commerciauxParAgence={};
-  allProfiles.forEach(p=>{if(p.agence&&p.nom){if(!commerciauxParAgence[p.agence])commerciauxParAgence[p.agence]=[];commerciauxParAgence[p.agence].push(p.nom);}});
-  Object.values(commerciauxParAgence).forEach(arr=>arr.sort());
+  const contactMap = useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
+  const commerciauxParAgence=useMemo(()=>{var m={};allProfiles.forEach(p=>{if(p.agence&&p.nom){if(!m[p.agence])m[p.agence]=[];m[p.agence].push(p.nom);}});Object.values(m).forEach(arr=>arr.sort());return m;},[allProfiles]);
   const isAdmin=profile.role==='admin';
 
   // ── Mode "Voir comme" ──────────────────────────────────
   const activeProfile = viewAs || profile;
   const activeIsAdmin = activeProfile.role==='admin';
-  const contactAgenceMap = Object.fromEntries(Object.entries(contactMap).map(([id,c])=>[id,c.agence]));
+  const contactAgenceMap = useMemo(()=>Object.fromEntries(Object.entries(contactMap).map(([id,c])=>[id,c.agence])),[contactMap]);
   const vContacts   = contacts; // tous voient tous les contacts
   const vHistorique = activeIsAdmin ? historique : historique.filter(h=>h.responsable===activeProfile.nom);
   const vTaches     = activeIsAdmin ? taches     : taches.filter(t=>t.responsable===activeProfile.nom);
