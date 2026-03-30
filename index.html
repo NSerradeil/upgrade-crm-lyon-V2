@@ -129,7 +129,8 @@ const SUPABASE_KEY = "sb_publishable_BaNIdlZ09xavRRhG0G-ScQ_mW4hVueJ";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const TZ='Europe/Paris';
 function getToday() { return new Date().toLocaleDateString('sv-SE',{timeZone:TZ}); }
-const TODAY = getToday();
+var TODAY = getToday();
+setInterval(function(){TODAY=getToday();},60000); // refresh TODAY chaque minute
 function normalizeLinkedinUrl(url) { if(!url)return null; var u=url.trim(); if(!u)return null; if(u.indexOf('http')!==0)u='https://'+u; return u; }
 function norm(s) { return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 
@@ -400,7 +401,7 @@ async function loadAchievements(profileNom) {
     // 12. DIPLOMATE — actions RDV en 2026
     sb.from('historique_actions').select('id',{count:'exact',head:true}).eq('responsable',profileNom).ilike('type_action','%RDV%').gte('date',Y26).lt('date',Y27),
     // 13. SPEED CLOSER — besoins pourvus créés en 2026
-    sb.from('besoins').select('created_at, updated_at').eq('responsable',profileNom).eq('statut','pourvu').gte('created_at',Y26).lt('created_at',Y27),
+    sb.from('besoins').select('created_at, updated_at').eq('responsable',profileNom).eq('statut','Besoin Gagné').gte('created_at',Y26).lt('created_at',Y27),
   ]);
   var rProsp = results[0];
   var rMissions = results[1];
@@ -1588,8 +1589,8 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
         <div><span className="text-[11px] text-slate uppercase tracking-wide">Agence</span><br/><span className="text-carbon font-medium">{contact.agence||'—'}</span></div>
         {contact.email&&<div className="col-span-2"><span className="text-[11px] text-slate uppercase tracking-wide">Email</span><br/><a href={`mailto:${contact.email}`} className="text-azure-100 hover:underline font-medium">{contact.email}</a></div>}
         {contact.telephone&&<div><span className="text-[11px] text-slate uppercase tracking-wide">Tel</span><br/><a href={`tel:${contact.telephone}`} className="text-jade-100 font-mono font-medium">{contact.telephone}</a></div>}
-        {contact.linkedin&&<div><span className="text-[11px] text-slate uppercase tracking-wide">LinkedIn</span><br/><a href={contact.linkedin} target="_blank" className="text-azure-100 hover:underline text-xs">→ Profil LinkedIn</a></div>}
-        {contact.ats&&<div><span className="text-[11px] text-slate uppercase tracking-wide">ATS</span><br/><a href={contact.ats} target="_blank" className="text-iris-100 hover:underline text-xs">→ Fiche ATS</a></div>}
+        {contact.linkedin&&contact.linkedin.match(/^https?:\/\//)&&<div><span className="text-[11px] text-slate uppercase tracking-wide">LinkedIn</span><br/><a href={contact.linkedin} target="_blank" rel="noopener noreferrer" className="text-azure-100 hover:underline text-xs">→ Profil LinkedIn</a></div>}
+        {contact.ats&&contact.ats.match(/^https?:\/\//)&&<div><span className="text-[11px] text-slate uppercase tracking-wide">ATS</span><br/><a href={contact.ats} target="_blank" rel="noopener noreferrer" className="text-iris-100 hover:underline text-xs">→ Fiche ATS</a></div>}
         {contact.date_dernier_suivi_client&&(()=>{const j=daysSince(contact.date_dernier_suivi_client);const dot=j<30?'🟢':j<=60?'🟡':'🔴';return <div className="col-span-2"><span className="text-[11px] text-slate uppercase tracking-wide">Dernier suivi client</span><br/><span className="text-carbon font-medium">{new Date(contact.date_dernier_suivi_client).toLocaleDateString('fr-FR')} — {dot} {j}j</span></div>;})()}
       </div>
       {contact.commentaires&&<div><div className="text-[11px] font-bold text-slate uppercase tracking-[0.1em] mb-2">Commentaires</div><div className="text-sm text-slate bg-neutral-50 rounded-lg p-3 whitespace-pre-wrap">{contact.commentaires}</div></div>}
@@ -2577,7 +2578,7 @@ function BadgeDetailPanel({ category, score, profile, prefs, onSavePrefs, onClos
     else if(cat==='rentier') p=sb.from('missions').select('consultant,client,tjm,cjm').eq('responsable',nom).not('tjm','is',null).not('cjm','is',null).then(function(r){return{type:'table',label:'Missions avec marge (embarqué inclus)',items:(r.data||[]).filter(function(m){return m.tjm>0;}).map(function(m){var tx=((m.tjm-m.cjm)/m.tjm*100).toFixed(1);var pts=tx>40?2:tx>30?1:tx>20?0.5:0;return m.consultant+' chez '+m.client+' — marge '+tx+'% → '+pts+' pt'+(pts>1?'s':'');}),note:score.toFixed(1)+' pts de marge'};});
     else if(cat==='architecte') p=sb.from('besoins').select('id,titre,compte,statut,created_at').eq('responsable',nom).gte('created_at',Y26).lt('created_at',Y27).order('created_at',{ascending:false}).limit(20).then(function(r){return{type:'table',label:'Besoins créés en 2026 (20 derniers)',items:(r.data||[]).map(function(b){return(b.created_at||'').slice(0,10)+' — '+(b.titre||b.compte||'?')+' ['+b.statut+']';}),note:score+' besoins créés en 2026'};});
     else if(cat==='diplomate') p=Promise.all([sb.from('taches').select('id,titre,due_date').eq('responsable',nom).ilike('type','%RDV%').gte('created_at',Y26).lt('created_at',Y27).order('due_date',{ascending:false}).limit(15),sb.from('historique_actions').select('id,date,details').eq('responsable',nom).ilike('type_action','%RDV%').gte('date',Y26).lt('date',Y27).order('date',{ascending:false}).limit(15)]).then(function(res){var items=[];(res[0].data||[]).forEach(function(t2){items.push('Tâche — '+(t2.due_date||'').slice(0,10)+' — '+(t2.titre||'RDV'));});(res[1].data||[]).forEach(function(h){items.push('Action — '+(h.date||'').slice(0,10)+' — '+(h.details||'RDV').slice(0,50));});return{type:'table',label:'RDV loggés en 2026 (30 derniers)',items:items.slice(0,30),note:score+' RDV en 2026'};});
-    else if(cat==='speedcloser') p=sb.from('besoins').select('id,titre,compte,created_at,updated_at').eq('responsable',nom).eq('statut','pourvu').gte('created_at',Y26).lt('created_at',Y27).then(function(r){return{type:'table',label:'Besoins closés en 2026',items:(r.data||[]).map(function(b){var days=Math.round((new Date(b.updated_at)-new Date(b.created_at))/(1000*60*60*24));return(b.titre||b.compte||'?')+' — '+days+'j'+(days<30?' ✓':' (> 30j)');}),note:score+' deals rapides en 2026'};});
+    else if(cat==='speedcloser') p=sb.from('besoins').select('id,titre,compte,created_at,updated_at').eq('responsable',nom).eq('statut','Besoin Gagné').gte('created_at',Y26).lt('created_at',Y27).then(function(r){return{type:'table',label:'Besoins closés en 2026',items:(r.data||[]).map(function(b){var days=Math.round((new Date(b.updated_at)-new Date(b.created_at))/(1000*60*60*24));return(b.titre||b.compte||'?')+' — '+days+'j'+(days<30?' ✓':' (> 30j)');}),note:score+' deals rapides en 2026'};});
     else p=Promise.resolve({type:'list',label:'Score',items:score,note:''});
     p.then(function(d){setDetailData(d);setDetailLoading(false);});
   }
@@ -3356,7 +3357,7 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
         <div><span className="text-[11px] text-slate uppercase tracking-wide">Responsable</span><br/>{editing&&isAdmin?<select value={f.responsable} onChange={e=>setF(v=>({...v,responsable:e.target.value}))} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select>:<span className="text-carbon font-medium">{besoin.responsable}</span>}</div>
         <div><span className="text-[11px] text-slate uppercase tracking-wide">Compte</span><br/>{editing?<CompteSearchField contacts={contacts} value={f.compte||''} onChange={compte=>setF(v=>({...v,compte}))}/>:<span className="text-carbon font-medium">{besoin.compte||'—'}</span>}</div>
         {contact&&!editing&&<div className="col-span-2"><span className="text-[11px] text-slate uppercase tracking-wide">Contact</span><br/>{onNavToContact?<button onClick={()=>{onClose();onNavToContact(contact.id);}} className="text-midnight font-medium underline decoration-2 decoration-lemon-100 underline-offset-2 hover:decoration-lemon-100 hover:bg-lemon-20 cursor-pointer transition-colors">{contact.prenom} {contact.nom} — {contact.groupe}</button>:<span>{contact.prenom} {contact.nom} — {contact.groupe}</span>}</div>}
-        {besoin.lien&&!editing&&<div className="col-span-2"><span className="text-[11px] text-slate uppercase tracking-wide">Lien</span><br/><a href={besoin.lien} target="_blank" className="text-azure-100 hover:underline text-xs">{besoin.lien}</a></div>}
+        {besoin.lien&&!editing&&besoin.lien.match(/^https?:\/\//)&&<div className="col-span-2"><span className="text-[11px] text-slate uppercase tracking-wide">Lien</span><br/><a href={besoin.lien} target="_blank" rel="noopener noreferrer" className="text-azure-100 hover:underline text-xs">{besoin.lien}</a></div>}
         {editing&&<div className="col-span-2"><Field label="Lien"><input type="url" value={f.lien||''} onChange={e=>setF(v=>({...v,lien:e.target.value}))} className={inputCls}/></Field></div>}
       </div>
 
@@ -5966,7 +5967,8 @@ function ProspectionNew({ contacts, profile, onStart, onBack }) {
   var filtered = useMemo(function(){return contacts.filter(function(c){
     if (agence && c.agence !== agence) return false;
     if (filterResp && c.responsable !== filterResp) return false;
-    if (c.statut === 'Consultant CDI' || c.statut === 'Freelance') return false;
+    if (c.statut === 'Consultant CDI' || c.statut === 'Freelance' || c.statut === 'Prestataire') return false;
+    if (c.ne_pas_recontacter) return false;
     if (delai > 0) {
       var lastDate = c.date_dernier || c.updated_at;
       if (lastDate) {
@@ -5988,17 +5990,21 @@ function ProspectionNew({ contacts, profile, onStart, onBack }) {
   };
 
   var handleStart = async function(){
-    var result = await sb.from('sessions_prospection').insert({
-      nom: nom || ('Session ' + new Date().toLocaleDateString('fr-FR')),
-      date_session: new Date().toISOString().slice(0,10),
-      responsable: profile.nom,
-      agence: agence||null,
-      statut: 'active',
-    }).select().single();
-    var sess = result.data;
-    var rows = Array.from(selected).map(function(id){return {session_id:sess.id, contact_id:id, statut:'none'};});
-    await sb.from('session_prospection_contacts').insert(rows);
-    onStart({...sess, contactIds:Array.from(selected)});
+    try{
+      var result = await sb.from('sessions_prospection').insert({
+        nom: nom || ('Session ' + new Date().toLocaleDateString('fr-FR')),
+        date_session: new Date().toISOString().slice(0,10),
+        responsable: profile.nom,
+        agence: agence||null,
+        statut: 'active',
+      }).select().single();
+      if(result.error||!result.data){toast('Erreur création session : '+(result.error?result.error.message:'pas de données'),'error');return;}
+      var sess = result.data;
+      var rows = Array.from(selected).map(function(id){return {session_id:sess.id, contact_id:id, statut:'none'};});
+      var ins = await sb.from('session_prospection_contacts').insert(rows);
+      if(ins.error){toast('Erreur ajout contacts : '+ins.error.message,'error');return;}
+      onStart({...sess, contactIds:Array.from(selected)});
+    }catch(e){toast('Erreur : '+e.message,'error');}
   };
 
   return (
@@ -6353,7 +6359,8 @@ function ProspectionEditContacts({ session, contacts, profile, onSaved, onBack }
     if (!search && !agence && !delai) return [];
     return contacts.filter(function(c){
       if (selected.has(c.id)) return false;
-      if (c.statut === 'Consultant CDI' || c.statut === 'Freelance') return false;
+      if (c.statut === 'Consultant CDI' || c.statut === 'Freelance' || c.statut === 'Prestataire') return false;
+    if (c.ne_pas_recontacter) return false;
       if (agence && c.agence !== agence) return false;
       if (delai > 0) {
         var lastDate = c.date_dernier || c.updated_at;
