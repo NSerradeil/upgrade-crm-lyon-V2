@@ -6551,7 +6551,7 @@ function App() {
   const [orgDefaults,setOrgDefaults]=useState([]);
   const [data,setData]=useState(null); const [loading,setLoading]=useState(false);
   const [error,setError]=useState(null); const [tab,setTab]=useState('taches');
-
+  const initialTabSetRef=useRef(false);
   const [lastRefresh,setLastRefresh]=useState(null);
   const [viewAs,setViewAs]=useState(null); const [allProfiles,setAllProfiles]=useState([]);
   const [tachesNavKey,setTachesNavKey]=useState(0); const [tachesNavEcheance,setTachesNavEcheance]=useState('');
@@ -6638,7 +6638,7 @@ function App() {
       setProfile(p);
       if(p){
         loadAchievements(p.nom).then(function(a){setAchievements(a);});
-        if(p.preferences&&p.preferences.default_tab)setTab(p.preferences.default_tab);
+        if(!initialTabSetRef.current&&p.preferences&&p.preferences.default_tab){setTab(p.preferences.default_tab);initialTabSetRef.current=true;}
         // After profile load, fetch org defaults
         sb.from('org_preferences').select('*').then(function(orgRes){
           var rows=orgRes.data||[];
