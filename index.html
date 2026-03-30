@@ -4959,8 +4959,8 @@ function AdminPanel({ orgDefaults, allProfiles, profile, onSave }) {
   );
 }
 
-function TabSettings({ user, profile, taches, subTab, onSubTabChange, prefs, onSavePrefs, achievements, viewAs, orgDefaults, allProfiles, onSaveOrgDefaults }) {
-  const SUB_TABS=viewAs?[{id:'exploits',label:'Exploits'}]:[{id:'profil',label:'Profil & Sécurité'},{id:'calendrier',label:'Calendrier ICS'},{id:'preferences',label:'Préférences'},{id:'exploits',label:'Exploits'},...(profile.role==='admin'?[{id:'admin',label:'Admin'}]:[])];
+function TabSettings({ user, profile, taches, subTab, onSubTabChange, prefs, onSavePrefs, achievements, viewAs }) {
+  const SUB_TABS=viewAs?[{id:'exploits',label:'Exploits'}]:[{id:'profil',label:'Profil & Sécurité'},{id:'calendrier',label:'Calendrier ICS'},{id:'preferences',label:'Préférences'},{id:'exploits',label:'Exploits'}];
 
   // Password change (inline)
   const [pwd,setPwd]=useState(''); const [pwd2,setPwd2]=useState('');
@@ -5121,7 +5121,7 @@ function TabSettings({ user, profile, taches, subTab, onSubTabChange, prefs, onS
           <ExploitsGrid achievements={ach} profile={profile} prefs={prefs} onSavePrefs={onSavePrefs}/>
         </div>;
       }())}
-      {subTab==='admin'&&profile.role==='admin'&&<AdminPanel orgDefaults={orgDefaults||[]} allProfiles={allProfiles||[]} profile={profile} onSave={onSaveOrgDefaults}/>}
+      {/* Admin panel removed — pending proper spec */}
     </div>
   );
 }
@@ -6639,23 +6639,7 @@ function App() {
       if(p){
         loadAchievements(p.nom).then(function(a){setAchievements(a);});
         if(!initialTabSetRef.current&&p.preferences&&p.preferences.default_tab){setTab(p.preferences.default_tab);initialTabSetRef.current=true;}
-        // After profile load, fetch org defaults
-        sb.from('org_preferences').select('*').then(function(orgRes){
-          var rows=orgRes.data||[];
-          var globalDef={};
-          var agenceDef={};
-          var respDef={};
-          rows.forEach(function(r){
-            if(r.scope==='global') globalDef=r.preferences||{};
-            else if(r.scope==='agence'&&r.scope_value===p.agence) agenceDef=r.preferences||{};
-            else if(r.scope==='responsable'&&r.scope_value===p.nom) respDef=r.preferences||{};
-          });
-          // Store org defaults in state for Admin panel
-          setOrgDefaults(rows);
-          // Resolve effective prefs: user > responsable > agence > global > fallback
-          var effective=Object.assign({},globalDef,agenceDef,respDef,p.preferences||{});
-          setPrefs(effective);
-        });
+        setPrefs(p.preferences||{});
       } else {
         setPrefs({});
       }
@@ -6669,10 +6653,6 @@ function App() {
     if(err){toast('Erreur sauvegarde préférences: '+err.message,'error');return false;}
     setPrefs(newPrefs);toast('Préférences sauvegardées');return true;
   },[user]);
-  const handleSaveOrgDefaults=useCallback(function(rows){
-    if(rows)setOrgDefaults(rows);
-    toast('Valeurs par défaut sauvegardées');
-  },[]);
   const [showMenu,setShowMenu]=useState(false);
   const [showShortcuts,setShowShortcuts]=useState(false);
   const [settingsSubTab,setSettingsSubTab]=useState('profil');
@@ -6839,7 +6819,7 @@ function App() {
         {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} prefs={prefs}/>}
         {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} contactMap={contactMap} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache}/>}
         {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navMissionId={navMissionId} navMissionKey={navMissionKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache} prefs={prefs}/>}
-        {tab==='settings' &&<TabSettings user={user} profile={activeProfile} taches={vTaches} subTab={settingsSubTab} onSubTabChange={setSettingsSubTab} prefs={prefs} onSavePrefs={viewAs?null:savePrefs} achievements={activeAchievements} viewAs={!!viewAs} orgDefaults={orgDefaults} allProfiles={allProfiles} onSaveOrgDefaults={handleSaveOrgDefaults}/>}
+        {tab==='settings' &&<TabSettings user={user} profile={activeProfile} taches={vTaches} subTab={settingsSubTab} onSubTabChange={setSettingsSubTab} prefs={prefs} onSavePrefs={viewAs?null:savePrefs} achievements={activeAchievements} viewAs={!!viewAs}/>}
       </div>
       {/* Shortcuts modal */}
       {showShortcuts&&(
