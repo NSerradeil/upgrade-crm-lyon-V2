@@ -4427,7 +4427,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
   const [selected,setSelected] = useState(null); const [showAdd,setShowAdd]=useState(false);
   useEffect(()=>{ if(navMissionId){ const m=missions.find(x=>String(x.id)===String(navMissionId)); if(m) setSelected(m); } },[navMissionKey]);
   const [search,setSearch] = useState(''); const [filterStatut,setFilterStatut] = useState(prefs?.missions_filter_statut||'');
-  const [filterAgence,setFilterAgence] = useState(prefs?.missions_filter_agence||(profile.role==='admin'?'':profile.agence));
+  const [filterAgence,setFilterAgence] = useState(prefs?.missions_filter_agence||'');
   const [filterResp,setFilterResp] = useState('');
   const [tick,setTick] = useState(0); // force re-render on optimistic update
   const forceUpdate=useCallback(()=>setTick(t=>t+1),[]);
@@ -4436,7 +4436,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
   const isAdmin = profile.role==='admin';
   const curMonthIdx = new Date().getMonth();
 
-  const agences=useMemo(()=>[...new Set(allProfiles.map(p=>p.agence).filter(Boolean))].sort(),[allProfiles]);
+  const agences=useMemo(()=>[...new Set([...allProfiles.map(p=>p.agence),...missions.map(m=>m.agence)].filter(Boolean))].sort(),[allProfiles,missions]);
   const responsablesVisibles=useMemo(()=>{
     if(isAdmin&&!filterAgence) return [...new Set(allProfiles.map(p=>p.nom).filter(Boolean))].sort();
     const ag=filterAgence||profile.agence;
