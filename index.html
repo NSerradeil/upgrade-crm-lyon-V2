@@ -3519,7 +3519,7 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
 }
 
 // ── Kanban Besoins ──────────────────────────────────────────────────────────
-function KanbanBesoins({ besoins, contacts, contactMap, besoinCandidats, onSelect, onStatutChange }) {
+function KanbanBesoins({ besoins, contacts, contactMap, besoinCandidats, candsByBesoinId, onSelect, onStatutChange }) {
   const [dragId,setDragId]=useState(null);
   const [overCol,setOverCol]=useState(null);
   const [dragOverCardId,setDragOverCardId]=useState(null);
@@ -3616,7 +3616,7 @@ function KanbanBesoins({ besoins, contacts, contactMap, besoinCandidats, onSelec
 }
 
 // ── Onglet Pipeline V2 ──────────────────────────────────────────────────────
-function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique, taches, missions, profile, allProfiles, commerciauxParAgence, onRefresh, navBesoinId, navBesoinKey, onNavToContact, onNavToMission, onNavToTache, prefs }) {
+function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, candsByBesoinId, historique, taches, missions, profile, allProfiles, commerciauxParAgence, onRefresh, navBesoinId, navBesoinKey, onNavToContact, onNavToMission, onNavToTache, prefs }) {
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
   const [filterResp,setFilterResp]=useState('');
   const [filterAgence,setFilterAgence]=useState(prefs?.besoins_filter_agence||(profile.role==='admin'?'':profile.agence));
@@ -3766,7 +3766,7 @@ function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique
         </>
       )}
       {viewMode==='kanban'&&(
-        <KanbanBesoins besoins={sorted} contacts={contacts} contactMap={contactMap} besoinCandidats={besoinCandidats} onSelect={b=>setSelected(b)}
+        <KanbanBesoins besoins={sorted} contacts={contacts} contactMap={contactMap} besoinCandidats={besoinCandidats} candsByBesoinId={candsByBesoinId} onSelect={b=>setSelected(b)}
           onStatutChange={async(besoin,newStatut)=>{
             if(newStatut==='Besoin Gagné'){
               const errs=[];
@@ -3897,7 +3897,7 @@ function besoinValeurBrute(b,bCandidats){
   if(b.budget_tjm&&b.budget_jours) return b.budget_tjm*b.budget_jours;
   return 0;
 }
-function TabPipe({ besoins, contacts, contactMap, besoinCandidats, historique, taches, missions, profile, allProfiles, onRefresh, prefs }) {
+function TabPipe({ besoins, contacts, contactMap, besoinCandidats, candsByBesoinId, historique, taches, missions, profile, allProfiles, onRefresh, prefs }) {
   const isAdmin=profile.role==='admin';
   const [filterAgence,setFilterAgence]=useState('');
   const pipeDefaultResp=prefs?.pipe_filter_responsable==='all'?'':(prefs?.pipe_filter_responsable==='moi'||prefs?.pipe_filter_responsable===undefined)?profile.nom:'';
@@ -4428,7 +4428,7 @@ function EditableJoursGridCell({ mission, moisKey, moisIdx, onUpdate }) {
 }
 
 // ── Onglet TDB Missions ───────────────────────────────────────────────────────
-function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, allProfiles, commerciauxParAgence, onRefresh, navMissionId, navMissionKey, onNavToContact, onNavToBesoin, onNavToTache, prefs }) {
+function TabTDB({ missions, histMissions, histByMissionId, contacts, taches, besoins, profile, allProfiles, commerciauxParAgence, onRefresh, navMissionId, navMissionKey, onNavToContact, onNavToBesoin, onNavToTache, prefs }) {
   const [selected,setSelected] = useState(null); const [showAdd,setShowAdd]=useState(false);
   useEffect(()=>{ if(navMissionId){ const m=missions.find(x=>String(x.id)===String(navMissionId)); if(m) setSelected(m); } },[navMissionKey]);
   const [search,setSearch] = useState(''); const [filterStatut,setFilterStatut] = useState(prefs?.missions_filter_statut||'');
@@ -6599,8 +6599,8 @@ function App() {
         {data:missions,  error:e5},{data:histMiss,  error:e6},
         {data:besoinCandidats,error:e7},
       ] = await Promise.all([
-        sb.from('contacts').select('id,prenom,nom,groupe,ville,role,telephone,email,linkedin,ats,statut,responsable,agence,commentaires,nb_relance,date_dernier,ne_pas_recontacter,ne_pas_recontacter_note,ne_pas_recontacter_date,created_at,updated_at').order('id').limit(10000),
-        sb.from('historique_actions').select('id,id_prospect,date,type_action,details,responsable,besoin_id,tache_id').order('date',{ascending:false}).limit(10000),
+        sb.from('contacts').select('*').order('id').limit(10000),
+        sb.from('historique_actions').select('*').order('date',{ascending:false}).limit(10000),
         sb.from('taches').select('*').order('due_date',{ascending:true,nullsFirst:false}).limit(10000),
         sb.from('besoins').select('*').order('created_at',{ascending:false}).limit(10000),
         sb.from('missions').select('*').order('consultant').limit(5000),
@@ -6644,8 +6644,8 @@ function App() {
   const refreshTable=useCallback(async function(table){
     if(!data)return fetchAll();
     var q;
-    if(table==='contacts')q=sb.from('contacts').select('id,prenom,nom,groupe,ville,role,telephone,email,linkedin,ats,statut,responsable,agence,commentaires,nb_relance,date_dernier,ne_pas_recontacter,ne_pas_recontacter_note,ne_pas_recontacter_date,created_at,updated_at').order('id').limit(10000);
-    else if(table==='historique')q=sb.from('historique_actions').select('id,id_prospect,date,type_action,details,responsable,besoin_id,tache_id').order('date',{ascending:false}).limit(10000);
+    if(table==='contacts')q=sb.from('contacts').select('*').order('id').limit(10000);
+    else if(table==='historique')q=sb.from('historique_actions').select('*').order('date',{ascending:false}).limit(10000);
     else if(table==='taches')q=sb.from('taches').select('*').order('due_date',{ascending:true,nullsFirst:false}).limit(10000);
     else if(table==='besoins')q=sb.from('besoins').select('*').order('created_at',{ascending:false}).limit(10000);
     else if(table==='missions')q=sb.from('missions').select('*').order('consultant').limit(5000);
