@@ -6588,13 +6588,13 @@ function App() {
         {data:missions,  error:e5},{data:histMiss,  error:e6},
         {data:besoinCandidats,error:e7},
       ] = await Promise.all([
-        sb.from('contacts').select('*').order('id'),
-        sb.from('historique_actions').select('*').order('date',{ascending:false}).limit(2000),
-        sb.from('taches').select('*').order('due_date',{ascending:true,nullsFirst:false}),
-        sb.from('besoins').select('*').order('created_at',{ascending:false}),
-        sb.from('missions').select('*').order('consultant'),
-        sb.from('historique_missions').select('*').order('date',{ascending:false}),
-        sb.from('besoin_candidats').select('*').order('created_at',{ascending:true}),
+        sb.from('contacts').select('*').order('id').limit(10000),
+        sb.from('historique_actions').select('*').order('date',{ascending:false}).limit(10000),
+        sb.from('taches').select('*').order('due_date',{ascending:true,nullsFirst:false}).limit(10000),
+        sb.from('besoins').select('*').order('created_at',{ascending:false}).limit(10000),
+        sb.from('missions').select('*').order('consultant').limit(5000),
+        sb.from('historique_missions').select('*').order('date',{ascending:false}).limit(10000),
+        sb.from('besoin_candidats').select('*').order('created_at',{ascending:true}).limit(5000),
       ]);
       const err=e1||e2||e3||e4;
       if(err) throw new Error(err.message);
