@@ -129,8 +129,7 @@ const SUPABASE_KEY = "sb_publishable_BaNIdlZ09xavRRhG0G-ScQ_mW4hVueJ";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const TZ='Europe/Paris';
 function getToday() { return new Date().toLocaleDateString('sv-SE',{timeZone:TZ}); }
-var TODAY = getToday();
-setInterval(function(){TODAY=getToday();},60000); // refresh TODAY chaque minute
+const TODAY = getToday();
 function normalizeLinkedinUrl(url) { if(!url)return null; var u=url.trim(); if(!u)return null; if(u.indexOf('http')!==0)u='https://'+u; return u; }
 function norm(s) { return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 
@@ -401,7 +400,7 @@ async function loadAchievements(profileNom) {
     // 12. DIPLOMATE — actions RDV en 2026
     sb.from('historique_actions').select('id',{count:'exact',head:true}).eq('responsable',profileNom).ilike('type_action','%RDV%').gte('date',Y26).lt('date',Y27),
     // 13. SPEED CLOSER — besoins pourvus créés en 2026
-    sb.from('besoins').select('created_at, updated_at').eq('responsable',profileNom).eq('statut','Besoin Gagné').gte('created_at',Y26).lt('created_at',Y27),
+    sb.from('besoins').select('created_at, updated_at').eq('responsable',profileNom).eq('statut','pourvu').gte('created_at',Y26).lt('created_at',Y27),
   ]);
   var rProsp = results[0];
   var rMissions = results[1];
@@ -1543,10 +1542,10 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
   const [modal,setModal] = useState(null);
   const [deleting,setDeleting] = useState(false);
   const isOwner = profile.role==='admin' || contact.responsable===profile.nom;
-  const hist = useMemo(()=>historique.filter(h=>h.id_prospect===contact.id).sort((a,b)=>(b.date||'').localeCompare(a.date||'')),[historique,contact.id]);
-  const tachesContact = useMemo(()=>taches.filter(t=>t.contact_id===contact.id&&t.statut!=='fait'&&t.statut!=='annule'),[taches,contact.id]);
-  const besoinsContact = useMemo(()=>(besoins||[]).filter(b=>String(b.contact_id)===String(contact.id)||String(b.candidat_id)===String(contact.id)),[besoins,contact.id]);
-  const missionsContact = useMemo(()=>(missions||[]).filter(m=>{const n=(contact.prenom+' '+contact.nom).trim().toUpperCase();return (m.consultant||'').toUpperCase()===n;}),[missions,contact.prenom,contact.nom]);
+  const hist = historique.filter(h=>h.id_prospect===contact.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const tachesContact = taches.filter(t=>t.contact_id===contact.id&&t.statut!=='fait'&&t.statut!=='annule');
+  const besoinsContact = (besoins||[]).filter(b=>String(b.contact_id)===String(contact.id)||String(b.candidat_id)===String(contact.id));
+  const missionsContact = (missions||[]).filter(m=>{const n=(contact.prenom+' '+contact.nom).trim().toUpperCase();return (m.consultant||'').toUpperCase()===n;});
   const saved = () => { setModal(null); onRefresh(); };
   const handleDelete = async () => {
     setDeleting(true);
@@ -1589,8 +1588,8 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
         <div><span className="text-[11px] text-slate uppercase tracking-wide">Agence</span><br/><span className="text-carbon font-medium">{contact.agence||'—'}</span></div>
         {contact.email&&<div className="col-span-2"><span className="text-[11px] text-slate uppercase tracking-wide">Email</span><br/><a href={`mailto:${contact.email}`} className="text-azure-100 hover:underline font-medium">{contact.email}</a></div>}
         {contact.telephone&&<div><span className="text-[11px] text-slate uppercase tracking-wide">Tel</span><br/><a href={`tel:${contact.telephone}`} className="text-jade-100 font-mono font-medium">{contact.telephone}</a></div>}
-        {contact.linkedin&&contact.linkedin.match(/^https?:\/\//)&&<div><span className="text-[11px] text-slate uppercase tracking-wide">LinkedIn</span><br/><a href={contact.linkedin} target="_blank" rel="noopener noreferrer" className="text-azure-100 hover:underline text-xs">→ Profil LinkedIn</a></div>}
-        {contact.ats&&contact.ats.match(/^https?:\/\//)&&<div><span className="text-[11px] text-slate uppercase tracking-wide">ATS</span><br/><a href={contact.ats} target="_blank" rel="noopener noreferrer" className="text-iris-100 hover:underline text-xs">→ Fiche ATS</a></div>}
+        {contact.linkedin&&<div><span className="text-[11px] text-slate uppercase tracking-wide">LinkedIn</span><br/><a href={contact.linkedin} target="_blank" className="text-azure-100 hover:underline text-xs">→ Profil LinkedIn</a></div>}
+        {contact.ats&&<div><span className="text-[11px] text-slate uppercase tracking-wide">ATS</span><br/><a href={contact.ats} target="_blank" className="text-iris-100 hover:underline text-xs">→ Fiche ATS</a></div>}
         {contact.date_dernier_suivi_client&&(()=>{const j=daysSince(contact.date_dernier_suivi_client);const dot=j<30?'🟢':j<=60?'🟡':'🔴';return <div className="col-span-2"><span className="text-[11px] text-slate uppercase tracking-wide">Dernier suivi client</span><br/><span className="text-carbon font-medium">{new Date(contact.date_dernier_suivi_client).toLocaleDateString('fr-FR')} — {dot} {j}j</span></div>;})()}
       </div>
       {contact.commentaires&&<div><div className="text-[11px] font-bold text-slate uppercase tracking-[0.1em] mb-2">Commentaires</div><div className="text-sm text-slate bg-neutral-50 rounded-lg p-3 whitespace-pre-wrap">{contact.commentaires}</div></div>}
@@ -1998,7 +1997,6 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
   const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState(prefResp);
   const [filterAgence,setFilterAgence]=useState('');
   const [filterMine,setFilterMine]=useState(false);
-  const [visibleCount,setVisibleCount]=useState(100);
   const [sortCol,setSortCol]=useState('date_dernier'); const [sortDir,setSortDir]=useState('desc');
   const [selected,setSelected]=useState(null); const [showAdd,setShowAdd]=useState(false);
   useEffect(()=>{ if(navContactId){ const c=contacts.find(x=>x.id===navContactId||String(x.id)===String(navContactId)); if(c) setSelected(c); } },[navContactKey]);
@@ -2050,9 +2048,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
   },[contacts,search,filterStatut,filterPeriode,filterResp,filterAgence,filterMine,profile.nom,sortCol,sortDir]);
 
   const hasFilter=search||filterStatut||filterPeriode||filterResp||filterAgence||filterMine;
-  useEffect(function(){setVisibleCount(100);},[search,filterStatut,filterPeriode,filterResp,filterAgence,filterMine]);
   const resetAll=()=>{setSearch('');setFilterStatut('');setFilterPeriode('');setFilterResp('');setFilterAgence('');setFilterMine(false);};
-  const visible=filtered.slice(0,visibleCount);
   const thCls="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-azure-100 whitespace-nowrap";
   return (
     <div className="tab-content">
@@ -2082,10 +2078,10 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
         <button onClick={function(){setFilterMine(!filterMine);if(!filterMine){setFilterAgence('');setFilterResp('');}}} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:filterMine?'0':'2px solid #E4E4E6',background:filterMine?'#1C1F35':'#fff',color:filterMine?'#fff':'#1C1F35',cursor:'pointer',borderRadius:0,textTransform:'uppercase',boxShadow:filterMine?'3px 3px 0 #FFE500':'none',transition:'all 120ms'}}>Mes contacts ({contacts.filter(function(c){return c.responsable===profile.nom;}).length})</button>
         {hasFilter&&<button onClick={resetAll} className="px-2 sm:px-3 py-2 text-sm text-slate hover:text-carbon">✕</button>}
       </div>
-      <div className="text-xs text-neutral-300 mb-2">{filtered.length} contact{filtered.length>1?'s':''}{filtered.length>visibleCount&&<span> · {visibleCount} affichés</span>}</div>
+      <div className="text-xs text-neutral-300 mb-2">{filtered.length} contact{filtered.length>1?'s':''}</div>
       {/* Vue cartes mobile */}
       <div className="md:hidden space-y-2">
-        {visible.map(c=>(
+        {filtered.map(c=>(
           <div key={c.id} onClick={()=>setSelected(c)} data-detail tabIndex="0" className="bg-white border-2 border-neutral-200 hover:border-midnight p-3 cursor-pointer active:bg-azure-20 focus:outline-none focus:border-midnight transition-colors">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -2114,7 +2110,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
             <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('responsable')}>Responsable<SortIcon col="responsable"/></th>
             <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('date_dernier')}>Dernier contact<SortIcon col="date_dernier"/></th>
           </tr></thead>
-          <tbody>{visible.map(c=>(
+          <tbody>{filtered.map(c=>(
             <tr key={c.id} onClick={()=>setSelected(c)} data-detail tabIndex="0" className={`border-t border-neutral-50 hover:bg-lemon-20 focus:bg-azure-20 focus:outline-none cursor-pointer transition-colors${selected&&selected.id===c.id?' bg-azure-20':''}`}>
               <td className="px-4 py-3"><div className="font-medium text-midnight">{c.prenom} {c.nom}</div>{c.role&&<div className="text-xs text-neutral-300">{c.role}</div>}</td>
               <td className="px-4 py-3 text-slate">{c.groupe}</td>
@@ -2126,7 +2122,6 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
           ))}</tbody>
         </table>
       </div>
-      {filtered.length>visibleCount&&<div className="flex justify-center py-4"><button onClick={function(){setVisibleCount(function(v){return v+100;});}} style={{fontSize:12,fontWeight:700,padding:'8px 20px',border:'2px solid #E4E4E6',background:'#fff',cursor:'pointer',color:'#1C1F35'}}>Voir plus ({filtered.length-visibleCount} restants)</button></div>}
       {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} missions={missions} besoins={besoins} profile={profile} allProfiles={allProfiles} onRefresh={()=>{onRefresh();setSelected(null);}} onClose={()=>setSelected(null)} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache}/>}
       {showAdd&&<AddContactModal profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
     </div>
@@ -2578,7 +2573,7 @@ function BadgeDetailPanel({ category, score, profile, prefs, onSavePrefs, onClos
     else if(cat==='rentier') p=sb.from('missions').select('consultant,client,tjm,cjm').eq('responsable',nom).not('tjm','is',null).not('cjm','is',null).then(function(r){return{type:'table',label:'Missions avec marge (embarqué inclus)',items:(r.data||[]).filter(function(m){return m.tjm>0;}).map(function(m){var tx=((m.tjm-m.cjm)/m.tjm*100).toFixed(1);var pts=tx>40?2:tx>30?1:tx>20?0.5:0;return m.consultant+' chez '+m.client+' — marge '+tx+'% → '+pts+' pt'+(pts>1?'s':'');}),note:score.toFixed(1)+' pts de marge'};});
     else if(cat==='architecte') p=sb.from('besoins').select('id,titre,compte,statut,created_at').eq('responsable',nom).gte('created_at',Y26).lt('created_at',Y27).order('created_at',{ascending:false}).limit(20).then(function(r){return{type:'table',label:'Besoins créés en 2026 (20 derniers)',items:(r.data||[]).map(function(b){return(b.created_at||'').slice(0,10)+' — '+(b.titre||b.compte||'?')+' ['+b.statut+']';}),note:score+' besoins créés en 2026'};});
     else if(cat==='diplomate') p=Promise.all([sb.from('taches').select('id,titre,due_date').eq('responsable',nom).ilike('type','%RDV%').gte('created_at',Y26).lt('created_at',Y27).order('due_date',{ascending:false}).limit(15),sb.from('historique_actions').select('id,date,details').eq('responsable',nom).ilike('type_action','%RDV%').gte('date',Y26).lt('date',Y27).order('date',{ascending:false}).limit(15)]).then(function(res){var items=[];(res[0].data||[]).forEach(function(t2){items.push('Tâche — '+(t2.due_date||'').slice(0,10)+' — '+(t2.titre||'RDV'));});(res[1].data||[]).forEach(function(h){items.push('Action — '+(h.date||'').slice(0,10)+' — '+(h.details||'RDV').slice(0,50));});return{type:'table',label:'RDV loggés en 2026 (30 derniers)',items:items.slice(0,30),note:score+' RDV en 2026'};});
-    else if(cat==='speedcloser') p=sb.from('besoins').select('id,titre,compte,created_at,updated_at').eq('responsable',nom).eq('statut','Besoin Gagné').gte('created_at',Y26).lt('created_at',Y27).then(function(r){return{type:'table',label:'Besoins closés en 2026',items:(r.data||[]).map(function(b){var days=Math.round((new Date(b.updated_at)-new Date(b.created_at))/(1000*60*60*24));return(b.titre||b.compte||'?')+' — '+days+'j'+(days<30?' ✓':' (> 30j)');}),note:score+' deals rapides en 2026'};});
+    else if(cat==='speedcloser') p=sb.from('besoins').select('id,titre,compte,created_at,updated_at').eq('responsable',nom).eq('statut','pourvu').gte('created_at',Y26).lt('created_at',Y27).then(function(r){return{type:'table',label:'Besoins closés en 2026',items:(r.data||[]).map(function(b){var days=Math.round((new Date(b.updated_at)-new Date(b.created_at))/(1000*60*60*24));return(b.titre||b.compte||'?')+' — '+days+'j'+(days<30?' ✓':' (> 30j)');}),note:score+' deals rapides en 2026'};});
     else p=Promise.resolve({type:'list',label:'Score',items:score,note:''});
     p.then(function(d){setDetailData(d);setDetailLoading(false);});
   }
@@ -3207,8 +3202,8 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
   const [deleting,setDeleting]=useState(false);
   const contact=contacts.find(c=>c.id===besoin.contact_id);
   const candidat=contacts.find(c=>c.id===besoin.candidat_id);
-  const mesCandidats=useMemo(()=>(besoinCandidats||[]).filter(bc=>bc.besoin_id===besoin.id),[besoinCandidats,besoin.id]);
-  const besoinHist=useMemo(()=>historique.filter(h=>h.besoin_id===besoin.id).sort((a,b)=>(b.date||'').localeCompare(a.date||'')),[historique,besoin.id]);
+  const mesCandidats=(besoinCandidats||[]).filter(bc=>bc.besoin_id===besoin.id);
+  const besoinHist=historique.filter(h=>h.besoin_id===besoin.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const besoinTaches=taches.filter(t=>t.besoin_id===besoin.id&&t.statut!=='fait'&&t.statut!=='annule');
   // Indicateurs Besoin Gagné
   const nbJours=joursOuvres(f.date_demarrage,f.date_fin);
@@ -3357,7 +3352,7 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
         <div><span className="text-[11px] text-slate uppercase tracking-wide">Responsable</span><br/>{editing&&isAdmin?<select value={f.responsable} onChange={e=>setF(v=>({...v,responsable:e.target.value}))} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select>:<span className="text-carbon font-medium">{besoin.responsable}</span>}</div>
         <div><span className="text-[11px] text-slate uppercase tracking-wide">Compte</span><br/>{editing?<CompteSearchField contacts={contacts} value={f.compte||''} onChange={compte=>setF(v=>({...v,compte}))}/>:<span className="text-carbon font-medium">{besoin.compte||'—'}</span>}</div>
         {contact&&!editing&&<div className="col-span-2"><span className="text-[11px] text-slate uppercase tracking-wide">Contact</span><br/>{onNavToContact?<button onClick={()=>{onClose();onNavToContact(contact.id);}} className="text-midnight font-medium underline decoration-2 decoration-lemon-100 underline-offset-2 hover:decoration-lemon-100 hover:bg-lemon-20 cursor-pointer transition-colors">{contact.prenom} {contact.nom} — {contact.groupe}</button>:<span>{contact.prenom} {contact.nom} — {contact.groupe}</span>}</div>}
-        {besoin.lien&&!editing&&besoin.lien.match(/^https?:\/\//)&&<div className="col-span-2"><span className="text-[11px] text-slate uppercase tracking-wide">Lien</span><br/><a href={besoin.lien} target="_blank" rel="noopener noreferrer" className="text-azure-100 hover:underline text-xs">{besoin.lien}</a></div>}
+        {besoin.lien&&!editing&&<div className="col-span-2"><span className="text-[11px] text-slate uppercase tracking-wide">Lien</span><br/><a href={besoin.lien} target="_blank" className="text-azure-100 hover:underline text-xs">{besoin.lien}</a></div>}
         {editing&&<div className="col-span-2"><Field label="Lien"><input type="url" value={f.lien||''} onChange={e=>setF(v=>({...v,lien:e.target.value}))} className={inputCls}/></Field></div>}
       </div>
 
@@ -3845,7 +3840,7 @@ function TabHistorique({ historique, contacts, contactMap, taches, besoins, prof
           const contact=h.id_prospect?contactMap[h.id_prospect]:null;
           const s=TYPE_COLORS[h.type_action]||TYPE_COLORS['Autre'];
           return (
-            <div key={h.id||i} className="px-4 py-3 hover:bg-neutral-50 transition-colors">
+            <div key={i} className="px-4 py-3 hover:bg-neutral-50 transition-colors">
               <div className="flex items-baseline gap-2 mb-1 flex-wrap">
                 <span className="text-[11px] text-neutral-300 tabular-nums whitespace-nowrap">{fmtDateParis(h.date)}</span>
                 <span style={{backgroundColor:s.bg,color:s.color,padding:'2px 8px',borderRadius:0,fontSize:11,fontWeight:700,whiteSpace:'nowrap',textTransform:'uppercase',letterSpacing:'0.04em'}}>{h.type_action}</span>
@@ -5967,8 +5962,7 @@ function ProspectionNew({ contacts, profile, onStart, onBack }) {
   var filtered = useMemo(function(){return contacts.filter(function(c){
     if (agence && c.agence !== agence) return false;
     if (filterResp && c.responsable !== filterResp) return false;
-    if (c.statut === 'Consultant CDI' || c.statut === 'Freelance' || c.statut === 'Prestataire') return false;
-    if (c.ne_pas_recontacter) return false;
+    if (c.statut === 'Consultant CDI' || c.statut === 'Freelance') return false;
     if (delai > 0) {
       var lastDate = c.date_dernier || c.updated_at;
       if (lastDate) {
@@ -5990,21 +5984,17 @@ function ProspectionNew({ contacts, profile, onStart, onBack }) {
   };
 
   var handleStart = async function(){
-    try{
-      var result = await sb.from('sessions_prospection').insert({
-        nom: nom || ('Session ' + new Date().toLocaleDateString('fr-FR')),
-        date_session: new Date().toISOString().slice(0,10),
-        responsable: profile.nom,
-        agence: agence||null,
-        statut: 'active',
-      }).select().single();
-      if(result.error||!result.data){toast('Erreur création session : '+(result.error?result.error.message:'pas de données'),'error');return;}
-      var sess = result.data;
-      var rows = Array.from(selected).map(function(id){return {session_id:sess.id, contact_id:id, statut:'none'};});
-      var ins = await sb.from('session_prospection_contacts').insert(rows);
-      if(ins.error){toast('Erreur ajout contacts : '+ins.error.message,'error');return;}
-      onStart({...sess, contactIds:Array.from(selected)});
-    }catch(e){toast('Erreur : '+e.message,'error');}
+    var result = await sb.from('sessions_prospection').insert({
+      nom: nom || ('Session ' + new Date().toLocaleDateString('fr-FR')),
+      date_session: new Date().toISOString().slice(0,10),
+      responsable: profile.nom,
+      agence: agence||null,
+      statut: 'active',
+    }).select().single();
+    var sess = result.data;
+    var rows = Array.from(selected).map(function(id){return {session_id:sess.id, contact_id:id, statut:'none'};});
+    await sb.from('session_prospection_contacts').insert(rows);
+    onStart({...sess, contactIds:Array.from(selected)});
   };
 
   return (
@@ -6359,8 +6349,7 @@ function ProspectionEditContacts({ session, contacts, profile, onSaved, onBack }
     if (!search && !agence && !delai) return [];
     return contacts.filter(function(c){
       if (selected.has(c.id)) return false;
-      if (c.statut === 'Consultant CDI' || c.statut === 'Freelance' || c.statut === 'Prestataire') return false;
-    if (c.ne_pas_recontacter) return false;
+      if (c.statut === 'Consultant CDI' || c.statut === 'Freelance') return false;
       if (agence && c.agence !== agence) return false;
       if (delai > 0) {
         var lastDate = c.date_dernier || c.updated_at;
@@ -6599,13 +6588,13 @@ function App() {
         {data:missions,  error:e5},{data:histMiss,  error:e6},
         {data:besoinCandidats,error:e7},
       ] = await Promise.all([
-        sb.from('contacts').select('*').order('id').limit(10000),
-        sb.from('historique_actions').select('*').order('date',{ascending:false}).limit(10000),
-        sb.from('taches').select('*').order('due_date',{ascending:true,nullsFirst:false}).limit(10000),
-        sb.from('besoins').select('*').order('created_at',{ascending:false}).limit(10000),
-        sb.from('missions').select('*').order('consultant').limit(5000),
-        sb.from('historique_missions').select('*').order('date',{ascending:false}).limit(10000),
-        sb.from('besoin_candidats').select('*').order('created_at',{ascending:true}).limit(5000),
+        sb.from('contacts').select('*').order('id'),
+        sb.from('historique_actions').select('*').order('date',{ascending:false}).limit(2000),
+        sb.from('taches').select('*').order('due_date',{ascending:true,nullsFirst:false}),
+        sb.from('besoins').select('*').order('created_at',{ascending:false}),
+        sb.from('missions').select('*').order('consultant'),
+        sb.from('historique_missions').select('*').order('date',{ascending:false}),
+        sb.from('besoin_candidats').select('*').order('created_at',{ascending:true}),
       ]);
       const err=e1||e2||e3||e4;
       if(err) throw new Error(err.message);
@@ -6641,20 +6630,6 @@ function App() {
       setLastRefresh(new Date().toLocaleTimeString('fr-FR'));
     } catch(err){ setError(err.message); } finally{ setLoading(false); }
   },[]);
-  const refreshTable=useCallback(async function(table){
-    if(!data)return fetchAll();
-    var q;
-    if(table==='contacts')q=sb.from('contacts').select('*').order('id').limit(10000);
-    else if(table==='historique')q=sb.from('historique_actions').select('*').order('date',{ascending:false}).limit(10000);
-    else if(table==='taches')q=sb.from('taches').select('*').order('due_date',{ascending:true,nullsFirst:false}).limit(10000);
-    else if(table==='besoins')q=sb.from('besoins').select('*').order('created_at',{ascending:false}).limit(10000);
-    else if(table==='missions')q=sb.from('missions').select('*').order('consultant').limit(5000);
-    else return fetchAll();
-    var res=await q;
-    if(res.error)return fetchAll();
-    setData(function(d){var nd={};for(var k in d)nd[k]=d[k];nd[table]=res.data;return nd;});
-    setLastRefresh(new Date().toLocaleTimeString('fr-FR'));
-  },[data,fetchAll]);
 
   useEffect(()=>{
     if(!user) return;
@@ -6721,14 +6696,16 @@ function App() {
   if(error) return <div className="flex items-center justify-center min-h-screen"><div className="bg-coral-20 border border-coral-20 p-6 max-w-md text-center"><div className="text-3xl mb-3">❌</div><div className="font-semibold text-coral-100">Erreur Supabase</div><div className="text-sm text-coral-100 mt-2 font-mono">{error}</div><button onClick={fetchAll} className="mt-4 px-4 py-2 bg-coral-100 text-white rounded-lg text-sm">Réessayer</button></div></div>;
 
   const {contacts,historique,taches,besoins,missions,histMissions,besoinCandidats}=data;
-  const contactMap = useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
-  const commerciauxParAgence=useMemo(()=>{var m={};allProfiles.forEach(p=>{if(p.agence&&p.nom){if(!m[p.agence])m[p.agence]=[];m[p.agence].push(p.nom);}});Object.values(m).forEach(arr=>arr.sort());return m;},[allProfiles]);
+  const contactMap = Object.fromEntries(contacts.map(c=>[c.id,c]));
+  const commerciauxParAgence={};
+  allProfiles.forEach(p=>{if(p.agence&&p.nom){if(!commerciauxParAgence[p.agence])commerciauxParAgence[p.agence]=[];commerciauxParAgence[p.agence].push(p.nom);}});
+  Object.values(commerciauxParAgence).forEach(arr=>arr.sort());
   const isAdmin=profile.role==='admin';
 
   // ── Mode "Voir comme" ──────────────────────────────────
   const activeProfile = viewAs || profile;
   const activeIsAdmin = activeProfile.role==='admin';
-  const contactAgenceMap = useMemo(()=>Object.fromEntries(Object.entries(contactMap).map(([id,c])=>[id,c.agence])),[contactMap]);
+  const contactAgenceMap = Object.fromEntries(Object.entries(contactMap).map(([id,c])=>[id,c.agence]));
   const vContacts   = contacts; // tous voient tous les contacts
   const vHistorique = activeIsAdmin ? historique : historique.filter(h=>h.responsable===activeProfile.nom);
   const vTaches     = activeIsAdmin ? taches     : taches.filter(t=>t.responsable===activeProfile.nom);
