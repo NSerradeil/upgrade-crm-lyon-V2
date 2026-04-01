@@ -4439,9 +4439,13 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
   const agences=useMemo(()=>[...new Set([...allProfiles.map(p=>p.agence),...missions.map(m=>m.agence)].filter(Boolean))].sort(),[allProfiles,missions]);
   const responsablesVisibles=useMemo(()=>{
     if(isAdmin&&!filterAgence) return [...new Set(allProfiles.map(p=>p.nom).filter(Boolean))].sort();
+    if(!isAdmin&&!filterAgence){
+      const myAgences=[...new Set([profile.agence,...missions.filter(m=>m.responsable===profile.nom).map(m=>m.agence)].filter(Boolean))];
+      return [...new Set(myAgences.flatMap(ag=>commerciauxParAgence[ag]||[]))].sort();
+    }
     const ag=filterAgence||profile.agence;
     return commerciauxParAgence[ag]||[];
-  },[isAdmin,filterAgence,profile.agence,allProfiles,commerciauxParAgence]);
+  },[isAdmin,filterAgence,profile.agence,allProfiles,commerciauxParAgence,missions]);
 
   const missionsFiltrees=useMemo(()=>{
     const q=search.toLowerCase();
@@ -4455,8 +4459,9 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
     rows.sort(function(a,b){var da=a.date_demarrage_initiale||'0';var db=b.date_demarrage_initiale||'0';return da>db?-1:da<db?1:0;});
     return rows;
   },[missions,search,filterStatut,filterAgence,filterResp]);
-  const hasFilter=search||filterStatut||filterResp||(isAdmin?filterAgence!=='':filterAgence!==profile.agence);
-  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterResp('');setFilterAgence(isAdmin?'':profile.agence);};
+  const myMultiAgence=!isAdmin&&missions.some(m=>m.responsable===profile.nom&&m.agence!==profile.agence);
+  const hasFilter=search||filterStatut||filterResp||(isAdmin?filterAgence!=='':myMultiAgence?filterAgence!=='':filterAgence!==profile.agence);
+  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterResp('');setFilterAgence(isAdmin||myMultiAgence?'':profile.agence);};
 
   const enMission    = missionsFiltrees.filter(m=>m.statut==='En cours'||m.statut==='New');
   const intercontrat = missionsFiltrees.filter(m=>m.statut==='Intercontrat');
@@ -4579,9 +4584,14 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
               <option value="">Toutes agences</option>{agences.map(a=><option key={a} value={a}>{a}</option>)}
             </select>
           )}
-          {!isAdmin&&(
-            <span className="px-3 py-1.5 bg-neutral-50 border rounded-lg text-sm text-slate">{profile.agence}</span>
-          )}
+          {!isAdmin&&(()=>{
+            const myAgences=[...new Set([profile.agence,...missions.filter(m=>m.responsable===profile.nom).map(m=>m.agence)].filter(Boolean))].sort();
+            return myAgences.length>1
+              ? <select value={filterAgence} onChange={e=>{setFilterAgence(e.target.value);setFilterResp('');}} className="px-3 py-1.5 border rounded-lg text-sm focus:outline-none">
+                  <option value="">Toutes ({myAgences.join(', ')})</option>{myAgences.map(a=><option key={a} value={a}>{a}</option>)}
+                </select>
+              : <span className="px-3 py-1.5 bg-neutral-50 border rounded-lg text-sm text-slate">{profile.agence}</span>;
+          })()}
           <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-1.5 border rounded-lg text-sm focus:outline-none">
             <option value="">Tous{!isAdmin?` (${profile.agence})`:filterAgence?` (${filterAgence})`:''}</option>
             {responsablesVisibles.map(r=><option key={r} value={r}>{r}{r===profile.nom?' (moi)':''}</option>)}
