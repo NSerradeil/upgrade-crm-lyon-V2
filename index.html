@@ -3635,7 +3635,7 @@ function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique
       .filter(b=>{
         if(filterStatut&&b.statut!==filterStatut) return false;
         if(filterResp&&b.responsable!==filterResp) return false;
-        if(filterAgence&&b.agence!==filterAgence) return false;
+        if(filterAgence&&b.agence!==filterAgence&&b.responsable!==profile.nom) return false;
         if(q){
           const c=contactMap[b.contact_id];
           const cand=contactMap[b.candidat_id];
@@ -4447,7 +4447,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
     const q=search.toLowerCase();
     var rows=missions.filter(m=>{
       if(filterStatut&&m.statut!==filterStatut) return false;
-      if(filterAgence&&m.agence!==filterAgence) return false;
+      if(filterAgence&&m.agence!==filterAgence&&m.responsable!==profile.nom) return false;
       if(filterResp&&m.responsable!==filterResp) return false;
       if(q&&![(m.consultant||''),(m.client||'')].some(v=>norm(v).includes(norm(q)))) return false;
       return true;
