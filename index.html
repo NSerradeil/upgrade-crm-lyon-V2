@@ -1935,8 +1935,8 @@ function MissionPeriodesSection({ missionId, periods, profile, onPeriodsChange }
   const labelCls = { fontSize: 10, fontWeight: 700, color: '#6B7280', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 2 };
 
   // Formulaire partagé (ajout + édition)
-  const renderForm = (title) => React.createElement('div', { style: { background: '#EFF6FF', border: '1px solid #BFDBFE', padding: 12, marginTop: editingId ? 0 : 4 } },
-    React.createElement('div', { style: { fontSize: 12, fontWeight: 700, marginBottom: 8, color: '#1E40AF' } }, title),
+  const renderForm = (title) => React.createElement('div', { style: editingId && !title ? {} : { background: '#EFF6FF', border: '1px solid #BFDBFE', padding: 12, marginTop: 4 } },
+    title && React.createElement('div', { style: { fontSize: 12, fontWeight: 700, marginBottom: 8, color: '#1E40AF' } }, title),
     React.createElement('div', { className: 'grid grid-cols-2 gap-2 mb-2' },
       React.createElement('div', null, React.createElement('div', { style: labelCls }, 'Label'), React.createElement('input', { className: inputCls, value: draft.label, onChange: e => setDraft(d => ({ ...d, label: e.target.value })) })),
       React.createElement('div', null, React.createElement('div', { style: labelCls }, 'N° Commande'), React.createElement('input', { className: inputCls, value: draft.numero_commande, onChange: e => setDraft(d => ({ ...d, numero_commande: e.target.value })) }))
@@ -1959,6 +1959,10 @@ function MissionPeriodesSection({ missionId, periods, profile, onPeriodsChange }
     )
   );
 
+  const editedPeriod = editingId ? periods.find(p => p.id === editingId) : null;
+  const panelRef = React.useRef(null);
+  useEffect(() => { if ((editingId || adding) && panelRef.current) panelRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, [editingId, adding]);
+
   return React.createElement('div', { className: 'mt-4 mb-2' },
     // Header collapsable
     React.createElement('button', { onClick: () => setOpen(!open), className: 'flex items-center gap-2 w-full text-left py-2 cursor-pointer', style: { fontSize: 11, fontWeight: 700, letterSpacing: 1, color: '#9CA3AF', textTransform: 'uppercase' } },
@@ -1967,55 +1971,59 @@ function MissionPeriodesSection({ missionId, periods, profile, onPeriodsChange }
       periods.length > 0 && React.createElement('span', { style: { background: '#F3F4F6', padding: '1px 6px', fontSize: 10, fontWeight: 700 } }, periods.length)
     ),
     open && React.createElement('div', null,
-      // Table des périodes
-      periods.length > 0 ? React.createElement('div', { className: 'overflow-x-auto mb-3' },
+      // Table desktop — lignes cliquables, 7 colonnes
+      periods.length > 0 && React.createElement('div', { className: 'hidden sm:block mb-3' },
         React.createElement('table', { className: 'w-full text-xs border-collapse' },
           React.createElement('thead', null,
             React.createElement('tr', { style: { borderBottom: '1px solid #E5E7EB' } },
-              ['Label', 'Début', 'Fin', 'N° Commande', 'TJM Vente', 'CJM Achat', 'Marge', '', ''].map((h, i) =>
+              ['Label', 'Début', 'Fin', 'N° Cmd', 'TJM', 'CJM', 'Marge'].map((h, i) =>
                 React.createElement('th', { key: i, style: { ...labelCls, padding: '4px 6px', textAlign: 'left' } }, h)
               )
             )
           ),
           React.createElement('tbody', null,
-            periods.map((p, idx) => React.createElement(React.Fragment, { key: p.id },
-              React.createElement('tr', { style: { background: isCurrent(p) ? '#FFFBEB' : idx % 2 === 0 ? '#FAFAFA' : '#FFF', borderBottom: '1px solid #F3F4F6' } },
-                React.createElement('td', { style: { padding: '6px', fontWeight: 600, fontSize: 12, minWidth: 130 } },
+            periods.map((p, idx) =>
+              React.createElement('tr', { key: p.id, onClick: () => startEdit(p), className: 'cursor-pointer transition-colors hover:bg-lemon-20', style: { background: editingId === p.id ? '#FEF3C7' : isCurrent(p) ? '#FFFBEB' : 'transparent', borderBottom: '1px solid #F3F4F6' } },
+                React.createElement('td', { style: { padding: '6px', fontWeight: 600, fontSize: 12 } },
                   p.label,
-                  isCurrent(p) && React.createElement('span', { style: { marginLeft: 6, display: 'inline-block', background: '#FEF3C7', color: '#92400E', fontSize: 9, fontWeight: 700, padding: '1px 5px' } }, 'EN COURS')
+                  isCurrent(p) && React.createElement('span', { style: { marginLeft: 6, display: 'inline-block', background: '#FEF3C7', color: '#92400E', fontSize: 9, fontWeight: 700, padding: '1px 5px' } }, 'EN COURS'),
+                  p.commentaire && React.createElement('span', { style: { marginLeft: 4, fontSize: 12, opacity: 0.4 } }, '\uD83D\uDCAC')
                 ),
                 React.createElement('td', { style: { padding: '6px', fontSize: 12 } }, fmtD(p.debut)),
                 React.createElement('td', { style: { padding: '6px', fontSize: 12 } }, fmtD(p.fin)),
                 React.createElement('td', { style: { padding: '6px', fontSize: 11, fontFamily: 'monospace', color: '#6B7280' } }, p.numero_commande || '—'),
                 React.createElement('td', { style: { padding: '6px', fontSize: 13, fontWeight: 700 } }, fmtM(p.tjm_vente), React.createElement(DeltaTag, { prev: periods[idx - 1], curr: p, field: 'tjm_vente' })),
                 React.createElement('td', { style: { padding: '6px', fontSize: 13, fontWeight: 600 } }, fmtM(p.cjm_consultant), React.createElement(DeltaTag, { prev: periods[idx - 1], curr: p, field: 'cjm_consultant' })),
-                React.createElement('td', { style: { padding: '6px', fontSize: 12, fontWeight: 700, color: margeColor(marge(p)) } }, marge(p) !== null ? marge(p).toFixed(1) + '%' : '—'),
-                React.createElement('td', { style: { padding: '6px', textAlign: 'center' } },
-                  React.createElement('button', { onClick: () => toggleComment(p.id), style: { opacity: p.commentaire ? 1 : 0.25, cursor: p.commentaire ? 'pointer' : 'default', fontSize: 14 }, disabled: !p.commentaire }, '\uD83D\uDCAC')
-                ),
-                React.createElement('td', { style: { padding: '6px', textAlign: 'center', whiteSpace: 'nowrap' } },
-                  React.createElement('button', { onClick: () => startEdit(p), title: 'Modifier', style: { fontSize: 13, cursor: 'pointer', opacity: 0.5, marginRight: 4 }, className: 'hover:opacity-100' }, '\u270F\uFE0F'),
-                  confirmDeleteId === p.id
-                    ? React.createElement('span', { style: { fontSize: 11 } },
-                        React.createElement('button', { onClick: () => handleDelete(p.id), style: { color: '#991B1B', fontWeight: 700, cursor: 'pointer', marginRight: 4 } }, 'Supprimer ?'),
-                        React.createElement('button', { onClick: () => setConfirmDeleteId(null), style: { color: '#6B7280', cursor: 'pointer' } }, 'Non')
-                      )
-                    : React.createElement('button', { onClick: () => setConfirmDeleteId(p.id), title: 'Supprimer', style: { fontSize: 13, cursor: 'pointer', opacity: 0.5 }, className: 'hover:opacity-100' }, '\uD83D\uDDD1\uFE0F')
-                )
-              ),
-              editingId === p.id && React.createElement('tr', null,
-                React.createElement('td', { colSpan: 9, style: { padding: 0 } }, renderForm('Modifier : ' + p.label))
-              ),
-              openComments[p.id] && p.commentaire && editingId !== p.id && React.createElement('tr', null,
-                React.createElement('td', { colSpan: 9, style: { padding: '4px 6px 8px 20px', fontSize: 13, fontStyle: 'italic', color: '#374151', background: '#F9FAFB' } }, p.commentaire)
+                React.createElement('td', { style: { padding: '6px', fontSize: 12, fontWeight: 700, color: margeColor(marge(p)) } }, marge(p) !== null ? marge(p).toFixed(1) + '%' : '—')
               )
-            ))
+            )
           )
         )
-      ) : React.createElement('div', { className: 'text-sm text-slate py-3' }, 'Aucune période enregistrée'),
+      ),
+
+      // Vue mobile — cartes cliquables
+      periods.length > 0 && React.createElement('div', { className: 'sm:hidden space-y-2 mb-3' },
+        periods.map((p, idx) =>
+          React.createElement('div', { key: p.id, onClick: () => startEdit(p), className: 'cursor-pointer transition-colors', style: { padding: '8px 10px', border: '1px solid ' + (editingId === p.id ? '#FBBF24' : '#E5E7EB'), background: editingId === p.id ? '#FEF3C7' : isCurrent(p) ? '#FFFBEB' : '#FAFAFA' } },
+            React.createElement('div', { className: 'flex items-center justify-between mb-1' },
+              React.createElement('span', { style: { fontWeight: 600, fontSize: 13 } }, p.label),
+              React.createElement('span', { style: { fontSize: 11, color: '#6B7280' } }, fmtD(p.debut), ' → ', fmtD(p.fin))
+            ),
+            React.createElement('div', { className: 'flex items-center gap-3 text-xs' },
+              React.createElement('span', null, 'TJM ', React.createElement('strong', null, fmtM(p.tjm_vente)), React.createElement(DeltaTag, { prev: periods[idx - 1], curr: p, field: 'tjm_vente' })),
+              React.createElement('span', null, 'CJM ', React.createElement('strong', null, fmtM(p.cjm_consultant))),
+              React.createElement('span', { style: { fontWeight: 700, color: margeColor(marge(p)) } }, marge(p) !== null ? marge(p).toFixed(1) + '%' : '—'),
+              isCurrent(p) && React.createElement('span', { style: { background: '#FEF3C7', color: '#92400E', fontSize: 9, fontWeight: 700, padding: '1px 5px' } }, 'EN COURS')
+            )
+          )
+        )
+      ),
+
+      // Aucune période
+      periods.length === 0 && React.createElement('div', { className: 'text-sm text-slate py-3' }, 'Aucune période enregistrée'),
 
       // KPIs récap
-      periods.length > 0 && React.createElement('div', { className: 'grid grid-cols-4 gap-2 mb-3' },
+      periods.length > 0 && React.createElement('div', { className: 'grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3' },
         [
           { label: 'Durée totale', value: dureeTotal + ' mois' },
           { label: 'TJM moyen', value: tjmMoyen ? tjmMoyen + '€' : '—' },
@@ -2027,9 +2035,32 @@ function MissionPeriodesSection({ missionId, periods, profile, onPeriodsChange }
         ))
       ),
 
-      // Bouton renouveler ou formulaire
-      !adding && !editingId ? React.createElement('button', { onClick: () => { resetDraft(); setAdding(true); setFormError(null); }, style: { width: '100%', padding: '8px', border: '1px dashed #D1D5DB', background: '#F9FAFB', color: '#374151', fontSize: 13, fontWeight: 500, cursor: 'pointer' } }, periods.length > 0 ? '+ Renouveler la mission' : '+ Créer la période initiale')
-      : adding ? renderForm(periods.length > 0 ? 'Nouveau renouvellement' : 'Période initiale') : null
+      // Panel édition ancré en bas (affiché quand on clique une ligne)
+      editingId && React.createElement('div', { ref: panelRef, style: { background: '#EFF6FF', border: '1px solid #BFDBFE', padding: 12, marginBottom: 8 } },
+        React.createElement('div', { className: 'flex items-center justify-between mb-2' },
+          React.createElement('span', { style: { fontSize: 12, fontWeight: 700, color: '#1E40AF' } }, 'Modifier : ' + (editedPeriod?.label || '')),
+          React.createElement('div', { className: 'flex items-center gap-3' },
+            confirmDeleteId === editingId
+              ? React.createElement('span', { className: 'flex items-center gap-2', style: { fontSize: 12 } },
+                  React.createElement('span', { style: { color: '#991B1B', fontWeight: 600 } }, 'Supprimer cette période ?'),
+                  React.createElement('button', { onClick: () => handleDelete(editingId), style: { color: '#991B1B', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' } }, 'Oui'),
+                  React.createElement('button', { onClick: () => setConfirmDeleteId(null), style: { color: '#6B7280', cursor: 'pointer' } }, 'Non')
+                )
+              : React.createElement('button', { onClick: (e) => { e.stopPropagation(); setConfirmDeleteId(editingId); }, style: { fontSize: 18, cursor: 'pointer', opacity: 0.4, lineHeight: 1 }, className: 'hover:opacity-100', title: 'Supprimer' }, '\u00D7'),
+            React.createElement('button', { onClick: cancelEdit, style: { fontSize: 18, cursor: 'pointer', opacity: 0.4, lineHeight: 1 }, className: 'hover:opacity-100', title: 'Fermer' }, '\u2715')
+          )
+        ),
+        // Commentaire existant
+        editedPeriod?.commentaire && !draft.commentaire && React.createElement('div', { style: { fontSize: 12, fontStyle: 'italic', color: '#374151', background: '#F0F9FF', padding: '4px 8px', marginBottom: 8 } }, editedPeriod.commentaire),
+        renderForm(null)
+      ),
+
+      // Bouton renouveler ou formulaire ajout
+      !editingId && (
+        !adding
+          ? React.createElement('button', { onClick: () => { resetDraft(); setAdding(true); setFormError(null); }, style: { width: '100%', padding: '8px', border: '1px dashed #D1D5DB', background: '#F9FAFB', color: '#374151', fontSize: 13, fontWeight: 500, cursor: 'pointer' } }, periods.length > 0 ? '+ Renouveler la mission' : '+ Créer la période initiale')
+          : React.createElement('div', { ref: panelRef }, renderForm(periods.length > 0 ? 'Nouveau renouvellement' : 'Période initiale'))
+      )
     )
   );
 }
