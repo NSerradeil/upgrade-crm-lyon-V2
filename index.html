@@ -1849,6 +1849,10 @@ function MissionPeriodesSection({ missionId, periods, profile, onPeriodsChange }
 
   const cancelEdit = () => { setEditingId(null); setFormError(null); resetDraft(); };
 
+  // Formatters — 1 décimale partout
+  const fmtM = v => (v === null || v === undefined || v === '') ? '—' : Number(v).toFixed(1) + '€';
+  const fmtDelta = (prev, curr) => { const diff = Number(curr) - Number(prev); return diff === 0 ? null : (diff > 0 ? '+' : '') + diff.toFixed(1) + '€'; };
+
   const validate = (excludeId) => {
     const errs = [];
     if (!draft.debut) errs.push('Date de début obligatoire');
@@ -1866,16 +1870,27 @@ function MissionPeriodesSection({ missionId, periods, profile, onPeriodsChange }
     try {
       const row = { label: draft.label, debut: draft.debut, fin: draft.fin, numero_commande: draft.numero_commande || null, tjm_vente: draft.tjm_vente ? Number(draft.tjm_vente) : null, cjm_consultant: draft.cjm_consultant ? Number(draft.cjm_consultant) : null, commentaire: draft.commentaire || null };
       if (editingId) {
+        const oldP = periods.find(p => p.id === editingId);
         const { error } = await sb.from('mission_periods').update(row).eq('id', editingId);
         if (error) throw error;
-        await sb.from('historique_missions').insert({ mission_id: missionId, date: today, type_action: 'Modification période', details: `${draft.label} modifié — ${draft.debut} → ${draft.fin}${draft.tjm_vente ? ' · TJM ' + draft.tjm_vente + '€' : ''}`, responsable: profile.nom });
+        await sb.from('historique_missions').insert({ mission_id: missionId, date: today, type_action: 'Modification période', details: `${draft.label} modifié — ${draft.debut} → ${draft.fin}${draft.tjm_vente ? ' · TJM ' + Number(draft.tjm_vente).toFixed(1) + '€' : ''}`, responsable: profile.nom });
+        // Sync conditionnelle : seulement si la période modifiée est active
+        const updatedPeriods = periods.map(p => p.id === editingId ? { ...p, ...row } : p);
+        const active = getActivePeriod(updatedPeriods);
+        if (active && active.id === editingId) {
+          await syncMissionFromPeriods(missionId);
+        } else {
+          // Toujours sync date_fin (max de toutes les périodes)
+          const maxFin = updatedPeriods.reduce((mx, p) => p.fin > mx ? p.fin : mx, updatedPeriods[0].fin);
+          await sb.from('missions').update({ date_fin_mission: maxFin }).eq('id', missionId);
+        }
       } else {
         row.mission_id = missionId; row.created_by = profile.nom;
         const { error } = await sb.from('mission_periods').insert(row);
         if (error) throw error;
-        await sb.from('historique_missions').insert({ mission_id: missionId, date: today, type_action: 'Renouvellement', details: `${draft.label} — ${draft.debut} → ${draft.fin}${draft.tjm_vente ? ' · TJM ' + draft.tjm_vente + '€' : ''}`, responsable: profile.nom });
+        await sb.from('historique_missions').insert({ mission_id: missionId, date: today, type_action: 'Renouvellement', details: `${draft.label} — ${draft.debut} → ${draft.fin}${draft.tjm_vente ? ' · TJM ' + Number(draft.tjm_vente).toFixed(1) + '€' : ''}`, responsable: profile.nom });
+        await syncMissionFromPeriods(missionId);
       }
-      await syncMissionFromPeriods(missionId);
       setAdding(false); setEditingId(null); resetDraft(); onPeriodsChange();
     } catch (e) { setFormError(e.message); } finally { setSaving(false); }
   };
@@ -1895,9 +1910,10 @@ function MissionPeriodesSection({ missionId, periods, profile, onPeriodsChange }
   const fmtD = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
   const DeltaTag = ({ prev, curr, field }) => {
     if (!prev || !prev[field] || !curr[field]) return null;
+    const label = fmtDelta(prev[field], curr[field]);
+    if (!label) return null;
     const diff = Number(curr[field]) - Number(prev[field]);
-    if (diff === 0) return null;
-    return React.createElement('span', { style: { display: 'inline-block', marginLeft: 4, padding: '1px 5px', fontSize: 10, fontWeight: 700, borderRadius: 2, background: diff > 0 ? '#D1FAE5' : '#FEE2E2', color: diff > 0 ? '#065F46' : '#991B1B' } }, (diff > 0 ? '+' : '') + diff + '€');
+    return React.createElement('span', { style: { display: 'inline-block', marginLeft: 4, padding: '1px 5px', fontSize: 10, fontWeight: 700, borderRadius: 2, background: diff > 0 ? '#D1FAE5' : '#FEE2E2', color: diff > 0 ? '#065F46' : '#991B1B' } }, label);
   };
   const isCurrent = p => p.debut <= today && p.fin >= today;
   const marge = p => (p.tjm_vente && p.cjm_consultant && Number(p.tjm_vente) > 0) ? ((Number(p.tjm_vente) - Number(p.cjm_consultant)) / Number(p.tjm_vente) * 100) : null;
@@ -1905,8 +1921,10 @@ function MissionPeriodesSection({ missionId, periods, profile, onPeriodsChange }
 
   // KPIs
   const dureeTotal = periods.length > 0 ? (() => { const d0 = new Date(periods[0].debut); const d1 = new Date(periods[periods.length - 1].fin); return Math.round((d1 - d0) / (1000 * 60 * 60 * 24 * 30.44)); })() : 0;
-  const tjmMoyen = periods.filter(p => p.tjm_vente).length > 0 ? Math.round(periods.filter(p => p.tjm_vente).reduce((s, p) => s + Number(p.tjm_vente), 0) / periods.filter(p => p.tjm_vente).length) : null;
-  const margeMoy = periods.filter(p => marge(p) !== null).length > 0 ? (periods.filter(p => marge(p) !== null).reduce((s, p) => s + marge(p), 0) / periods.filter(p => marge(p) !== null).length).toFixed(1) : null;
+  const pWithTjm = periods.filter(p => p.tjm_vente);
+  const tjmMoyen = pWithTjm.length > 0 ? (pWithTjm.reduce((s, p) => s + Number(p.tjm_vente), 0) / pWithTjm.length).toFixed(1) : null;
+  const pWithMarge = periods.filter(p => marge(p) !== null);
+  const margeMoy = pWithMarge.length > 0 ? (pWithMarge.reduce((s, p) => s + marge(p), 0) / pWithMarge.length).toFixed(1) : null;
   const nbComm = periods.filter(p => p.commentaire).length;
 
   const [openComments, setOpenComments] = useState({});
@@ -1915,6 +1933,31 @@ function MissionPeriodesSection({ missionId, periods, profile, onPeriodsChange }
 
   const inputCls = "w-full px-2 py-1.5 border text-sm focus:outline-none";
   const labelCls = { fontSize: 10, fontWeight: 700, color: '#6B7280', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 2 };
+
+  // Formulaire partagé (ajout + édition)
+  const renderForm = (title) => React.createElement('div', { style: { background: '#EFF6FF', border: '1px solid #BFDBFE', padding: 12, marginTop: editingId ? 0 : 4 } },
+    React.createElement('div', { style: { fontSize: 12, fontWeight: 700, marginBottom: 8, color: '#1E40AF' } }, title),
+    React.createElement('div', { className: 'grid grid-cols-2 gap-2 mb-2' },
+      React.createElement('div', null, React.createElement('div', { style: labelCls }, 'Label'), React.createElement('input', { className: inputCls, value: draft.label, onChange: e => setDraft(d => ({ ...d, label: e.target.value })) })),
+      React.createElement('div', null, React.createElement('div', { style: labelCls }, 'N° Commande'), React.createElement('input', { className: inputCls, value: draft.numero_commande, onChange: e => setDraft(d => ({ ...d, numero_commande: e.target.value })) }))
+    ),
+    React.createElement('div', { className: 'grid grid-cols-2 gap-2 mb-2' },
+      React.createElement('div', null, React.createElement('div', { style: labelCls }, 'Début'), React.createElement('input', { type: 'date', className: inputCls, value: draft.debut, onChange: e => setDraft(d => ({ ...d, debut: e.target.value })) })),
+      React.createElement('div', null, React.createElement('div', { style: labelCls }, 'Fin'), React.createElement('input', { type: 'date', className: inputCls, value: draft.fin, onChange: e => setDraft(d => ({ ...d, fin: e.target.value })) }))
+    ),
+    React.createElement('div', { className: 'grid grid-cols-2 gap-2 mb-2' },
+      React.createElement('div', null, React.createElement('div', { style: labelCls }, 'TJM Vente (€)'), React.createElement('input', { type: 'number', className: inputCls, value: draft.tjm_vente, onChange: e => setDraft(d => ({ ...d, tjm_vente: e.target.value })) })),
+      React.createElement('div', null, React.createElement('div', { style: labelCls }, 'CJM Achat (€)'), React.createElement('input', { type: 'number', className: inputCls, value: draft.cjm_consultant, onChange: e => setDraft(d => ({ ...d, cjm_consultant: e.target.value })) }))
+    ),
+    tjmChanged && React.createElement('div', { style: { background: '#FEF3C7', color: '#92400E', padding: '4px 8px', fontSize: 11, fontWeight: 600, marginBottom: 8 } }, 'TJM modifié — explique pourquoi dans le commentaire'),
+    React.createElement('div', { className: 'mb-2' }, React.createElement('div', { style: labelCls }, 'Commentaire'), React.createElement('textarea', { className: inputCls, rows: 2, value: draft.commentaire, onChange: e => setDraft(d => ({ ...d, commentaire: e.target.value })), placeholder: 'Contexte du renouvellement...' })),
+    draft.tjm_vente && draft.cjm_consultant && Number(draft.tjm_vente) > 0 && React.createElement('div', { style: { fontSize: 11, color: '#6B7280', marginBottom: 8 } }, 'Marge estimée : ', React.createElement('strong', { style: { color: margeColor(((Number(draft.tjm_vente) - Number(draft.cjm_consultant)) / Number(draft.tjm_vente) * 100)) } }, ((Number(draft.tjm_vente) - Number(draft.cjm_consultant)) / Number(draft.tjm_vente) * 100).toFixed(1) + '%')),
+    formError && React.createElement('div', { style: { color: '#991B1B', fontSize: 12, marginBottom: 8, fontWeight: 600 } }, formError),
+    React.createElement('div', { className: 'flex gap-2' },
+      React.createElement('button', { onClick: handleConfirm, disabled: saving || !draft.debut || !draft.fin, style: { padding: '6px 16px', background: '#111', color: '#FFF', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: saving || !draft.debut || !draft.fin ? 0.5 : 1 } }, saving ? 'Enregistrement...' : editingId ? 'Enregistrer' : 'Confirmer'),
+      React.createElement('button', { onClick: () => { if (editingId) cancelEdit(); else { setAdding(false); setFormError(null); } }, style: { padding: '6px 16px', background: '#F3F4F6', color: '#374151', fontSize: 12, fontWeight: 500, cursor: 'pointer' } }, 'Annuler')
+    )
+  );
 
   return React.createElement('div', { className: 'mt-4 mb-2' },
     // Header collapsable
@@ -1944,8 +1987,8 @@ function MissionPeriodesSection({ missionId, periods, profile, onPeriodsChange }
                 React.createElement('td', { style: { padding: '6px', fontSize: 12 } }, fmtD(p.debut)),
                 React.createElement('td', { style: { padding: '6px', fontSize: 12 } }, fmtD(p.fin)),
                 React.createElement('td', { style: { padding: '6px', fontSize: 11, fontFamily: 'monospace', color: '#6B7280' } }, p.numero_commande || '—'),
-                React.createElement('td', { style: { padding: '6px', fontSize: 13, fontWeight: 700 } }, p.tjm_vente ? p.tjm_vente + '€' : '—', React.createElement(DeltaTag, { prev: periods[idx - 1], curr: p, field: 'tjm_vente' })),
-                React.createElement('td', { style: { padding: '6px', fontSize: 13, fontWeight: 600 } }, p.cjm_consultant ? p.cjm_consultant + '€' : '—', React.createElement(DeltaTag, { prev: periods[idx - 1], curr: p, field: 'cjm_consultant' })),
+                React.createElement('td', { style: { padding: '6px', fontSize: 13, fontWeight: 700 } }, fmtM(p.tjm_vente), React.createElement(DeltaTag, { prev: periods[idx - 1], curr: p, field: 'tjm_vente' })),
+                React.createElement('td', { style: { padding: '6px', fontSize: 13, fontWeight: 600 } }, fmtM(p.cjm_consultant), React.createElement(DeltaTag, { prev: periods[idx - 1], curr: p, field: 'cjm_consultant' })),
                 React.createElement('td', { style: { padding: '6px', fontSize: 12, fontWeight: 700, color: margeColor(marge(p)) } }, marge(p) !== null ? marge(p).toFixed(1) + '%' : '—'),
                 React.createElement('td', { style: { padding: '6px', textAlign: 'center' } },
                   React.createElement('button', { onClick: () => toggleComment(p.id), style: { opacity: p.commentaire ? 1 : 0.25, cursor: p.commentaire ? 'pointer' : 'default', fontSize: 14 }, disabled: !p.commentaire }, '\uD83D\uDCAC')
@@ -1960,33 +2003,10 @@ function MissionPeriodesSection({ missionId, periods, profile, onPeriodsChange }
                     : React.createElement('button', { onClick: () => setConfirmDeleteId(p.id), title: 'Supprimer', style: { fontSize: 13, cursor: 'pointer', opacity: 0.5 }, className: 'hover:opacity-100' }, '\uD83D\uDDD1\uFE0F')
                 )
               ),
-              // Formulaire d'édition inline
               editingId === p.id && React.createElement('tr', null,
-                React.createElement('td', { colSpan: 9, style: { padding: 0 } },
-                  React.createElement('div', { style: { background: '#EFF6FF', border: '1px solid #BFDBFE', padding: 12 } },
-                    React.createElement('div', { style: { fontSize: 12, fontWeight: 700, marginBottom: 8, color: '#1E40AF' } }, 'Modifier : ' + p.label),
-                    React.createElement('div', { className: 'grid grid-cols-2 gap-2 mb-2' },
-                      React.createElement('div', null, React.createElement('div', { style: labelCls }, 'Label'), React.createElement('input', { className: inputCls, value: draft.label, onChange: e => setDraft(d => ({ ...d, label: e.target.value })) })),
-                      React.createElement('div', null, React.createElement('div', { style: labelCls }, 'N° Commande'), React.createElement('input', { className: inputCls, value: draft.numero_commande, onChange: e => setDraft(d => ({ ...d, numero_commande: e.target.value })) }))
-                    ),
-                    React.createElement('div', { className: 'grid grid-cols-2 gap-2 mb-2' },
-                      React.createElement('div', null, React.createElement('div', { style: labelCls }, 'Début'), React.createElement('input', { type: 'date', className: inputCls, value: draft.debut, onChange: e => setDraft(d => ({ ...d, debut: e.target.value })) })),
-                      React.createElement('div', null, React.createElement('div', { style: labelCls }, 'Fin'), React.createElement('input', { type: 'date', className: inputCls, value: draft.fin, onChange: e => setDraft(d => ({ ...d, fin: e.target.value })) }))
-                    ),
-                    React.createElement('div', { className: 'grid grid-cols-2 gap-2 mb-2' },
-                      React.createElement('div', null, React.createElement('div', { style: labelCls }, 'TJM Vente (€)'), React.createElement('input', { type: 'number', className: inputCls, value: draft.tjm_vente, onChange: e => setDraft(d => ({ ...d, tjm_vente: e.target.value })) })),
-                      React.createElement('div', null, React.createElement('div', { style: labelCls }, 'CJM Achat (€)'), React.createElement('input', { type: 'number', className: inputCls, value: draft.cjm_consultant, onChange: e => setDraft(d => ({ ...d, cjm_consultant: e.target.value })) }))
-                    ),
-                    React.createElement('div', { className: 'mb-2' }, React.createElement('div', { style: labelCls }, 'Commentaire'), React.createElement('textarea', { className: inputCls, rows: 2, value: draft.commentaire, onChange: e => setDraft(d => ({ ...d, commentaire: e.target.value })) })),
-                    formError && React.createElement('div', { style: { color: '#991B1B', fontSize: 12, marginBottom: 8, fontWeight: 600 } }, formError),
-                    React.createElement('div', { className: 'flex gap-2' },
-                      React.createElement('button', { onClick: handleConfirm, disabled: saving || !draft.debut || !draft.fin, style: { padding: '6px 16px', background: '#111', color: '#FFF', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: saving || !draft.debut || !draft.fin ? 0.5 : 1 } }, saving ? 'Enregistrement...' : 'Enregistrer'),
-                      React.createElement('button', { onClick: cancelEdit, style: { padding: '6px 16px', background: '#F3F4F6', color: '#374151', fontSize: 12, fontWeight: 500, cursor: 'pointer' } }, 'Annuler')
-                    )
-                  )
-                )
+                React.createElement('td', { colSpan: 9, style: { padding: 0 } }, renderForm('Modifier : ' + p.label))
               ),
-              openComments[p.id] && p.commentaire && !editingId && React.createElement('tr', null,
+              openComments[p.id] && p.commentaire && editingId !== p.id && React.createElement('tr', null,
                 React.createElement('td', { colSpan: 9, style: { padding: '4px 6px 8px 20px', fontSize: 13, fontStyle: 'italic', color: '#374151', background: '#F9FAFB' } }, p.commentaire)
               )
             ))
@@ -2009,40 +2029,28 @@ function MissionPeriodesSection({ missionId, periods, profile, onPeriodsChange }
 
       // Bouton renouveler ou formulaire
       !adding && !editingId ? React.createElement('button', { onClick: () => { resetDraft(); setAdding(true); setFormError(null); }, style: { width: '100%', padding: '8px', border: '1px dashed #D1D5DB', background: '#F9FAFB', color: '#374151', fontSize: 13, fontWeight: 500, cursor: 'pointer' } }, periods.length > 0 ? '+ Renouveler la mission' : '+ Créer la période initiale')
-      : React.createElement('div', { style: { background: '#EFF6FF', border: '1px solid #BFDBFE', padding: 12, marginTop: 4 } },
-          React.createElement('div', { style: { fontSize: 12, fontWeight: 700, marginBottom: 8, color: '#1E40AF' } }, periods.length > 0 ? 'Nouveau renouvellement' : 'Période initiale'),
-          React.createElement('div', { className: 'grid grid-cols-2 gap-2 mb-2' },
-            React.createElement('div', null, React.createElement('div', { style: labelCls }, 'Label'), React.createElement('input', { className: inputCls, value: draft.label, onChange: e => setDraft(d => ({ ...d, label: e.target.value })) })),
-            React.createElement('div', null, React.createElement('div', { style: labelCls }, 'N° Commande'), React.createElement('input', { className: inputCls, value: draft.numero_commande, onChange: e => setDraft(d => ({ ...d, numero_commande: e.target.value })) }))
-          ),
-          React.createElement('div', { className: 'grid grid-cols-2 gap-2 mb-2' },
-            React.createElement('div', null, React.createElement('div', { style: labelCls }, 'Début'), React.createElement('input', { type: 'date', className: inputCls, value: draft.debut, onChange: e => setDraft(d => ({ ...d, debut: e.target.value })) })),
-            React.createElement('div', null, React.createElement('div', { style: labelCls }, 'Fin'), React.createElement('input', { type: 'date', className: inputCls, value: draft.fin, onChange: e => setDraft(d => ({ ...d, fin: e.target.value })) }))
-          ),
-          React.createElement('div', { className: 'grid grid-cols-2 gap-2 mb-2' },
-            React.createElement('div', null, React.createElement('div', { style: labelCls }, 'TJM Vente (€)'), React.createElement('input', { type: 'number', className: inputCls, value: draft.tjm_vente, onChange: e => setDraft(d => ({ ...d, tjm_vente: e.target.value })) })),
-            React.createElement('div', null, React.createElement('div', { style: labelCls }, 'CJM Achat (€)'), React.createElement('input', { type: 'number', className: inputCls, value: draft.cjm_consultant, onChange: e => setDraft(d => ({ ...d, cjm_consultant: e.target.value })) }))
-          ),
-          tjmChanged && React.createElement('div', { style: { background: '#FEF3C7', color: '#92400E', padding: '4px 8px', fontSize: 11, fontWeight: 600, marginBottom: 8 } }, 'TJM modifié par rapport à la période précédente — explique pourquoi dans le commentaire'),
-          React.createElement('div', { className: 'mb-2' }, React.createElement('div', { style: labelCls }, 'Commentaire'), React.createElement('textarea', { className: inputCls, rows: 2, value: draft.commentaire, onChange: e => setDraft(d => ({ ...d, commentaire: e.target.value })), placeholder: 'Contexte du renouvellement...' })),
-          // Marge live
-          draft.tjm_vente && draft.cjm_consultant && Number(draft.tjm_vente) > 0 && React.createElement('div', { style: { fontSize: 11, color: '#6B7280', marginBottom: 8 } }, 'Marge estimée : ', React.createElement('strong', { style: { color: margeColor(((Number(draft.tjm_vente) - Number(draft.cjm_consultant)) / Number(draft.tjm_vente) * 100)) } }, ((Number(draft.tjm_vente) - Number(draft.cjm_consultant)) / Number(draft.tjm_vente) * 100).toFixed(1) + '%')),
-          formError && React.createElement('div', { style: { color: '#991B1B', fontSize: 12, marginBottom: 8, fontWeight: 600 } }, formError),
-          React.createElement('div', { className: 'flex gap-2' },
-            React.createElement('button', { onClick: handleConfirm, disabled: saving || !draft.debut || !draft.fin, style: { padding: '6px 16px', background: '#111', color: '#FFF', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: saving || !draft.debut || !draft.fin ? 0.5 : 1 } }, saving ? 'Enregistrement...' : 'Confirmer'),
-            React.createElement('button', { onClick: () => { setAdding(false); setFormError(null); }, style: { padding: '6px 16px', background: '#F3F4F6', color: '#374151', fontSize: 12, fontWeight: 500, cursor: 'pointer' } }, 'Annuler')
-          )
-        )
+      : adding ? renderForm(periods.length > 0 ? 'Nouveau renouvellement' : 'Période initiale') : null
     )
   );
+}
+
+function getActivePeriod(periods) {
+  if (!periods || periods.length === 0) return null;
+  const today = new Date().toISOString().slice(0,10);
+  return periods.find(p => p.debut <= today && p.fin >= today) || [...periods].sort((a, b) => b.debut.localeCompare(a.debut))[0];
 }
 
 async function syncMissionFromPeriods(missionId) {
   const { data: ps } = await sb.from('mission_periods').select('*').eq('mission_id', missionId).order('debut', { ascending: true });
   if (!ps || ps.length === 0) return;
-  const last = ps[ps.length - 1];
+  const active = getActivePeriod(ps);
   const maxFin = ps.reduce((mx, p) => p.fin > mx ? p.fin : mx, ps[0].fin);
-  await sb.from('missions').update({ date_fin_mission: maxFin, tjm: last.tjm_vente ? Number(last.tjm_vente) : undefined, cjm: last.cjm_consultant ? Number(last.cjm_consultant) : undefined }).eq('id', missionId);
+  const patch = { date_fin_mission: maxFin };
+  if (active) {
+    if (active.tjm_vente) patch.tjm = Number(active.tjm_vente);
+    if (active.cjm_consultant) patch.cjm = Number(active.cjm_consultant);
+  }
+  await sb.from('missions').update(patch).eq('id', missionId);
 }
 
 // ── Panel : Détail mission ────────────────────────────────────────────────────
