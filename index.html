@@ -1830,8 +1830,164 @@ function TerminerMissionModal({ mission, profile, onClose, onSaved }) {
   );
 }
 
+// ── Section Périodes de mission (renouvellements) ─────────────────────────────
+function MissionPeriodesSection({ missionId, periods, profile, onPeriodsChange }) {
+  const [open, setOpen] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState(null);
+  const today = new Date().toISOString().slice(0,10);
+  const lastPeriod = periods.length > 0 ? periods[periods.length - 1] : null;
+  const defaultDebut = lastPeriod ? (() => { const d = new Date(lastPeriod.fin); d.setDate(d.getDate() + 1); return d.toISOString().slice(0,10); })() : today;
+  const [draft, setDraft] = useState({ label: `Renouvellement ${periods.length}`, debut: defaultDebut, fin: '', numero_commande: '', tjm_vente: lastPeriod?.tjm_vente || '', cjm_consultant: lastPeriod?.cjm_consultant || '', commentaire: '' });
+
+  const resetDraft = () => { const lp = periods.length > 0 ? periods[periods.length - 1] : null; const dd = lp ? (() => { const d = new Date(lp.fin); d.setDate(d.getDate() + 1); return d.toISOString().slice(0,10); })() : today; setDraft({ label: `Renouvellement ${periods.length}`, debut: dd, fin: '', numero_commande: '', tjm_vente: lp?.tjm_vente || '', cjm_consultant: lp?.cjm_consultant || '', commentaire: '' }); };
+
+  const validate = () => {
+    const errs = [];
+    if (!draft.debut) errs.push('Date de début obligatoire');
+    if (!draft.fin) errs.push('Date de fin obligatoire');
+    if (draft.debut && draft.fin && draft.debut >= draft.fin) errs.push('La fin doit être après le début');
+    const overlap = periods.some(p => draft.debut <= p.fin && draft.fin >= p.debut);
+    if (overlap) errs.push('Les périodes ne peuvent pas se chevaucher');
+    return errs;
+  };
+
+  const handleConfirm = async () => {
+    const errs = validate();
+    if (errs.length > 0) { setFormError(errs.join('. ')); return; }
+    setSaving(true); setFormError(null);
+    try {
+      const { error } = await sb.from('mission_periods').insert({ mission_id: missionId, label: draft.label, debut: draft.debut, fin: draft.fin, numero_commande: draft.numero_commande || null, tjm_vente: draft.tjm_vente ? Number(draft.tjm_vente) : null, cjm_consultant: draft.cjm_consultant ? Number(draft.cjm_consultant) : null, commentaire: draft.commentaire || null, created_by: profile.nom });
+      if (error) throw error;
+      // Sync mission parente
+      await syncMissionFromPeriods(missionId);
+      // Log historique
+      await sb.from('historique_missions').insert({ mission_id: missionId, date: today, type_action: 'Renouvellement', details: `${draft.label} — ${draft.debut} → ${draft.fin}${draft.tjm_vente ? ' · TJM ' + draft.tjm_vente + '€' : ''}`, responsable: profile.nom });
+      setAdding(false); resetDraft(); onPeriodsChange();
+    } catch (e) { setFormError(e.message); } finally { setSaving(false); }
+  };
+
+  const fmtD = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  const DeltaTag = ({ prev, curr, field }) => {
+    if (!prev || !prev[field] || !curr[field]) return null;
+    const diff = Number(curr[field]) - Number(prev[field]);
+    if (diff === 0) return null;
+    return React.createElement('span', { style: { display: 'inline-block', marginLeft: 4, padding: '1px 5px', fontSize: 10, fontWeight: 700, borderRadius: 2, background: diff > 0 ? '#D1FAE5' : '#FEE2E2', color: diff > 0 ? '#065F46' : '#991B1B' } }, (diff > 0 ? '+' : '') + diff + '€');
+  };
+  const isCurrent = p => p.debut <= today && p.fin >= today;
+  const marge = p => (p.tjm_vente && p.cjm_consultant && Number(p.tjm_vente) > 0) ? ((Number(p.tjm_vente) - Number(p.cjm_consultant)) / Number(p.tjm_vente) * 100) : null;
+  const margeColor = m => m === null ? '#9CA3AF' : m >= 25 ? '#065F46' : m >= 15 ? '#92400E' : '#991B1B';
+
+  // KPIs
+  const dureeTotal = periods.length > 0 ? (() => { const d0 = new Date(periods[0].debut); const d1 = new Date(periods[periods.length - 1].fin); return Math.round((d1 - d0) / (1000 * 60 * 60 * 24 * 30.44)); })() : 0;
+  const tjmMoyen = periods.filter(p => p.tjm_vente).length > 0 ? Math.round(periods.filter(p => p.tjm_vente).reduce((s, p) => s + Number(p.tjm_vente), 0) / periods.filter(p => p.tjm_vente).length) : null;
+  const margeMoy = periods.filter(p => marge(p) !== null).length > 0 ? (periods.filter(p => marge(p) !== null).reduce((s, p) => s + marge(p), 0) / periods.filter(p => marge(p) !== null).length).toFixed(1) : null;
+  const nbComm = periods.filter(p => p.commentaire).length;
+
+  const [openComments, setOpenComments] = useState({});
+  const toggleComment = id => setOpenComments(prev => ({ ...prev, [id]: !prev[id] }));
+  const tjmChanged = draft.tjm_vente && lastPeriod?.tjm_vente && Number(draft.tjm_vente) !== Number(lastPeriod.tjm_vente);
+
+  const inputCls = "w-full px-2 py-1.5 border text-sm focus:outline-none";
+  const labelCls = { fontSize: 10, fontWeight: 700, color: '#6B7280', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 2 };
+
+  return React.createElement('div', { className: 'mt-4 mb-2' },
+    // Header collapsable
+    React.createElement('button', { onClick: () => setOpen(!open), className: 'flex items-center gap-2 w-full text-left py-2 cursor-pointer', style: { fontSize: 11, fontWeight: 700, letterSpacing: 1, color: '#9CA3AF', textTransform: 'uppercase' } },
+      React.createElement('span', null, open ? '▼' : '▶'),
+      'Périodes de mission',
+      periods.length > 0 && React.createElement('span', { style: { background: '#F3F4F6', padding: '1px 6px', fontSize: 10, fontWeight: 700 } }, periods.length)
+    ),
+    open && React.createElement('div', null,
+      // Table des périodes
+      periods.length > 0 ? React.createElement('div', { className: 'overflow-x-auto mb-3' },
+        React.createElement('table', { className: 'w-full text-xs border-collapse' },
+          React.createElement('thead', null,
+            React.createElement('tr', { style: { borderBottom: '1px solid #E5E7EB' } },
+              ['Label', 'Début', 'Fin', 'N° Commande', 'TJM Vente', 'CJM Achat', 'Marge', ''].map((h, i) =>
+                React.createElement('th', { key: i, style: { ...labelCls, padding: '4px 6px', textAlign: 'left' } }, h)
+              )
+            )
+          ),
+          React.createElement('tbody', null,
+            periods.map((p, idx) => React.createElement(React.Fragment, { key: p.id },
+              React.createElement('tr', { style: { background: isCurrent(p) ? '#FFFBEB' : idx % 2 === 0 ? '#FAFAFA' : '#FFF', borderBottom: '1px solid #F3F4F6' } },
+                React.createElement('td', { style: { padding: '6px', fontWeight: 600, fontSize: 12, minWidth: 130 } },
+                  p.label,
+                  isCurrent(p) && React.createElement('span', { style: { marginLeft: 6, display: 'inline-block', background: '#FEF3C7', color: '#92400E', fontSize: 9, fontWeight: 700, padding: '1px 5px' } }, 'EN COURS')
+                ),
+                React.createElement('td', { style: { padding: '6px', fontSize: 12 } }, fmtD(p.debut)),
+                React.createElement('td', { style: { padding: '6px', fontSize: 12 } }, fmtD(p.fin)),
+                React.createElement('td', { style: { padding: '6px', fontSize: 11, fontFamily: 'monospace', color: '#6B7280' } }, p.numero_commande || '—'),
+                React.createElement('td', { style: { padding: '6px', fontSize: 13, fontWeight: 700 } }, p.tjm_vente ? p.tjm_vente + '€' : '—', React.createElement(DeltaTag, { prev: periods[idx - 1], curr: p, field: 'tjm_vente' })),
+                React.createElement('td', { style: { padding: '6px', fontSize: 13, fontWeight: 600 } }, p.cjm_consultant ? p.cjm_consultant + '€' : '—', React.createElement(DeltaTag, { prev: periods[idx - 1], curr: p, field: 'cjm_consultant' })),
+                React.createElement('td', { style: { padding: '6px', fontSize: 12, fontWeight: 700, color: margeColor(marge(p)) } }, marge(p) !== null ? marge(p).toFixed(1) + '%' : '—'),
+                React.createElement('td', { style: { padding: '6px', textAlign: 'center' } },
+                  React.createElement('button', { onClick: () => toggleComment(p.id), style: { opacity: p.commentaire ? 1 : 0.25, cursor: p.commentaire ? 'pointer' : 'default', fontSize: 14 }, disabled: !p.commentaire }, '\uD83D\uDCAC')
+                )
+              ),
+              openComments[p.id] && p.commentaire && React.createElement('tr', null,
+                React.createElement('td', { colSpan: 8, style: { padding: '4px 6px 8px 20px', fontSize: 13, fontStyle: 'italic', color: '#374151', background: '#F9FAFB' } }, p.commentaire)
+              )
+            ))
+          )
+        )
+      ) : React.createElement('div', { className: 'text-sm text-slate py-3' }, 'Aucune période enregistrée'),
+
+      // KPIs récap
+      periods.length > 0 && React.createElement('div', { className: 'grid grid-cols-4 gap-2 mb-3' },
+        [
+          { label: 'Durée totale', value: dureeTotal + ' mois' },
+          { label: 'TJM moyen', value: tjmMoyen ? tjmMoyen + '€' : '—' },
+          { label: 'Marge moyenne', value: margeMoy ? margeMoy + '%' : '—' },
+          { label: 'Commentaires', value: nbComm + ' / ' + periods.length },
+        ].map((kpi, i) => React.createElement('div', { key: i, style: { background: '#F9FAFB', border: '1px solid #E5E7EB', padding: '6px 8px' } },
+          React.createElement('div', { style: labelCls }, kpi.label),
+          React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: '#111' } }, kpi.value)
+        ))
+      ),
+
+      // Bouton renouveler ou formulaire
+      !adding ? React.createElement('button', { onClick: () => { resetDraft(); setAdding(true); setFormError(null); }, style: { width: '100%', padding: '8px', border: '1px dashed #D1D5DB', background: '#F9FAFB', color: '#374151', fontSize: 13, fontWeight: 500, cursor: 'pointer' } }, periods.length > 0 ? '+ Renouveler la mission' : '+ Créer la période initiale')
+      : React.createElement('div', { style: { background: '#EFF6FF', border: '1px solid #BFDBFE', padding: 12, marginTop: 4 } },
+          React.createElement('div', { style: { fontSize: 12, fontWeight: 700, marginBottom: 8, color: '#1E40AF' } }, periods.length > 0 ? 'Nouveau renouvellement' : 'Période initiale'),
+          React.createElement('div', { className: 'grid grid-cols-2 gap-2 mb-2' },
+            React.createElement('div', null, React.createElement('div', { style: labelCls }, 'Label'), React.createElement('input', { className: inputCls, value: draft.label, onChange: e => setDraft(d => ({ ...d, label: e.target.value })) })),
+            React.createElement('div', null, React.createElement('div', { style: labelCls }, 'N° Commande'), React.createElement('input', { className: inputCls, value: draft.numero_commande, onChange: e => setDraft(d => ({ ...d, numero_commande: e.target.value })) }))
+          ),
+          React.createElement('div', { className: 'grid grid-cols-2 gap-2 mb-2' },
+            React.createElement('div', null, React.createElement('div', { style: labelCls }, 'Début'), React.createElement('input', { type: 'date', className: inputCls, value: draft.debut, onChange: e => setDraft(d => ({ ...d, debut: e.target.value })) })),
+            React.createElement('div', null, React.createElement('div', { style: labelCls }, 'Fin'), React.createElement('input', { type: 'date', className: inputCls, value: draft.fin, onChange: e => setDraft(d => ({ ...d, fin: e.target.value })) }))
+          ),
+          React.createElement('div', { className: 'grid grid-cols-2 gap-2 mb-2' },
+            React.createElement('div', null, React.createElement('div', { style: labelCls }, 'TJM Vente (€)'), React.createElement('input', { type: 'number', className: inputCls, value: draft.tjm_vente, onChange: e => setDraft(d => ({ ...d, tjm_vente: e.target.value })) })),
+            React.createElement('div', null, React.createElement('div', { style: labelCls }, 'CJM Achat (€)'), React.createElement('input', { type: 'number', className: inputCls, value: draft.cjm_consultant, onChange: e => setDraft(d => ({ ...d, cjm_consultant: e.target.value })) }))
+          ),
+          tjmChanged && React.createElement('div', { style: { background: '#FEF3C7', color: '#92400E', padding: '4px 8px', fontSize: 11, fontWeight: 600, marginBottom: 8 } }, 'TJM modifié par rapport à la période précédente — explique pourquoi dans le commentaire'),
+          React.createElement('div', { className: 'mb-2' }, React.createElement('div', { style: labelCls }, 'Commentaire'), React.createElement('textarea', { className: inputCls, rows: 2, value: draft.commentaire, onChange: e => setDraft(d => ({ ...d, commentaire: e.target.value })), placeholder: 'Contexte du renouvellement...' })),
+          // Marge live
+          draft.tjm_vente && draft.cjm_consultant && Number(draft.tjm_vente) > 0 && React.createElement('div', { style: { fontSize: 11, color: '#6B7280', marginBottom: 8 } }, 'Marge estimée : ', React.createElement('strong', { style: { color: margeColor(((Number(draft.tjm_vente) - Number(draft.cjm_consultant)) / Number(draft.tjm_vente) * 100)) } }, ((Number(draft.tjm_vente) - Number(draft.cjm_consultant)) / Number(draft.tjm_vente) * 100).toFixed(1) + '%')),
+          formError && React.createElement('div', { style: { color: '#991B1B', fontSize: 12, marginBottom: 8, fontWeight: 600 } }, formError),
+          React.createElement('div', { className: 'flex gap-2' },
+            React.createElement('button', { onClick: handleConfirm, disabled: saving || !draft.debut || !draft.fin, style: { padding: '6px 16px', background: '#111', color: '#FFF', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: saving || !draft.debut || !draft.fin ? 0.5 : 1 } }, saving ? 'Enregistrement...' : 'Confirmer'),
+            React.createElement('button', { onClick: () => { setAdding(false); setFormError(null); }, style: { padding: '6px 16px', background: '#F3F4F6', color: '#374151', fontSize: 12, fontWeight: 500, cursor: 'pointer' } }, 'Annuler')
+          )
+        )
+    )
+  );
+}
+
+async function syncMissionFromPeriods(missionId) {
+  const { data: ps } = await sb.from('mission_periods').select('*').eq('mission_id', missionId).order('debut', { ascending: true });
+  if (!ps || ps.length === 0) return;
+  const last = ps[ps.length - 1];
+  const maxFin = ps.reduce((mx, p) => p.fin > mx ? p.fin : mx, ps[0].fin);
+  await sb.from('missions').update({ date_fin_mission: maxFin, tjm: last.tjm_vente ? Number(last.tjm_vente) : undefined, cjm: last.cjm_consultant ? Number(last.cjm_consultant) : undefined }).eq('id', missionId);
+}
+
 // ── Panel : Détail mission ────────────────────────────────────────────────────
-function MissionDetail({ mission, histMissions, contacts, taches, missions, besoins, profile, allProfiles, onClose, onRefresh, onNavToContact, onNavToBesoin, onNavToTache }) {
+function MissionDetail({ mission, histMissions, missionPeriods, contacts, taches, missions, besoins, profile, allProfiles, onClose, onRefresh, onNavToContact, onNavToBesoin, onNavToTache }) {
   const [showAdd,setShowAdd] = useState(false);
   const [modal,setModal]=useState(null);
   const [viewContact,setViewContact]=useState(null);
@@ -1957,6 +2113,9 @@ function MissionDetail({ mission, histMissions, contacts, taches, missions, beso
             ))}</div>
           </div>
         )}
+
+        {/* Périodes de mission */}
+        <MissionPeriodesSection missionId={mission.id} periods={missionPeriods||[]} profile={profile} onPeriodsChange={onRefresh}/>
 
         {/* Historique */}
         <div>
@@ -4423,7 +4582,7 @@ function EditableJoursGridCell({ mission, moisKey, moisIdx, onUpdate }) {
 }
 
 // ── Onglet TDB Missions ───────────────────────────────────────────────────────
-function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, allProfiles, commerciauxParAgence, onRefresh, navMissionId, navMissionKey, onNavToContact, onNavToBesoin, onNavToTache, prefs }) {
+function TabTDB({ missions, histMissions, missionPeriods, contacts, taches, besoins, profile, allProfiles, commerciauxParAgence, onRefresh, navMissionId, navMissionKey, onNavToContact, onNavToBesoin, onNavToTache, prefs }) {
   const [selected,setSelected] = useState(null); const [showAdd,setShowAdd]=useState(false);
   useEffect(()=>{ if(navMissionId){ const m=missions.find(x=>String(x.id)===String(navMissionId)); if(m) setSelected(m); } },[navMissionKey]);
   const [search,setSearch] = useState(''); const [filterStatut,setFilterStatut] = useState(prefs?.missions_filter_statut||'');
@@ -4718,7 +4877,7 @@ function TabTDB({ missions, histMissions, contacts, taches, besoins, profile, al
         </div>
       </div>
 
-      {selected&&<MissionDetail mission={selected} histMissions={histMissions} contacts={contacts||[]} taches={taches||[]} missions={missions||[]} besoins={besoins||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}} onNavToContact={onNavToContact} onNavToBesoin={onNavToBesoin} onNavToTache={onNavToTache}/>}
+      {selected&&<MissionDetail mission={selected} histMissions={histMissions} missionPeriods={(missionPeriods||[]).filter(p=>p.mission_id===selected.id)} contacts={contacts||[]} taches={taches||[]} missions={missions||[]} besoins={besoins||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}} onNavToContact={onNavToContact} onNavToBesoin={onNavToBesoin} onNavToTache={onNavToTache}/>}
       {showAdd&&<MissionFormModal profile={profile} allProfiles={allProfiles} contacts={contacts||[]} besoins={besoins||[]} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
     </div>
   );
@@ -6597,6 +6756,7 @@ function App() {
         {data:taches,    error:e3},{data:besoins,   error:e4},
         {data:missions,  error:e5},{data:histMiss,  error:e6},
         {data:besoinCandidats,error:e7},
+        {data:missionPeriods,error:e8},
       ] = await Promise.all([
         sb.from('contacts').select('*').order('id').limit(10000),
         sb.from('historique_actions').select('*').order('date',{ascending:false}).limit(10000),
@@ -6605,6 +6765,7 @@ function App() {
         sb.from('missions').select('*').order('consultant').limit(5000),
         sb.from('historique_missions').select('*').order('date',{ascending:false}).limit(10000),
         sb.from('besoin_candidats').select('*').order('created_at',{ascending:true}).limit(5000),
+        sb.from('mission_periods').select('*').order('debut',{ascending:true}).limit(10000),
       ]);
       const err=e1||e2||e3||e4;
       if(err) throw new Error(err.message);
@@ -6636,7 +6797,7 @@ function App() {
           }));
         }
       }
-      setData({contacts,historique,taches,besoins,missions:mList,histMissions:histMiss||[],besoinCandidats:besoinCandidats||[]});
+      setData({contacts,historique,taches,besoins,missions:mList,histMissions:histMiss||[],besoinCandidats:besoinCandidats||[],missionPeriods:missionPeriods||[]});
       setLastRefresh(new Date().toLocaleTimeString('fr-FR'));
     } catch(err){ setError(err.message); } finally{ setLoading(false); }
   },[]);
@@ -6705,7 +6866,7 @@ function App() {
   if(!data||!profile) return <Loader label="Chargement depuis Supabase..."/>;
   if(error) return <div className="flex items-center justify-center min-h-screen"><div className="bg-coral-20 border border-coral-20 p-6 max-w-md text-center"><div className="text-3xl mb-3">❌</div><div className="font-semibold text-coral-100">Erreur Supabase</div><div className="text-sm text-coral-100 mt-2 font-mono">{error}</div><button onClick={fetchAll} className="mt-4 px-4 py-2 bg-coral-100 text-white rounded-lg text-sm">Réessayer</button></div></div>;
 
-  const {contacts,historique,taches,besoins,missions,histMissions,besoinCandidats}=data;
+  const {contacts,historique,taches,besoins,missions,histMissions,besoinCandidats,missionPeriods}=data;
   const contactMap = Object.fromEntries(contacts.map(c=>[c.id,c]));
   const commerciauxParAgence={};
   allProfiles.forEach(p=>{if(p.agence&&p.nom){if(!commerciauxParAgence[p.agence])commerciauxParAgence[p.agence]=[];commerciauxParAgence[p.agence].push(p.nom);}});
@@ -6828,7 +6989,7 @@ function App() {
         {tab==='besoins'  &&<TabBesoins  contacts={vContacts} contactMap={contactMap} besoins={vBesoins} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navBesoinId={navBesoinId} navBesoinKey={navBesoinKey} onNavToContact={navToContact} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
         {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} prefs={prefs}/>}
         {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} contactMap={contactMap} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache}/>}
-        {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navMissionId={navMissionId} navMissionKey={navMissionKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache} prefs={prefs}/>}
+        {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} missionPeriods={missionPeriods} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navMissionId={navMissionId} navMissionKey={navMissionKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache} prefs={prefs}/>}
         {tab==='settings' &&<TabSettings user={user} profile={activeProfile} taches={vTaches} subTab={settingsSubTab} onSubTabChange={setSettingsSubTab} prefs={prefs} onSavePrefs={viewAs?null:savePrefs} achievements={activeAchievements} viewAs={!!viewAs}/>}
       </div>
       {/* Shortcuts modal */}
