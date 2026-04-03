@@ -1983,7 +1983,7 @@ function MissionPeriodesSection({ missionId, periods, profile, onPeriodsChange }
           ),
           React.createElement('tbody', null,
             periods.map((p, idx) =>
-              React.createElement('tr', { key: p.id, onClick: () => startEdit(p), className: 'cursor-pointer transition-colors hover:bg-lemon-20', style: { background: editingId === p.id ? '#FEF3C7' : isCurrent(p) ? '#FFFBEB' : 'transparent', borderBottom: '1px solid #F3F4F6' } },
+              React.createElement('tr', { key: p.id, onClick: () => startEdit(p), className: 'cursor-pointer transition-colors', style: { background: editingId === p.id ? '#DBEAFE' : isCurrent(p) ? '#FFFBEB' : 'transparent', borderBottom: '1px solid #F3F4F6' }, onMouseEnter: e => { if (editingId !== p.id) e.currentTarget.style.background = '#F3F4F6'; }, onMouseLeave: e => { e.currentTarget.style.background = editingId === p.id ? '#DBEAFE' : isCurrent(p) ? '#FFFBEB' : 'transparent'; } },
                 React.createElement('td', { style: { padding: '6px', fontWeight: 600, fontSize: 12 } },
                   p.label,
                   isCurrent(p) && React.createElement('span', { style: { marginLeft: 6, display: 'inline-block', background: '#FEF3C7', color: '#92400E', fontSize: 9, fontWeight: 700, padding: '1px 5px' } }, 'EN COURS'),
@@ -2004,7 +2004,7 @@ function MissionPeriodesSection({ missionId, periods, profile, onPeriodsChange }
       // Vue mobile — cartes cliquables
       periods.length > 0 && React.createElement('div', { className: 'sm:hidden space-y-2 mb-3' },
         periods.map((p, idx) =>
-          React.createElement('div', { key: p.id, onClick: () => startEdit(p), className: 'cursor-pointer transition-colors', style: { padding: '8px 10px', border: '1px solid ' + (editingId === p.id ? '#FBBF24' : '#E5E7EB'), background: editingId === p.id ? '#FEF3C7' : isCurrent(p) ? '#FFFBEB' : '#FAFAFA' } },
+          React.createElement('div', { key: p.id, onClick: () => startEdit(p), className: 'cursor-pointer transition-colors', style: { padding: '8px 10px', border: '1px solid ' + (editingId === p.id ? '#93C5FD' : '#E5E7EB'), background: editingId === p.id ? '#DBEAFE' : isCurrent(p) ? '#FFFBEB' : '#FAFAFA' } },
             React.createElement('div', { className: 'flex items-center justify-between mb-1' },
               React.createElement('span', { style: { fontWeight: 600, fontSize: 13 } }, p.label),
               React.createElement('span', { style: { fontSize: 11, color: '#6B7280' } }, fmtD(p.debut), ' → ', fmtD(p.fin))
