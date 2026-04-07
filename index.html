@@ -2075,11 +2075,17 @@ async function syncMissionFromPeriods(missionId) {
   const { data: ps } = await sb.from('mission_periods').select('*').eq('mission_id', missionId).order('debut', { ascending: true });
   if (!ps || ps.length === 0) return;
   const active = getActivePeriod(ps);
+  const today = new Date().toISOString().slice(0,10);
   const maxFin = ps.reduce((mx, p) => p.fin > mx ? p.fin : mx, ps[0].fin);
   const patch = { date_fin_mission: maxFin };
   if (active) {
     if (active.tjm_vente) patch.tjm = Number(active.tjm_vente);
     if (active.cjm_consultant) patch.cjm = Number(active.cjm_consultant);
+  }
+  // Mission terminée mais une période couvre aujourd'hui → repasser en cours
+  if (maxFin >= today) {
+    const { data: m } = await sb.from('missions').select('statut').eq('id', missionId).single();
+    if (m && m.statut === 'Terminée') patch.statut = 'En cours';
   }
   await sb.from('missions').update(patch).eq('id', missionId);
 }
