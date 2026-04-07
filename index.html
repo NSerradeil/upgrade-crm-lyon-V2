@@ -6877,14 +6877,24 @@ function App() {
       const mList=missions||[];
       // Auto-status missions : New→En cours si démarrée, En cours→Terminée si date fin dépassée
       const today=new Date().toISOString().slice(0,10);
+      const periodsList=missionPeriods||[];
       const autoUpdates=mList.filter(m=>{
         if(m.statut==='New'&&m.date_debut_mission&&m.date_debut_mission.slice(0,10)<=today) return true;
-        if(m.statut==='En cours'&&m.date_fin_mission&&m.date_fin_mission.slice(0,10)<today) return true;
+        if(m.statut==='En cours'&&m.date_fin_mission&&m.date_fin_mission.slice(0,10)<today){
+          // Ne pas terminer si une période couvre aujourd'hui
+          const hasPeriodCoveringToday=periodsList.some(p=>p.mission_id===m.id&&p.debut<=today&&p.fin>=today);
+          if(hasPeriodCoveringToday) return false;
+          return true;
+        }
         return false;
       });
-      if(autoUpdates.length>0){
-        await Promise.all(autoUpdates.map(m=>{
-          const newStatut=m.statut==='New'?'En cours':'Terminée';
+      // Missions terminées mais avec une période couvrant aujourd'hui → repasser en cours
+      const reactivate=mList.filter(m=>m.statut==='Terminée'&&periodsList.some(p=>p.mission_id===m.id&&p.debut<=today&&p.fin>=today));
+      reactivate.forEach(m=>{m.statut='En cours';});
+      const allAutoUpdates=[...autoUpdates,...reactivate];
+      if(allAutoUpdates.length>0){
+        await Promise.all(allAutoUpdates.map(m=>{
+          const newStatut=m.statut==='New'?'En cours':m.statut;
           m.statut=newStatut;
           return sb.from('missions').update({statut:newStatut}).eq('id',m.id);
         }));
