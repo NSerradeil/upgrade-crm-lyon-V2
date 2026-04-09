@@ -3862,6 +3862,7 @@ function KanbanBesoins({ besoins, contacts, contactMap, besoinCandidats, onSelec
                       :candidatLegacy&&<div className="text-xs text-azure-100 truncate"><Icon d={ICONS.person} size={12}/> {candidatLegacy.prenom} {candidatLegacy.nom}</div>
                     }
                     {b.statut==='Besoin Gagné'&&ca>0&&<div className="text-xs text-jade-100 font-medium">{fmtCurrency(ca)}</div>}
+                    {b.created_at&&<div className="text-[10px] text-neutral-300 mt-1">{new Date(b.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'})} · {Math.max(0,Math.round((Date.now()-new Date(b.created_at))/(86400000)))}j</div>}
                   </div>
                 );
               })}
@@ -4010,6 +4011,7 @@ function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique
                               </div>
                             )}
                             {b.date_entretien&&<div className="text-xs text-neutral-300 mt-1"><Icon d={ICONS.calendar} size={12}/> {new Date(b.date_entretien).toLocaleString('fr-FR',{timeZone:TZ})}</div>}
+                            {b.created_at&&<div className="text-[10px] text-neutral-300 mt-1">Créé le {new Date(b.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'})} · {Math.max(0,Math.round((Date.now()-new Date(b.created_at))/(86400000)))}j</div>}
                           </div>
                           <div className="shrink-0 text-xs text-neutral-300">{b.responsable}</div>
                         </div>
