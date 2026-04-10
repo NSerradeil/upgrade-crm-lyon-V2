@@ -1910,10 +1910,10 @@ function MissionPeriodesSection({ missionId, periods, profile, onPeriodsChange }
   const fmtD = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
   const DeltaTag = ({ prev, curr, field }) => {
     if (!prev || !prev[field] || !curr[field]) return null;
-    const label = fmtDelta(prev[field], curr[field]);
-    if (!label) return null;
+    const dlabel = fmtDelta(prev[field], curr[field]);
+    if (!dlabel) return null;
     const diff = Number(curr[field]) - Number(prev[field]);
-    return React.createElement('span', { style: { display: 'inline-block', marginLeft: 4, padding: '1px 5px', fontSize: 10, fontWeight: 700, borderRadius: 2, background: diff > 0 ? '#D1FAE5' : '#FEE2E2', color: diff > 0 ? '#065F46' : '#991B1B' } }, label);
+    return <span style={{ display: 'inline-block', marginLeft: 4, padding: '1px 5px', fontSize: 10, fontWeight: 700, borderRadius: 2, background: diff > 0 ? '#D1FAE5' : '#FEE2E2', color: diff > 0 ? '#065F46' : '#991B1B' }}>{dlabel}</span>;
   };
   const isCurrent = p => p.debut <= today && p.fin >= today;
   const marge = p => (p.tjm_vente && p.cjm_consultant && Number(p.tjm_vente) > 0) ? ((Number(p.tjm_vente) - Number(p.cjm_consultant)) / Number(p.tjm_vente) * 100) : null;
@@ -1934,134 +1934,133 @@ function MissionPeriodesSection({ missionId, periods, profile, onPeriodsChange }
   const inputCls = "w-full px-2 py-1.5 border text-sm focus:outline-none";
   const labelCls = { fontSize: 10, fontWeight: 700, color: '#6B7280', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 2 };
 
-  // Formulaire partagé (ajout + édition)
-  const renderForm = (title) => React.createElement('div', { style: editingId && !title ? {} : { background: '#EFF6FF', border: '1px solid #BFDBFE', padding: 12, marginTop: 4 } },
-    title && React.createElement('div', { style: { fontSize: 12, fontWeight: 700, marginBottom: 8, color: '#1E40AF' } }, title),
-    React.createElement('div', { className: 'grid grid-cols-2 gap-2 mb-2' },
-      React.createElement('div', null, React.createElement('div', { style: labelCls }, 'Label'), React.createElement('input', { className: inputCls, value: draft.label, onChange: e => setDraft(d => ({ ...d, label: e.target.value })) })),
-      React.createElement('div', null, React.createElement('div', { style: labelCls }, 'N° Commande'), React.createElement('input', { className: inputCls, value: draft.numero_commande, onChange: e => setDraft(d => ({ ...d, numero_commande: e.target.value })) }))
-    ),
-    React.createElement('div', { className: 'grid grid-cols-2 gap-2 mb-2' },
-      React.createElement('div', null, React.createElement('div', { style: labelCls }, 'Début'), React.createElement('input', { type: 'date', className: inputCls, value: draft.debut, onChange: e => setDraft(d => ({ ...d, debut: e.target.value })) })),
-      React.createElement('div', null, React.createElement('div', { style: labelCls }, 'Fin'), React.createElement('input', { type: 'date', className: inputCls, value: draft.fin, onChange: e => setDraft(d => ({ ...d, fin: e.target.value })) }))
-    ),
-    React.createElement('div', { className: 'grid grid-cols-2 gap-2 mb-2' },
-      React.createElement('div', null, React.createElement('div', { style: labelCls }, 'TJM Vente (€)'), React.createElement('input', { type: 'number', className: inputCls, value: draft.tjm_vente, onChange: e => setDraft(d => ({ ...d, tjm_vente: e.target.value })) })),
-      React.createElement('div', null, React.createElement('div', { style: labelCls }, 'CJM Achat (€)'), React.createElement('input', { type: 'number', className: inputCls, value: draft.cjm_consultant, onChange: e => setDraft(d => ({ ...d, cjm_consultant: e.target.value })) }))
-    ),
-    tjmChanged && React.createElement('div', { style: { background: '#FEF3C7', color: '#92400E', padding: '4px 8px', fontSize: 11, fontWeight: 600, marginBottom: 8 } }, 'TJM modifié — explique pourquoi dans le commentaire'),
-    React.createElement('div', { className: 'mb-2' }, React.createElement('div', { style: labelCls }, 'Commentaire'), React.createElement('textarea', { className: inputCls, rows: 2, value: draft.commentaire, onChange: e => setDraft(d => ({ ...d, commentaire: e.target.value })), placeholder: 'Contexte du renouvellement...' })),
-    draft.tjm_vente && draft.cjm_consultant && Number(draft.tjm_vente) > 0 && React.createElement('div', { style: { fontSize: 11, color: '#6B7280', marginBottom: 8 } }, 'Marge estimée : ', React.createElement('strong', { style: { color: margeColor(((Number(draft.tjm_vente) - Number(draft.cjm_consultant)) / Number(draft.tjm_vente) * 100)) } }, ((Number(draft.tjm_vente) - Number(draft.cjm_consultant)) / Number(draft.tjm_vente) * 100).toFixed(1) + '%')),
-    formError && React.createElement('div', { style: { color: '#991B1B', fontSize: 12, marginBottom: 8, fontWeight: 600 } }, formError),
-    React.createElement('div', { className: 'flex gap-2' },
-      React.createElement('button', { onClick: handleConfirm, disabled: saving || !draft.debut || !draft.fin, style: { padding: '6px 16px', background: '#111', color: '#FFF', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: saving || !draft.debut || !draft.fin ? 0.5 : 1 } }, saving ? 'Enregistrement...' : editingId ? 'Enregistrer' : 'Confirmer'),
-      React.createElement('button', { onClick: () => { if (editingId) cancelEdit(); else { setAdding(false); setFormError(null); } }, style: { padding: '6px 16px', background: '#F3F4F6', color: '#374151', fontSize: 12, fontWeight: 500, cursor: 'pointer' } }, 'Annuler')
-    )
+  const editedPeriod = editingId ? periods.find(p => p.id === editingId) : null;
+  const panelRef = useRef(null);
+  useEffect(() => { if ((editingId || adding) && panelRef.current) panelRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, [editingId, adding]);
+  const draftMargeVal = draft.tjm_vente && draft.cjm_consultant && Number(draft.tjm_vente) > 0 ? ((Number(draft.tjm_vente) - Number(draft.cjm_consultant)) / Number(draft.tjm_vente) * 100) : null;
+
+  const renderForm = (title) => (
+    <div style={editingId && !title ? {} : { background: '#EFF6FF', border: '1px solid #BFDBFE', padding: 12, marginTop: 4 }}>
+      {title && <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: '#1E40AF' }}>{title}</div>}
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <div><div style={labelCls}>Label</div><input className={inputCls} value={draft.label} onChange={e => setDraft(d => ({ ...d, label: e.target.value }))}/></div>
+        <div><div style={labelCls}>N° Commande</div><input className={inputCls} value={draft.numero_commande} onChange={e => setDraft(d => ({ ...d, numero_commande: e.target.value }))}/></div>
+      </div>
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <div><div style={labelCls}>Début</div><input type="date" className={inputCls} value={draft.debut} onChange={e => setDraft(d => ({ ...d, debut: e.target.value }))}/></div>
+        <div><div style={labelCls}>Fin</div><input type="date" className={inputCls} value={draft.fin} onChange={e => setDraft(d => ({ ...d, fin: e.target.value }))}/></div>
+      </div>
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <div><div style={labelCls}>TJM Vente (€)</div><input type="number" className={inputCls} value={draft.tjm_vente} onChange={e => setDraft(d => ({ ...d, tjm_vente: e.target.value }))}/></div>
+        <div><div style={labelCls}>CJM Achat (€)</div><input type="number" className={inputCls} value={draft.cjm_consultant} onChange={e => setDraft(d => ({ ...d, cjm_consultant: e.target.value }))}/></div>
+      </div>
+      {tjmChanged && <div style={{ background: '#FEF3C7', color: '#92400E', padding: '4px 8px', fontSize: 11, fontWeight: 600, marginBottom: 8 }}>TJM modifié — explique pourquoi dans le commentaire</div>}
+      <div className="mb-2"><div style={labelCls}>Commentaire</div><textarea className={inputCls} rows={2} value={draft.commentaire} onChange={e => setDraft(d => ({ ...d, commentaire: e.target.value }))} placeholder="Contexte du renouvellement..."/></div>
+      {draftMargeVal !== null && <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 8 }}>Marge estimée : <strong style={{ color: margeColor(draftMargeVal) }}>{draftMargeVal.toFixed(1)}%</strong></div>}
+      {formError && <div style={{ color: '#991B1B', fontSize: 12, marginBottom: 8, fontWeight: 600 }}>{formError}</div>}
+      <div className="flex gap-2">
+        <button onClick={handleConfirm} disabled={saving || !draft.debut || !draft.fin} style={{ padding: '6px 16px', background: '#111', color: '#FFF', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: saving || !draft.debut || !draft.fin ? 0.5 : 1 }}>{saving ? 'Enregistrement...' : editingId ? 'Enregistrer' : 'Confirmer'}</button>
+        <button onClick={() => { if (editingId) cancelEdit(); else { setAdding(false); setFormError(null); } }} style={{ padding: '6px 16px', background: '#F3F4F6', color: '#374151', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>Annuler</button>
+      </div>
+    </div>
   );
 
-  const editedPeriod = editingId ? periods.find(p => p.id === editingId) : null;
-  const panelRef = React.useRef(null);
-  useEffect(() => { if ((editingId || adding) && panelRef.current) panelRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, [editingId, adding]);
+  return (
+    <div className="mt-4 mb-2">
+      <button onClick={() => setOpen(!open)} className="flex items-center gap-2 w-full text-left py-2 cursor-pointer" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, color: '#9CA3AF', textTransform: 'uppercase' }}>
+        <span>{open ? '▼' : '▶'}</span>
+        Périodes de mission
+        {periods.length > 0 && <span style={{ background: '#F3F4F6', padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>{periods.length}</span>}
+      </button>
+      {open && <div>
+        {/* Table desktop */}
+        {periods.length > 0 && <div className="hidden sm:block mb-3">
+          <table className="w-full text-xs border-collapse">
+            <thead><tr style={{ borderBottom: '1px solid #E5E7EB' }}>
+              {['Label', 'Début', 'Fin', 'N° Cmd', 'TJM', 'CJM', 'Marge'].map((h, i) => <th key={i} style={{ ...labelCls, padding: '4px 6px', textAlign: 'left' }}>{h}</th>)}
+            </tr></thead>
+            <tbody>{periods.map((p, idx) =>
+              <tr key={p.id} onClick={() => startEdit(p)} className="cursor-pointer transition-colors"
+                style={{ background: editingId === p.id ? '#DBEAFE' : isCurrent(p) ? '#FFFBEB' : 'transparent', borderBottom: '1px solid #F3F4F6' }}
+                onMouseEnter={e => { if (editingId !== p.id) e.currentTarget.style.background = '#F3F4F6'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = editingId === p.id ? '#DBEAFE' : isCurrent(p) ? '#FFFBEB' : 'transparent'; }}>
+                <td style={{ padding: '6px', fontWeight: 600, fontSize: 12 }}>
+                  {p.label}
+                  {isCurrent(p) && <span style={{ marginLeft: 6, display: 'inline-block', background: '#FEF3C7', color: '#92400E', fontSize: 9, fontWeight: 700, padding: '1px 5px' }}>EN COURS</span>}
+                  {p.commentaire && <span style={{ marginLeft: 4, fontSize: 12, opacity: 0.4 }}>{'\uD83D\uDCAC'}</span>}
+                </td>
+                <td style={{ padding: '6px', fontSize: 12 }}>{fmtD(p.debut)}</td>
+                <td style={{ padding: '6px', fontSize: 12 }}>{fmtD(p.fin)}</td>
+                <td style={{ padding: '6px', fontSize: 11, fontFamily: 'monospace', color: '#6B7280' }}>{p.numero_commande || '—'}</td>
+                <td style={{ padding: '6px', fontSize: 13, fontWeight: 700 }}>{fmtM(p.tjm_vente)}<DeltaTag prev={periods[idx - 1]} curr={p} field="tjm_vente"/></td>
+                <td style={{ padding: '6px', fontSize: 13, fontWeight: 600 }}>{fmtM(p.cjm_consultant)}<DeltaTag prev={periods[idx - 1]} curr={p} field="cjm_consultant"/></td>
+                <td style={{ padding: '6px', fontSize: 12, fontWeight: 700, color: margeColor(marge(p)) }}>{marge(p) !== null ? marge(p).toFixed(1) + '%' : '—'}</td>
+              </tr>
+            )}</tbody>
+          </table>
+        </div>}
 
-  return React.createElement('div', { className: 'mt-4 mb-2' },
-    // Header collapsable
-    React.createElement('button', { onClick: () => setOpen(!open), className: 'flex items-center gap-2 w-full text-left py-2 cursor-pointer', style: { fontSize: 11, fontWeight: 700, letterSpacing: 1, color: '#9CA3AF', textTransform: 'uppercase' } },
-      React.createElement('span', null, open ? '▼' : '▶'),
-      'Périodes de mission',
-      periods.length > 0 && React.createElement('span', { style: { background: '#F3F4F6', padding: '1px 6px', fontSize: 10, fontWeight: 700 } }, periods.length)
-    ),
-    open && React.createElement('div', null,
-      // Table desktop — lignes cliquables, 7 colonnes
-      periods.length > 0 && React.createElement('div', { className: 'hidden sm:block mb-3' },
-        React.createElement('table', { className: 'w-full text-xs border-collapse' },
-          React.createElement('thead', null,
-            React.createElement('tr', { style: { borderBottom: '1px solid #E5E7EB' } },
-              ['Label', 'Début', 'Fin', 'N° Cmd', 'TJM', 'CJM', 'Marge'].map((h, i) =>
-                React.createElement('th', { key: i, style: { ...labelCls, padding: '4px 6px', textAlign: 'left' } }, h)
-              )
-            )
-          ),
-          React.createElement('tbody', null,
-            periods.map((p, idx) =>
-              React.createElement('tr', { key: p.id, onClick: () => startEdit(p), className: 'cursor-pointer transition-colors', style: { background: editingId === p.id ? '#DBEAFE' : isCurrent(p) ? '#FFFBEB' : 'transparent', borderBottom: '1px solid #F3F4F6' }, onMouseEnter: e => { if (editingId !== p.id) e.currentTarget.style.background = '#F3F4F6'; }, onMouseLeave: e => { e.currentTarget.style.background = editingId === p.id ? '#DBEAFE' : isCurrent(p) ? '#FFFBEB' : 'transparent'; } },
-                React.createElement('td', { style: { padding: '6px', fontWeight: 600, fontSize: 12 } },
-                  p.label,
-                  isCurrent(p) && React.createElement('span', { style: { marginLeft: 6, display: 'inline-block', background: '#FEF3C7', color: '#92400E', fontSize: 9, fontWeight: 700, padding: '1px 5px' } }, 'EN COURS'),
-                  p.commentaire && React.createElement('span', { style: { marginLeft: 4, fontSize: 12, opacity: 0.4 } }, '\uD83D\uDCAC')
-                ),
-                React.createElement('td', { style: { padding: '6px', fontSize: 12 } }, fmtD(p.debut)),
-                React.createElement('td', { style: { padding: '6px', fontSize: 12 } }, fmtD(p.fin)),
-                React.createElement('td', { style: { padding: '6px', fontSize: 11, fontFamily: 'monospace', color: '#6B7280' } }, p.numero_commande || '—'),
-                React.createElement('td', { style: { padding: '6px', fontSize: 13, fontWeight: 700 } }, fmtM(p.tjm_vente), React.createElement(DeltaTag, { prev: periods[idx - 1], curr: p, field: 'tjm_vente' })),
-                React.createElement('td', { style: { padding: '6px', fontSize: 13, fontWeight: 600 } }, fmtM(p.cjm_consultant), React.createElement(DeltaTag, { prev: periods[idx - 1], curr: p, field: 'cjm_consultant' })),
-                React.createElement('td', { style: { padding: '6px', fontSize: 12, fontWeight: 700, color: margeColor(marge(p)) } }, marge(p) !== null ? marge(p).toFixed(1) + '%' : '—')
-              )
-            )
-          )
-        )
-      ),
+        {/* Vue mobile */}
+        {periods.length > 0 && <div className="sm:hidden space-y-2 mb-3">
+          {periods.map((p, idx) =>
+            <div key={p.id} onClick={() => startEdit(p)} className="cursor-pointer transition-colors"
+              style={{ padding: '8px 10px', border: '1px solid ' + (editingId === p.id ? '#93C5FD' : '#E5E7EB'), background: editingId === p.id ? '#DBEAFE' : isCurrent(p) ? '#FFFBEB' : '#FAFAFA' }}>
+              <div className="flex items-center justify-between mb-1">
+                <span style={{ fontWeight: 600, fontSize: 13 }}>{p.label}</span>
+                <span style={{ fontSize: 11, color: '#6B7280' }}>{fmtD(p.debut)} → {fmtD(p.fin)}</span>
+              </div>
+              <div className="flex items-center gap-3 text-xs flex-wrap">
+                <span>TJM <strong>{fmtM(p.tjm_vente)}</strong><DeltaTag prev={periods[idx - 1]} curr={p} field="tjm_vente"/></span>
+                <span>CJM <strong>{fmtM(p.cjm_consultant)}</strong></span>
+                <span style={{ fontWeight: 700, color: margeColor(marge(p)) }}>{marge(p) !== null ? marge(p).toFixed(1) + '%' : '—'}</span>
+                {isCurrent(p) && <span style={{ background: '#FEF3C7', color: '#92400E', fontSize: 9, fontWeight: 700, padding: '1px 5px' }}>EN COURS</span>}
+              </div>
+            </div>
+          )}
+        </div>}
 
-      // Vue mobile — cartes cliquables
-      periods.length > 0 && React.createElement('div', { className: 'sm:hidden space-y-2 mb-3' },
-        periods.map((p, idx) =>
-          React.createElement('div', { key: p.id, onClick: () => startEdit(p), className: 'cursor-pointer transition-colors', style: { padding: '8px 10px', border: '1px solid ' + (editingId === p.id ? '#93C5FD' : '#E5E7EB'), background: editingId === p.id ? '#DBEAFE' : isCurrent(p) ? '#FFFBEB' : '#FAFAFA' } },
-            React.createElement('div', { className: 'flex items-center justify-between mb-1' },
-              React.createElement('span', { style: { fontWeight: 600, fontSize: 13 } }, p.label),
-              React.createElement('span', { style: { fontSize: 11, color: '#6B7280' } }, fmtD(p.debut), ' → ', fmtD(p.fin))
-            ),
-            React.createElement('div', { className: 'flex items-center gap-3 text-xs' },
-              React.createElement('span', null, 'TJM ', React.createElement('strong', null, fmtM(p.tjm_vente)), React.createElement(DeltaTag, { prev: periods[idx - 1], curr: p, field: 'tjm_vente' })),
-              React.createElement('span', null, 'CJM ', React.createElement('strong', null, fmtM(p.cjm_consultant))),
-              React.createElement('span', { style: { fontWeight: 700, color: margeColor(marge(p)) } }, marge(p) !== null ? marge(p).toFixed(1) + '%' : '—'),
-              isCurrent(p) && React.createElement('span', { style: { background: '#FEF3C7', color: '#92400E', fontSize: 9, fontWeight: 700, padding: '1px 5px' } }, 'EN COURS')
-            )
-          )
-        )
-      ),
+        {periods.length === 0 && <div className="text-sm text-slate py-3">Aucune période enregistrée</div>}
 
-      // Aucune période
-      periods.length === 0 && React.createElement('div', { className: 'text-sm text-slate py-3' }, 'Aucune période enregistrée'),
+        {/* KPIs */}
+        {periods.length > 0 && <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+          {[
+            { l: 'Durée totale', v: dureeTotal + ' mois' },
+            { l: 'TJM moyen', v: tjmMoyen ? tjmMoyen + '€' : '—' },
+            { l: 'Marge moyenne', v: margeMoy ? margeMoy + '%' : '—' },
+            { l: 'Commentaires', v: nbComm + ' / ' + periods.length },
+          ].map((kpi, i) => <div key={i} style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', padding: '6px 8px' }}>
+            <div style={labelCls}>{kpi.l}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#111' }}>{kpi.v}</div>
+          </div>)}
+        </div>}
 
-      // KPIs récap
-      periods.length > 0 && React.createElement('div', { className: 'grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3' },
-        [
-          { label: 'Durée totale', value: dureeTotal + ' mois' },
-          { label: 'TJM moyen', value: tjmMoyen ? tjmMoyen + '€' : '—' },
-          { label: 'Marge moyenne', value: margeMoy ? margeMoy + '%' : '—' },
-          { label: 'Commentaires', value: nbComm + ' / ' + periods.length },
-        ].map((kpi, i) => React.createElement('div', { key: i, style: { background: '#F9FAFB', border: '1px solid #E5E7EB', padding: '6px 8px' } },
-          React.createElement('div', { style: labelCls }, kpi.label),
-          React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: '#111' } }, kpi.value)
-        ))
-      ),
+        {/* Panel édition */}
+        {editingId && <div ref={panelRef} style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', padding: 12, marginBottom: 8 }}>
+          <div className="flex items-center justify-between mb-2">
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#1E40AF' }}>Modifier : {editedPeriod?.label || ''}</span>
+            <div className="flex items-center gap-3">
+              {confirmDeleteId === editingId
+                ? <span className="flex items-center gap-2" style={{ fontSize: 12 }}>
+                    <span style={{ color: '#991B1B', fontWeight: 600 }}>Supprimer cette période ?</span>
+                    <button onClick={() => handleDelete(editingId)} style={{ color: '#991B1B', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>Oui</button>
+                    <button onClick={() => setConfirmDeleteId(null)} style={{ color: '#6B7280', cursor: 'pointer' }}>Non</button>
+                  </span>
+                : <button onClick={e => { e.stopPropagation(); setConfirmDeleteId(editingId); }} style={{ fontSize: 18, cursor: 'pointer', opacity: 0.4, lineHeight: 1 }} className="hover:opacity-100" title="Supprimer">{'\u00D7'}</button>
+              }
+              <button onClick={cancelEdit} style={{ fontSize: 18, cursor: 'pointer', opacity: 0.4, lineHeight: 1 }} className="hover:opacity-100" title="Fermer">{'\u2715'}</button>
+            </div>
+          </div>
+          {editedPeriod?.commentaire && !draft.commentaire && <div style={{ fontSize: 12, fontStyle: 'italic', color: '#374151', background: '#F0F9FF', padding: '4px 8px', marginBottom: 8 }}>{editedPeriod.commentaire}</div>}
+          {renderForm(null)}
+        </div>}
 
-      // Panel édition ancré en bas (affiché quand on clique une ligne)
-      editingId && React.createElement('div', { ref: panelRef, style: { background: '#EFF6FF', border: '1px solid #BFDBFE', padding: 12, marginBottom: 8 } },
-        React.createElement('div', { className: 'flex items-center justify-between mb-2' },
-          React.createElement('span', { style: { fontSize: 12, fontWeight: 700, color: '#1E40AF' } }, 'Modifier : ' + (editedPeriod?.label || '')),
-          React.createElement('div', { className: 'flex items-center gap-3' },
-            confirmDeleteId === editingId
-              ? React.createElement('span', { className: 'flex items-center gap-2', style: { fontSize: 12 } },
-                  React.createElement('span', { style: { color: '#991B1B', fontWeight: 600 } }, 'Supprimer cette période ?'),
-                  React.createElement('button', { onClick: () => handleDelete(editingId), style: { color: '#991B1B', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' } }, 'Oui'),
-                  React.createElement('button', { onClick: () => setConfirmDeleteId(null), style: { color: '#6B7280', cursor: 'pointer' } }, 'Non')
-                )
-              : React.createElement('button', { onClick: (e) => { e.stopPropagation(); setConfirmDeleteId(editingId); }, style: { fontSize: 18, cursor: 'pointer', opacity: 0.4, lineHeight: 1 }, className: 'hover:opacity-100', title: 'Supprimer' }, '\u00D7'),
-            React.createElement('button', { onClick: cancelEdit, style: { fontSize: 18, cursor: 'pointer', opacity: 0.4, lineHeight: 1 }, className: 'hover:opacity-100', title: 'Fermer' }, '\u2715')
-          )
-        ),
-        // Commentaire existant
-        editedPeriod?.commentaire && !draft.commentaire && React.createElement('div', { style: { fontSize: 12, fontStyle: 'italic', color: '#374151', background: '#F0F9FF', padding: '4px 8px', marginBottom: 8 } }, editedPeriod.commentaire),
-        renderForm(null)
-      ),
-
-      // Bouton renouveler ou formulaire ajout
-      !editingId && (
-        !adding
-          ? React.createElement('button', { onClick: () => { resetDraft(); setAdding(true); setFormError(null); }, style: { width: '100%', padding: '8px', border: '1px dashed #D1D5DB', background: '#F9FAFB', color: '#374151', fontSize: 13, fontWeight: 500, cursor: 'pointer' } }, periods.length > 0 ? '+ Renouveler la mission' : '+ Créer la période initiale')
-          : React.createElement('div', { ref: panelRef }, renderForm(periods.length > 0 ? 'Nouveau renouvellement' : 'Période initiale'))
-      )
-    )
+        {/* Bouton renouveler / formulaire ajout */}
+        {!editingId && (!adding
+          ? <button onClick={() => { resetDraft(); setAdding(true); setFormError(null); }} style={{ width: '100%', padding: '8px', border: '1px dashed #D1D5DB', background: '#F9FAFB', color: '#374151', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>{periods.length > 0 ? '+ Renouveler la mission' : '+ Créer la période initiale'}</button>
+          : <div ref={panelRef}>{renderForm(periods.length > 0 ? 'Nouveau renouvellement' : 'Période initiale')}</div>
+        )}
+      </div>}
+    </div>
   );
 }
 
