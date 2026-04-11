@@ -1083,18 +1083,20 @@ function respOptions(allProfiles, current) {
 
 function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
   const isAdmin=profile.role==='admin';
-  const [f,setF] = useState({ telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', responsable:contact.responsable||'', linkedin:contact.linkedin||'', ats:contact.ats||'', agence:contact.agence||'', ne_pas_recontacter:contact.ne_pas_recontacter||false, ne_pas_recontacter_note:contact.ne_pas_recontacter_note||'' });
+  const [f,setF] = useState({ prenom:contact.prenom||'', nom:contact.nom||'', telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', responsable:contact.responsable||'', linkedin:contact.linkedin||'', ats:contact.ats||'', agence:contact.agence||'', ne_pas_recontacter:contact.ne_pas_recontacter||false, ne_pas_recontacter_note:contact.ne_pas_recontacter_note||'' });
   const canEditAgence = isAdmin || (contact.responsable === profile.nom);
   const [saving,setSaving]=useState(false); const [err,setErr]=useState('');
   const s = k => e => setF(v=>({...v,[k]:e.target.value}));
   const save = async () => {
     setSaving(true);
-    const upd={ telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, groupe:f.groupe||null, responsable:f.responsable||contact.responsable, linkedin:normalizeLinkedinUrl(f.linkedin), agence:f.agence||contact.agence, updated_at:new Date().toISOString(), ne_pas_recontacter:f.ne_pas_recontacter||false, ne_pas_recontacter_note:f.ne_pas_recontacter_note||null, ne_pas_recontacter_date:f.ne_pas_recontacter?contact.ne_pas_recontacter_date||(f.ne_pas_recontacter!==contact.ne_pas_recontacter?getToday():null):null };
+    const upd={ prenom:normPrenom(f.prenom)||contact.prenom, nom:(f.nom||'').toUpperCase()||contact.nom, telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, groupe:f.groupe||null, responsable:f.responsable||contact.responsable, linkedin:normalizeLinkedinUrl(f.linkedin), agence:f.agence||contact.agence, updated_at:new Date().toISOString(), ne_pas_recontacter:f.ne_pas_recontacter||false, ne_pas_recontacter_note:f.ne_pas_recontacter_note||null, ne_pas_recontacter_date:f.ne_pas_recontacter?contact.ne_pas_recontacter_date||(f.ne_pas_recontacter!==contact.ne_pas_recontacter?getToday():null):null };
     if(['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)) upd.ats=f.ats||null;
     const { error } = await sb.from('contacts').update(upd).eq('id',contact.id);
     if (error) { setErr(error.message); setSaving(false); }
     else {
       const changes = [];
+      if ((f.prenom||'') !== (contact.prenom||'')) changes.push(`prénom → ${f.prenom}`);
+      if ((f.nom||'').toUpperCase() !== (contact.nom||'')) changes.push(`nom → ${(f.nom||'').toUpperCase()}`);
       if (f.statut !== (contact.statut||'Prospect')) changes.push(`statut → ${f.statut}`);
       if ((f.groupe||'') !== (contact.groupe||'')) changes.push(`société → ${f.groupe||'(vide)'}`);
       if ((f.ville||'') !== (contact.ville||'')) changes.push(`ville → ${f.ville||'(vide)'}`);
@@ -1115,6 +1117,10 @@ function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
   return (
     <Modal title={<><Icon d={ICONS.edit} size={14}/> Modifier — {contact.prenom} {contact.nom}</>} onClose={onClose}
       footer={<ModalFooter onClose={onClose} onSave={save} saving={saving}/>}>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Prénom"><input type="text" value={f.prenom} onChange={e=>setF(v=>({...v,prenom:normPrenom(e.target.value)}))} className={inputCls}/></Field>
+        <Field label="Nom"><input type="text" value={f.nom} onChange={e=>setF(v=>({...v,nom:e.target.value.toUpperCase()}))} className={inputCls}/></Field>
+      </div>
       {[['Groupe / Société','groupe','text'],['Rôle / Poste','role','text']].map(([l,k,t])=>(
         <Field key={k} label={l}><input type={t} value={f[k]} onChange={s(k)} className={inputCls}/></Field>
       ))}
