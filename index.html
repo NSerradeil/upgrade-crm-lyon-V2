@@ -6860,9 +6860,12 @@ function App() {
     return ()=>subscription.unsubscribe();
   },[]);
 
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   const fetchAll = useCallback(async ()=>{
     setLoading(true); setError(null);
     try {
+      // Mobile : limiter les historiques pour éviter OOM Safari
+      const histLimit = isMobile ? 500 : 10000;
       const [
         {data:contacts,  error:e1},{data:historique,error:e2},
         {data:taches,    error:e3},{data:besoins,   error:e4},
@@ -6871,11 +6874,11 @@ function App() {
         {data:missionPeriods,error:e8},
       ] = await Promise.all([
         sb.from('contacts').select('*').order('id').limit(10000),
-        sb.from('historique_actions').select('*').order('date',{ascending:false}).limit(10000),
+        sb.from('historique_actions').select('*').order('date',{ascending:false}).limit(histLimit),
         sb.from('taches').select('*').order('due_date',{ascending:true,nullsFirst:false}).limit(10000),
         sb.from('besoins').select('*').order('created_at',{ascending:false}).limit(10000),
         sb.from('missions').select('*').order('consultant').limit(5000),
-        sb.from('historique_missions').select('*').order('date',{ascending:false}).limit(10000),
+        sb.from('historique_missions').select('*').order('date',{ascending:false}).limit(histLimit),
         sb.from('besoin_candidats').select('*').order('created_at',{ascending:true}).limit(5000),
         sb.from('mission_periods').select('*').order('debut',{ascending:true}).limit(10000),
       ]);
