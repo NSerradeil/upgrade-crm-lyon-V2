@@ -6864,8 +6864,9 @@ function App() {
   const fetchAll = useCallback(async ()=>{
     setLoading(true); setError(null);
     try {
-      // Mobile : limiter les historiques pour éviter OOM Safari
-      const histLimit = isMobile ? 500 : 10000;
+      // Mobile : limites réduites pour éviter OOM Safari iOS (~300-500MB max)
+      const L = isMobile ? 1000 : 10000;
+      const histLimit = isMobile ? 300 : 10000;
       const [
         {data:contacts,  error:e1},{data:historique,error:e2},
         {data:taches,    error:e3},{data:besoins,   error:e4},
@@ -6873,14 +6874,14 @@ function App() {
         {data:besoinCandidats,error:e7},
         {data:missionPeriods,error:e8},
       ] = await Promise.all([
-        sb.from('contacts').select('*').order('id').limit(10000),
+        sb.from('contacts').select('*').order('id').limit(L),
         sb.from('historique_actions').select('*').order('date',{ascending:false}).limit(histLimit),
-        sb.from('taches').select('*').order('due_date',{ascending:true,nullsFirst:false}).limit(10000),
-        sb.from('besoins').select('*').order('created_at',{ascending:false}).limit(10000),
-        sb.from('missions').select('*').order('consultant').limit(5000),
+        sb.from('taches').select('*').order('due_date',{ascending:true,nullsFirst:false}).limit(L),
+        sb.from('besoins').select('*').order('created_at',{ascending:false}).limit(L),
+        sb.from('missions').select('*').order('consultant').limit(isMobile?500:5000),
         sb.from('historique_missions').select('*').order('date',{ascending:false}).limit(histLimit),
-        sb.from('besoin_candidats').select('*').order('created_at',{ascending:true}).limit(5000),
-        sb.from('mission_periods').select('*').order('debut',{ascending:true}).limit(10000),
+        sb.from('besoin_candidats').select('*').order('created_at',{ascending:true}).limit(isMobile?500:5000),
+        sb.from('mission_periods').select('*').order('debut',{ascending:true}).limit(L),
       ]);
       const err=e1||e2||e3||e4;
       if(err) throw new Error(err.message);
