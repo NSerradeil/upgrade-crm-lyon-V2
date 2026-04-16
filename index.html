@@ -379,7 +379,7 @@ async function loadAchievements(profileNom) {
     // 1. PROSPECTEUR — sessions créées en 2026
     sb.from('session_prospection_contacts').select('id, sessions_prospection!inner(responsable,date_session)',{count:'exact',head:true}).eq('sessions_prospection.responsable',profileNom).gte('sessions_prospection.date_session',Y26).lt('sessions_prospection.date_session',Y27),
     // 2. CHASSEUR/ELEVEUR/CONNAISSEUR — missions démarrées en 2026
-    sb.from('missions').select('client').eq('responsable',profileNom).not('client','is',null).not('date_demarrage_initiale','is',null).gte('date_demarrage_initiale',Y26).lt('date_demarrage_initiale',Y27),
+    sb.from('missions').select('client').eq('responsable',profileNom).not('client','is',null).not('date_demarrage_initiale','is',null).gte('date_demarrage_initiale',Y26).lt('date_demarrage_initiale',Y27).limit(500),
     // 3. RECRUTEUR — missions besoin démarrées en 2026
     sb.from('missions').select('id',{count:'exact',head:true}).eq('responsable',profileNom).not('besoin_id','is',null).not('date_demarrage_initiale','is',null).gte('date_demarrage_initiale',Y26).lt('date_demarrage_initiale',Y27),
     // 4. GESTIONNAIRE — suivis loggés en 2026
@@ -393,7 +393,7 @@ async function loadAchievements(profileNom) {
     // 8. TRIBUN — sessions terminées en 2026
     sb.from('sessions_prospection').select('id',{count:'exact',head:true}).eq('statut','done').eq('responsable',profileNom).gte('date_session',Y26).lt('date_session',Y27),
     // 9. GOLDMAKER + RENTIER — toutes missions actives (embarqué inclus, CA/marge calculés sur jours 2026)
-    sb.from('missions').select('tjm, cjm, jours_jan, jours_fev, jours_mar, jours_avr, jours_mai, jours_jun, jours_jul, jours_aou, jours_sep, jours_oct, jours_nov, jours_dec').eq('responsable',profileNom).not('tjm','is',null),
+    sb.from('missions').select('tjm, cjm, jours_jan, jours_fev, jours_mar, jours_avr, jours_mai, jours_jun, jours_jul, jours_aou, jours_sep, jours_oct, jours_nov, jours_dec').eq('responsable',profileNom).not('tjm','is',null).limit(500),
     // 10. ARCHITECTE — besoins créés en 2026
     sb.from('besoins').select('id',{count:'exact',head:true}).eq('responsable',profileNom).gte('created_at',Y26).lt('created_at',Y27),
     // 11. DIPLOMATE — taches RDV en 2026 (titre contient RDV)
@@ -401,7 +401,7 @@ async function loadAchievements(profileNom) {
     // 12. DIPLOMATE — actions RDV en 2026
     sb.from('historique_actions').select('id',{count:'exact',head:true}).eq('responsable',profileNom).ilike('type_action','%RDV%').gte('date',Y26).lt('date',Y27),
     // 13. SPEED CLOSER — besoins gagnés créés en 2026
-    sb.from('besoins').select('created_at, updated_at').eq('responsable',profileNom).eq('statut','Besoin Gagné').gte('created_at',Y26).lt('created_at',Y27),
+    sb.from('besoins').select('created_at, updated_at').eq('responsable',profileNom).eq('statut','Besoin Gagné').gte('created_at',Y26).lt('created_at',Y27).limit(500),
   ]);
   var rProsp = results[0];
   var rMissions = results[1];
@@ -684,7 +684,7 @@ function useListReorder(storageKey) {
     if(oldIdx!==-1&&newIdx!==-1){
       const r=[...ordered];const[moved]=r.splice(oldIdx,1);r.splice(newIdx,0,moved);
       const updated={...orders,[group]:r.map(b=>String(b.id))};
-      setOrders(updated);localStorage.setItem(storageKey,JSON.stringify(updated));
+      setOrders(updated);try{localStorage.setItem(storageKey,JSON.stringify(updated));}catch(e){}
     }
     setDragId(null);setDragOverId(null);
   };
@@ -3824,7 +3824,7 @@ function KanbanBesoins({ besoins, contacts, contactMap, besoinCandidats, onSelec
         const newOrder = reordered.map(b=>String(b.id));
         const updated = {...colOrders, [statut]: newOrder};
         setColOrders(updated);
-        localStorage.setItem('besoins_kanban_order', JSON.stringify(updated));
+        try{localStorage.setItem('besoins_kanban_order', JSON.stringify(updated));}catch(e){}
       }
     }
     setDragId(null); setDragOverCardId(null);
@@ -6933,7 +6933,7 @@ function App() {
       var p=res.data;
       setProfile(p);
       if(p){
-        loadAchievements(p.nom).then(function(a){setAchievements(a);});
+        setTimeout(function(){loadAchievements(p.nom).then(function(a){setAchievements(a);});},2000);
         if(!initialTabSetRef.current&&p.preferences&&p.preferences.default_tab){setTab(p.preferences.default_tab);initialTabSetRef.current=true;}
         setPrefs(p.preferences||{});
       } else {
@@ -7135,7 +7135,23 @@ function App() {
   );
 }
 
-ReactDOM.render(<App />, document.getElementById('root'));
+class CRMErrorBoundary extends React.Component {
+  constructor(props){super(props);this.state={hasError:false,error:null};}
+  static getDerivedStateFromError(e){return{hasError:true,error:e};}
+  componentDidCatch(e,info){console.error('CRM crash:',e,info);}
+  render(){
+    if(this.state.hasError) return React.createElement('div',{style:{padding:32,fontFamily:'system-ui,sans-serif',textAlign:'center',maxWidth:400,margin:'80px auto'}},
+      React.createElement('div',{style:{fontSize:48,marginBottom:16}},'⚠️'),
+      React.createElement('h2',{style:{color:'#111',marginBottom:8}},'Une erreur est survenue'),
+      React.createElement('p',{style:{color:'#666',fontSize:14,marginBottom:24}},'Essayez de vider le cache ou contactez l\'administrateur.'),
+      React.createElement('button',{onClick:function(){try{localStorage.clear();}catch(e){}window.location.reload();},style:{padding:'12px 24px',background:'#FFD600',border:'none',borderRadius:8,fontWeight:700,fontSize:14,cursor:'pointer'}},'Réinitialiser et recharger'),
+      React.createElement('pre',{style:{fontSize:10,color:'#999',marginTop:24,textAlign:'left',whiteSpace:'pre-wrap',wordBreak:'break-all'}},this.state.error?.toString())
+    );
+    return this.props.children;
+  }
+}
+
+ReactDOM.render(<CRMErrorBoundary><App /></CRMErrorBoundary>, document.getElementById('root'));
 </script>
 </body>
 </html>
