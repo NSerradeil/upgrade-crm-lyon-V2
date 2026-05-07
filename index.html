@@ -203,6 +203,7 @@ const MOIS_KEYS        = ['jan','fev','mar','avr','mai','jun','jul','aou','sep',
 
 // ── Besoins V2 — Constantes ──────────────────────────────────────────────────
 const BESOIN_STATUTS_ORDRE = ['Opportunité','Push opportuniste','Besoin ouvert','Profil proposé','Entretien programmé','Entretien passé','Besoin Gagné','Besoin Perdu'];
+const BESOIN_FILTER_ACTIFS = 'ACTIFS';
 const BESOIN_STATUTS_CREATION = ['Besoin ouvert','Opportunité','Profil proposé','Push opportuniste'];
 const BESOIN_MOTIFS_PERTE = [
   {value:'annule',label:'Besoin annulé'},{value:'pas_de_reponse',label:'Pas de réponse'},
@@ -1422,7 +1423,7 @@ function AddTacheModal({ contacts, besoins, missions, profile, allProfiles, onCl
   const isAdmin = profile.role==='admin';
   const [f,setF] = useState({ type:'', titre:'', due_date:'', due_time:DEFAULT_TASK_TIME, contact_id:defaultContactId?String(defaultContactId):'', notes:'', responsable:profile.nom, mission_id:defaultMissionId||'', besoin_id:defaultBesoinId||'' });
   const [saving,setSaving]=useState(false);
-  const myContacts = useMemo(()=>contacts.filter(c=>isAdmin||c.responsable===profile.nom).sort((a,b)=>(a.nom||'').localeCompare(b.nom||'')),[contacts,profile,isAdmin]);
+  const myContacts = useMemo(()=>[...contacts].sort((a,b)=>(a.nom||'').localeCompare(b.nom||'')),[contacts]);
   const contactMap = useMemo(()=>Object.fromEntries(myContacts.map(c=>[c.id,c])),[myContacts]);
   const selContact = f.contact_id ? contactMap[f.contact_id] : null;
   const types = useMemo(()=>tacheTypesFor(selContact),[selContact]);
@@ -3882,7 +3883,7 @@ function KanbanBesoins({ besoins, contacts, contactMap, besoinCandidats, onSelec
 
 // ── Onglet Pipeline V2 ──────────────────────────────────────────────────────
 function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique, taches, missions, profile, allProfiles, commerciauxParAgence, onRefresh, navBesoinId, navBesoinKey, onNavToContact, onNavToMission, onNavToTache, prefs }) {
-  const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState('');
+  const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState(BESOIN_FILTER_ACTIFS);
   const [filterResp,setFilterResp]=useState('');
   const [filterAgence,setFilterAgence]=useState(prefs?.besoins_filter_agence||(profile.role==='admin'?'':profile.agence));
   const [selected,setSelected]=useState(null);
@@ -3903,7 +3904,7 @@ function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique
     const q=search.toLowerCase();
     return [...besoins]
       .filter(b=>{
-        if(filterStatut&&b.statut!==filterStatut) return false;
+        if(filterStatut && filterStatut!==BESOIN_FILTER_ACTIFS && b.statut!==filterStatut) return false;
         if(filterResp&&b.responsable!==filterResp) return false;
         if(filterAgence&&b.agence!==filterAgence&&b.responsable!==profile.nom) return false;
         if(q){
@@ -3918,10 +3919,13 @@ function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique
       .sort((a,b)=>BESOIN_STATUTS_ORDRE.indexOf(a.statut)-BESOIN_STATUTS_ORDRE.indexOf(b.statut));
   },[besoins,search,filterStatut,filterResp,filterAgence,contactMap]);
 
-  const hasFilter=search||filterStatut||filterResp||(isAdmin?filterAgence!=='':filterAgence!==profile.agence);
-  const resetAll=()=>{setSearch('');setFilterStatut('');setFilterResp('');setFilterAgence(isAdmin?'':profile.agence);};
+  const sortedList=useMemo(()=>filterStatut===BESOIN_FILTER_ACTIFS?sorted.filter(b=>b.statut!=='Besoin Perdu'):sorted,[sorted,filterStatut]);
+
+  const hasFilter=search||(filterStatut&&filterStatut!==BESOIN_FILTER_ACTIFS)||filterResp||(isAdmin?filterAgence!=='':filterAgence!==profile.agence);
+  const resetAll=()=>{setSearch('');setFilterStatut(BESOIN_FILTER_ACTIFS);setFilterResp('');setFilterAgence(isAdmin?'':profile.agence);};
 
   const STATUT_BTNS=[
+    {label:'ACTIFS',value:BESOIN_FILTER_ACTIFS},
     {label:'TOUS',value:''},
     {label:'OPPORTUNITÉ',value:'Opportunité'},
     {label:'PUSH',value:'Push opportuniste'},
@@ -3973,10 +3977,10 @@ function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique
               </button>;
             })}
           </div>
-          <div className="text-xs text-neutral-300 mb-3">{sorted.length} besoin{sorted.length>1?'s':''}</div>
+          <div className="text-xs text-neutral-300 mb-3">{sortedList.length} besoin{sortedList.length>1?'s':''}{filterStatut===BESOIN_FILTER_ACTIFS?' actif'+(sortedList.length>1?'s':''):''}{filterStatut==='Besoin Perdu'?' perdu'+(sortedList.length>1?'s':''):''}</div>
           <div className="space-y-6">
-            {(filterStatut?[filterStatut]:BESOIN_STATUTS_ORDRE).map(statut=>{
-              const items=sorted.filter(b=>b.statut===statut);
+            {(filterStatut===BESOIN_FILTER_ACTIFS?BESOIN_STATUTS_ORDRE.filter(s=>s!=='Besoin Perdu'):filterStatut?[filterStatut]:BESOIN_STATUTS_ORDRE).map(statut=>{
+              const items=sortedList.filter(b=>b.statut===statut);
               if(items.length===0) return null;
               const bc=BESOIN_BADGE_COLORS_GLOBAL[statut]||{bg:'#E4E4E6',color:'#1C1F35'};
               const orderedItems=reorder.getOrderedItems(statut,items);
