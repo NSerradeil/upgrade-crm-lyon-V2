@@ -870,7 +870,7 @@ const BESOIN_BADGE_COLORS_GLOBAL = {
   'Besoin Gagné':        { bg:'#00C218', color:'#1C1F35' },
   'Besoin ouvert':       { bg:'#4A7FE5', color:'#FFFFFF' },
   'Opportunité':         { bg:'#FF66FF', color:'#1C1F35' },
-  'Push opportuniste':   { bg:'#FFE500', color:'#1C1F35' },
+  'Push opportuniste':   { bg:'#4A7FE5', color:'#FFFFFF' },
   'Profil proposé':      { bg:'#1C1F35', color:'#FFFFFF' },
   'Entretien programmé': { bg:'#FF3D2E', color:'#FFFFFF' },
   'Entretien passé':     { bg:'#FF3D2E', color:'#FFFFFF' },
@@ -3970,7 +3970,7 @@ function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique
               const active=filterStatut===btn.value;
               const bc=btn.value?BESOIN_BADGE_COLORS_GLOBAL[btn.value]:null;
               return <button key={btn.value} onClick={()=>setFilterStatut(btn.value)}
-                style={active&&bc?{backgroundColor:bc.bg,color:bc.color}:active&&btn.value===BESOIN_FILTER_ACTIFS?{backgroundColor:'#4A7FE5',color:'#fff'}:active?{backgroundColor:'#1C1F35',color:'#fff'}:{}}
+                style={active&&bc?{backgroundColor:bc.bg,color:bc.color}:active&&btn.value===BESOIN_FILTER_ACTIFS?{backgroundColor:'#FFE500',color:'#1C1F35'}:active?{backgroundColor:'#1C1F35',color:'#fff'}:{}}
                 className={`px-3 py-1.5 text-[11px] font-bold border-2 transition-colors whitespace-nowrap tracking-[0.04em]
                   ${active?'border-transparent':'bg-white text-slate border-neutral-200 hover:border-midnight hover:text-midnight'}`}>
                 {btn.label}
