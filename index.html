@@ -3980,7 +3980,7 @@ function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique
           <div className="text-xs text-neutral-300 mb-3">{sortedList.length} besoin{sortedList.length>1?'s':''}{filterStatut===BESOIN_FILTER_ACTIFS?' actif'+(sortedList.length>1?'s':''):''}{filterStatut==='Besoin Perdu'?' perdu'+(sortedList.length>1?'s':''):''}</div>
           <div className="space-y-6">
             {(filterStatut===BESOIN_FILTER_ACTIFS?BESOIN_STATUTS_ORDRE.filter(s=>s!=='Besoin Perdu'):filterStatut?[filterStatut]:BESOIN_STATUTS_ORDRE).map(statut=>{
-              const items=sortedList.filter(b=>b.statut===statut);
+              const items=sortedList.filter(b=>b.statut===statut).sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
               if(items.length===0) return null;
               const bc=BESOIN_BADGE_COLORS_GLOBAL[statut]||{bg:'#E4E4E6',color:'#1C1F35'};
               const orderedItems=reorder.getOrderedItems(statut,items);
