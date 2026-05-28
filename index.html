@@ -380,7 +380,7 @@ async function loadAchievements(profileNom) {
     // 1. PROSPECTEUR — sessions créées en 2026
     sb.from('session_prospection_contacts').select('id, sessions_prospection!inner(responsable,date_session)',{count:'exact',head:true}).eq('sessions_prospection.responsable',profileNom).gte('sessions_prospection.date_session',Y26).lt('sessions_prospection.date_session',Y27),
     // 2. CHASSEUR/ELEVEUR/CONNAISSEUR — missions démarrées en 2026
-    sb.from('missions').select('client').eq('responsable',profileNom).not('client','is',null).not('date_demarrage_initiale','is',null).gte('date_demarrage_initiale',Y26).lt('date_demarrage_initiale',Y27),
+    sb.from('missions').select('client').eq('responsable',profileNom).not('client','is',null).not('date_demarrage_initiale','is',null).gte('date_demarrage_initiale',Y26).lt('date_demarrage_initiale',Y27).limit(500),
     // 3. RECRUTEUR — missions besoin démarrées en 2026
     sb.from('missions').select('id',{count:'exact',head:true}).eq('responsable',profileNom).not('besoin_id','is',null).not('date_demarrage_initiale','is',null).gte('date_demarrage_initiale',Y26).lt('date_demarrage_initiale',Y27),
     // 4. GESTIONNAIRE — suivis loggés en 2026
@@ -394,7 +394,7 @@ async function loadAchievements(profileNom) {
     // 8. TRIBUN — sessions terminées en 2026
     sb.from('sessions_prospection').select('id',{count:'exact',head:true}).eq('statut','done').eq('responsable',profileNom).gte('date_session',Y26).lt('date_session',Y27),
     // 9. GOLDMAKER + RENTIER — toutes missions actives (embarqué inclus, CA/marge calculés sur jours 2026)
-    sb.from('missions').select('tjm, cjm, jours_jan, jours_fev, jours_mar, jours_avr, jours_mai, jours_jun, jours_jul, jours_aou, jours_sep, jours_oct, jours_nov, jours_dec').eq('responsable',profileNom).not('tjm','is',null),
+    sb.from('missions').select('tjm, cjm, jours_jan, jours_fev, jours_mar, jours_avr, jours_mai, jours_jun, jours_jul, jours_aou, jours_sep, jours_oct, jours_nov, jours_dec').eq('responsable',profileNom).not('tjm','is',null).limit(500),
     // 10. ARCHITECTE — besoins créés en 2026
     sb.from('besoins').select('id',{count:'exact',head:true}).eq('responsable',profileNom).gte('created_at',Y26).lt('created_at',Y27),
     // 11. DIPLOMATE — taches RDV en 2026 (titre contient RDV)
@@ -402,7 +402,7 @@ async function loadAchievements(profileNom) {
     // 12. DIPLOMATE — actions RDV en 2026
     sb.from('historique_actions').select('id',{count:'exact',head:true}).eq('responsable',profileNom).ilike('type_action','%RDV%').gte('date',Y26).lt('date',Y27),
     // 13. SPEED CLOSER — besoins gagnés créés en 2026
-    sb.from('besoins').select('created_at, updated_at').eq('responsable',profileNom).eq('statut','Besoin Gagné').gte('created_at',Y26).lt('created_at',Y27),
+    sb.from('besoins').select('created_at, updated_at').eq('responsable',profileNom).eq('statut','Besoin Gagné').gte('created_at',Y26).lt('created_at',Y27).limit(500),
   ]);
   var rProsp = results[0];
   var rMissions = results[1];
@@ -685,7 +685,7 @@ function useListReorder(storageKey) {
     if(oldIdx!==-1&&newIdx!==-1){
       const r=[...ordered];const[moved]=r.splice(oldIdx,1);r.splice(newIdx,0,moved);
       const updated={...orders,[group]:r.map(b=>String(b.id))};
-      setOrders(updated);localStorage.setItem(storageKey,JSON.stringify(updated));
+      setOrders(updated);try{localStorage.setItem(storageKey,JSON.stringify(updated));}catch(e){}
     }
     setDragId(null);setDragOverId(null);
   };
@@ -864,6 +864,16 @@ function ColorBadge({ label, bg, color }) {
 }
 function StatutBadge({ statut }) {
   const st = STATUT_STYLE[statut] || STATUT_STYLE['Prospect'];
+  return <ColorBadge label={statut||'Prospect'} bg={st.bg} color={st.color}/>;
+}
+const COMPTE_STATUT_STYLE = {
+  'Prospect':       { bg:'#FFE500', color:'#1C1F35' },
+  'Client actif':   { bg:'#00C218', color:'#1C1F35' },
+  'Client dormant': { bg:'#FF78FD', color:'#1C1F35' },
+  'Ancien client':  { bg:'#A4A6AB', color:'#FFFFFF' },
+};
+function StatutCompteBadge({ statut }) {
+  const st = COMPTE_STATUT_STYLE[statut] || COMPTE_STATUT_STYLE['Prospect'];
   return <ColorBadge label={statut||'Prospect'} bg={st.bg} color={st.color}/>;
 }
 const BESOIN_BADGE_COLORS_GLOBAL = {
@@ -2269,6 +2279,8 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
   const [filterMine,setFilterMine]=useState(false);
   const [sortCol,setSortCol]=useState('date_dernier'); const [sortDir,setSortDir]=useState('desc');
   const [selected,setSelected]=useState(null); const [showAdd,setShowAdd]=useState(false);
+  const [viewMode,setViewMode]=useState('contacts'); // 'contacts' | 'comptes'
+  const [selectedCompte,setSelectedCompte]=useState(null);
   useEffect(()=>{ if(navContactId){ const c=contacts.find(x=>x.id===navContactId||String(x.id)===String(navContactId)); if(c) setSelected(c); } },[navContactKey]);
   const isAdmin=profile.role==='admin';
   const statuts=useMemo(()=>[...new Set(contacts.map(c=>c.statut).filter(Boolean))].sort(),[contacts]);
@@ -2322,10 +2334,15 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
   const thCls="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-azure-100 whitespace-nowrap";
   return (
     <div className="tab-content">
+      {/* Toggle Contacts / Comptes */}
       <div className="flex items-center justify-between mb-3">
-        <div/>
-        <button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">+ Nouveau contact</button>
+        <div className="flex border rounded-lg overflow-hidden text-sm">
+          <button onClick={()=>setViewMode('contacts')} className={`px-3 py-2 font-medium ${viewMode==='contacts'?'bg-midnight text-white':'bg-white text-slate hover:bg-neutral-50'}`}>Contacts ({contacts.length})</button>
+          <button onClick={()=>setViewMode('comptes')} className={`px-3 py-2 font-medium border-l ${viewMode==='comptes'?'bg-midnight text-white':'bg-white text-slate hover:bg-neutral-50'}`}>Comptes ({(comptes||[]).length})</button>
+        </div>
+        {viewMode==='contacts'&&<button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">+ Nouveau contact</button>}
       </div>
+      {viewMode==='contacts'&&<>
       <div className="flex gap-2 sm:gap-3 mb-4 flex-wrap">
         <input type="text" placeholder="Rechercher..." value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-[140px] sm:min-w-64 px-3 sm:px-4 py-2 border rounded-lg text-sm focus:outline-none focus:border-midnight"/>
         <select value={filterStatut} onChange={e=>setFilterStatut(e.target.value)} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none">
@@ -2394,6 +2411,211 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
       </div>
       {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} missions={missions} besoins={besoins} profile={profile} allProfiles={allProfiles} onRefresh={()=>{onRefresh();setSelected(null);}} onClose={()=>setSelected(null)} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache}/>}
       {showAdd&&<AddContactModal profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
+      </>}
+      {viewMode==='comptes'&&<ComptesView comptes={comptes||[]} contactComptes={contactComptes||[]} contacts={contacts} historique={historique} profile={profile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} selected={selectedCompte} onSelect={setSelectedCompte} onNavToContact={cid=>{const c=contacts.find(x=>x.id===cid);if(c){setViewMode('contacts');setSelectedCompte(null);setSelected(c);}}}/>}
+    </div>
+  );
+}
+
+// ── Vue Comptes (Phase 1.B.2) ─────────────────────────────────────────────────
+function ComptesView({ comptes, contactComptes, contacts, historique, profile, allProfiles, commerciauxParAgence, selected, onSelect, onNavToContact }) {
+  const [search,setSearch]=useState('');
+  const [filterStatut,setFilterStatut]=useState('');
+  const [filterResp,setFilterResp]=useState('');
+  const [filterMine,setFilterMine]=useState(false);
+  const [sortCol,setSortCol]=useState('nb_rdv_30j');
+  const [sortDir,setSortDir]=useState('desc');
+
+  // Pre-compute : map compte_id → [contact_id...]
+  const compteContacts = useMemo(()=>{
+    const m={};
+    contactComptes.forEach(cc=>{
+      if(!m[cc.compte_id])m[cc.compte_id]=[];
+      m[cc.compte_id].push(cc.contact_id);
+    });
+    return m;
+  },[contactComptes]);
+
+  const date30jAgo = useMemo(()=>{
+    const d=new Date(); d.setDate(d.getDate()-30);
+    return d.toISOString().slice(0,10);
+  },[]);
+
+  // Enrichit chaque compte avec nb_contacts, date_dernier_rdv, nb_rdv_30j
+  const comptesEnriched = useMemo(()=>{
+    return comptes.map(c=>{
+      const linkedIds = compteContacts[c.id] || [];
+      const linkedIdSet = new Set(linkedIds);
+      let lastDate = null;
+      let count30 = 0;
+      historique.forEach(h=>{
+        if(!linkedIdSet.has(h.id_prospect)) return;
+        if(!h.date) return;
+        if(!lastDate || h.date > lastDate) lastDate = h.date;
+        if(h.date >= date30jAgo) count30++;
+      });
+      return { ...c, nb_contacts: linkedIds.length, date_dernier_rdv: lastDate, nb_rdv_30j: count30 };
+    });
+  },[comptes, compteContacts, historique, date30jAgo]);
+
+  const responsables = useMemo(()=>[...new Set(comptesEnriched.map(c=>c.responsable).filter(Boolean))].sort(),[comptesEnriched]);
+
+  const filtered = useMemo(()=>{
+    const q = norm(search);
+    const rows = comptesEnriched.filter(c=>{
+      if(filterMine && c.responsable !== profile.nom) return false;
+      if(filterStatut && c.statut !== filterStatut) return false;
+      if(!filterMine && filterResp && c.responsable !== filterResp) return false;
+      if(q && ![c.nom, c.secteur, c.ville].some(v=>norm(v).includes(q))) return false;
+      return true;
+    });
+    rows.sort((a,b)=>{
+      let va, vb;
+      if(sortCol==='nom')                    { va=(a.nom||'').toLowerCase();        vb=(b.nom||'').toLowerCase(); }
+      else if(sortCol==='statut')            { va=(a.statut||'').toLowerCase();     vb=(b.statut||'').toLowerCase(); }
+      else if(sortCol==='responsable')       { va=(a.responsable||'').toLowerCase();vb=(b.responsable||'').toLowerCase(); }
+      else if(sortCol==='ville')             { va=(a.ville||'').toLowerCase();      vb=(b.ville||'').toLowerCase(); }
+      else if(sortCol==='nb_contacts')       { va=a.nb_contacts;                    vb=b.nb_contacts; }
+      else if(sortCol==='date_dernier_rdv')  { va=a.date_dernier_rdv||'0000-00-00'; vb=b.date_dernier_rdv||'0000-00-00'; }
+      else if(sortCol==='nb_rdv_30j')        { va=a.nb_rdv_30j;                     vb=b.nb_rdv_30j; }
+      else                                   { va=a.nom;                            vb=b.nom; }
+      if(va<vb) return sortDir==='asc'?-1:1;
+      if(va>vb) return sortDir==='asc'?1:-1;
+      return 0;
+    });
+    return rows;
+  },[comptesEnriched, search, filterStatut, filterResp, filterMine, profile.nom, sortCol, sortDir]);
+
+  const toggleSort = col => {
+    if(sortCol===col) setSortDir(d=>d==='asc'?'desc':'asc');
+    else { setSortCol(col); setSortDir(col==='nom'||col==='ville'||col==='statut'||col==='responsable'?'asc':'desc'); }
+  };
+  const SortIcon = ({col}) => {
+    if(sortCol!==col) return <span className="ml-1 text-neutral-200">↕</span>;
+    return <span className="ml-1 text-azure-100">{sortDir==='asc'?'↑':'↓'}</span>;
+  };
+
+  const STATUTS = ['Prospect','Client actif','Client dormant','Ancien client'];
+  const hasFilter = search||filterStatut||filterResp||filterMine;
+  const resetAll = ()=>{setSearch('');setFilterStatut('');setFilterResp('');setFilterMine(false);};
+  const thCls = "px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-azure-100 whitespace-nowrap";
+
+  return (
+    <>
+      <div className="flex gap-2 sm:gap-3 mb-4 flex-wrap">
+        <input type="text" placeholder="Rechercher compte..." value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-[140px] sm:min-w-64 px-3 sm:px-4 py-2 border rounded-lg text-sm focus:outline-none focus:border-midnight"/>
+        <select value={filterStatut} onChange={e=>setFilterStatut(e.target.value)} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none">
+          <option value="">Tous statuts</option>
+          {STATUTS.map(s=><option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} disabled={filterMine} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none hidden sm:block disabled:opacity-50">
+          <option value="">Tous responsables</option>
+          {responsables.map(r=><option key={r} value={r}>{r}{r===profile.nom?' (moi)':''}</option>)}
+        </select>
+        <button onClick={()=>{setFilterMine(!filterMine);if(!filterMine)setFilterResp('');}} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:filterMine?'0':'2px solid #E4E4E6',background:filterMine?'#1C1F35':'#fff',color:filterMine?'#fff':'#1C1F35',cursor:'pointer',borderRadius:0,textTransform:'uppercase',boxShadow:filterMine?'3px 3px 0 #FFE500':'none',transition:'all 120ms'}}>Mes comptes ({comptesEnriched.filter(c=>c.responsable===profile.nom).length})</button>
+        {hasFilter&&<button onClick={resetAll} className="px-2 sm:px-3 py-2 text-sm text-slate hover:text-carbon">✕</button>}
+      </div>
+      <div className="text-xs text-neutral-300 mb-2">{filtered.length} compte{filtered.length>1?'s':''}</div>
+      {/* Vue cartes mobile */}
+      <div className="md:hidden space-y-2">
+        {filtered.map(c=>(
+          <div key={c.id} onClick={()=>onSelect(c)} data-detail tabIndex="0" className="bg-white border-2 border-neutral-200 hover:border-midnight p-3 cursor-pointer active:bg-azure-20 focus:outline-none focus:border-midnight transition-colors">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="font-bold text-midnight text-sm">{c.nom}</div>
+                {c.secteur&&<div className="text-xs text-neutral-300">{c.secteur}</div>}
+              </div>
+              <StatutCompteBadge statut={c.statut}/>
+            </div>
+            <div className="flex items-center gap-3 mt-2 text-xs text-neutral-300 flex-wrap">
+              {c.ville&&<span>{c.ville}</span>}
+              <span>{c.nb_contacts} contact{c.nb_contacts>1?'s':''}</span>
+              {c.date_dernier_rdv&&<span>· Dernier RDV {daysSince(c.date_dernier_rdv)}j</span>}
+              {c.nb_rdv_30j>0&&<span className="text-azure-100 font-medium">· {c.nb_rdv_30j} RDV/30j</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* Vue tableau desktop */}
+      <div className="hidden md:block bg-white border-2 border-neutral-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead><tr className="bg-neutral-50 text-[11px] font-bold uppercase tracking-[0.1em] text-slate">
+            <th className={thCls} onClick={()=>toggleSort('nom')}>Compte<SortIcon col="nom"/></th>
+            <th className={thCls} onClick={()=>toggleSort('statut')}>Statut<SortIcon col="statut"/></th>
+            <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('responsable')}>Responsable<SortIcon col="responsable"/></th>
+            <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('ville')}>Ville<SortIcon col="ville"/></th>
+            <th className={thCls} onClick={()=>toggleSort('nb_contacts')}>Contacts<SortIcon col="nb_contacts"/></th>
+            <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('date_dernier_rdv')}>Dernier RDV<SortIcon col="date_dernier_rdv"/></th>
+            <th className={thCls} onClick={()=>toggleSort('nb_rdv_30j')}>RDV / 30j<SortIcon col="nb_rdv_30j"/></th>
+          </tr></thead>
+          <tbody>{filtered.map(c=>(
+            <tr key={c.id} onClick={()=>onSelect(c)} data-detail tabIndex="0" className={`border-t border-neutral-50 hover:bg-lemon-20 focus:bg-azure-20 focus:outline-none cursor-pointer transition-colors${selected&&selected.id===c.id?' bg-azure-20':''}`}>
+              <td className="px-4 py-3"><div className="font-medium text-midnight">{c.nom}</div>{c.secteur&&<div className="text-xs text-neutral-300">{c.secteur}</div>}</td>
+              <td className="px-4 py-3"><StatutCompteBadge statut={c.statut}/></td>
+              <td className="px-4 py-3 text-slate text-xs hidden lg:table-cell">{c.responsable||'—'}</td>
+              <td className="px-4 py-3 text-slate hidden lg:table-cell">{c.ville||'—'}</td>
+              <td className="px-4 py-3 text-slate">{c.nb_contacts}</td>
+              <td className="px-4 py-3 hidden lg:table-cell">{c.date_dernier_rdv?<span className={daysSince(c.date_dernier_rdv)>90?'text-coral-100 font-medium':'text-slate'}>{daysSince(c.date_dernier_rdv)}j</span>:<span className="text-neutral-200">—</span>}</td>
+              <td className="px-4 py-3">{c.nb_rdv_30j>0?<span className="text-azure-100 font-medium">{c.nb_rdv_30j}</span>:<span className="text-neutral-200">—</span>}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+      {selected&&<CompteSidebar compte={selected} contactComptes={contactComptes} contacts={contacts} onClose={()=>onSelect(null)} onNavToContact={onNavToContact}/>}
+    </>
+  );
+}
+
+// ── Sidebar Compte (minimale en Phase 1.B.2, sera enrichie en 1.B.3) ─────────
+function CompteSidebar({ compte, contactComptes, contacts, onClose, onNavToContact }) {
+  const contactMap = useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
+  const linkedContacts = useMemo(()=>(
+    contactComptes
+      .filter(cc=>cc.compte_id===compte.id)
+      .map(cc=>{ const c=contactMap[cc.contact_id]; return c?{...c, role_compte:cc.role, is_primary:cc.is_primary}:null; })
+      .filter(Boolean)
+      .sort((a,b)=>(b.is_primary?1:0)-(a.is_primary?1:0)||(a.nom||'').localeCompare(b.nom||''))
+  ),[contactComptes, compte.id, contactMap]);
+
+  return (
+    <div className="fixed top-0 right-0 w-full sm:w-96 h-full bg-white border-l-4 border-midnight shadow-2xl z-50 overflow-y-auto" data-detail>
+      <div className="sticky top-0 bg-white border-b-2 border-neutral-100 p-4 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[10px] text-neutral-300 uppercase tracking-wider mb-1">Compte</div>
+          <div className="font-bold text-midnight text-lg truncate">{compte.nom}</div>
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <StatutCompteBadge statut={compte.statut}/>
+            {compte.responsable&&<span className="text-xs text-slate">· {compte.responsable}</span>}
+          </div>
+        </div>
+        <button onClick={onClose} aria-label="Fermer" className="text-slate hover:text-carbon text-xl leading-none px-2">✕</button>
+      </div>
+      <div className="p-4 space-y-3 text-sm">
+        {compte.secteur&&<div><div className="text-[10px] text-neutral-300 uppercase tracking-wider">Secteur</div><div className="text-carbon">{compte.secteur}</div></div>}
+        {compte.ville&&<div><div className="text-[10px] text-neutral-300 uppercase tracking-wider">Ville</div><div className="text-carbon">{compte.ville}</div></div>}
+        {compte.site_web&&<div><div className="text-[10px] text-neutral-300 uppercase tracking-wider">Site web</div><a href={compte.site_web} target="_blank" rel="noopener noreferrer" className="text-azure-100 hover:underline break-all">{compte.site_web}</a></div>}
+        {compte.notes&&<div><div className="text-[10px] text-neutral-300 uppercase tracking-wider">Notes</div><div className="whitespace-pre-wrap text-slate text-xs">{compte.notes}</div></div>}
+        <div>
+          <div className="text-[10px] text-neutral-300 uppercase tracking-wider mb-2">Contacts liés ({linkedContacts.length})</div>
+          {linkedContacts.length===0&&<div className="text-xs text-neutral-200 italic">Aucun contact lié</div>}
+          <div className="space-y-1">
+            {linkedContacts.map(c=>(
+              <button key={c.id} onClick={()=>onNavToContact&&onNavToContact(c.id)} className="w-full text-left bg-neutral-50 p-2 border border-neutral-100 hover:border-midnight hover:bg-white transition-colors group">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm text-midnight truncate">{c.prenom} {c.nom}</div>
+                    {(c.role_compte||c.role)&&<div className="text-xs text-neutral-300 mt-0.5 truncate">{c.role_compte||c.role}</div>}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <StatutBadge statut={c.statut}/>
+                    <span className="text-neutral-300 group-hover:text-midnight">→</span>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -3825,7 +4047,7 @@ function KanbanBesoins({ besoins, contacts, contactMap, besoinCandidats, onSelec
         const newOrder = reordered.map(b=>String(b.id));
         const updated = {...colOrders, [statut]: newOrder};
         setColOrders(updated);
-        localStorage.setItem('besoins_kanban_order', JSON.stringify(updated));
+        try{localStorage.setItem('besoins_kanban_order', JSON.stringify(updated));}catch(e){}
       }
     }
     setDragId(null); setDragOverCardId(null);
@@ -6868,8 +7090,9 @@ function App() {
   const fetchAll = useCallback(async ()=>{
     setLoading(true); setError(null);
     try {
-      // Mobile : limiter les historiques pour éviter OOM Safari
-      const histLimit = isMobile ? 500 : 10000;
+      // Mobile : limites réduites pour éviter OOM Safari iOS (~300-500MB max)
+      const L = isMobile ? 1000 : 10000;
+      const histLimit = isMobile ? 300 : 10000;
       const [
         {data:contacts,  error:e1},{data:historique,error:e2},
         {data:taches,    error:e3},{data:besoins,   error:e4},
@@ -6878,11 +7101,11 @@ function App() {
         {data:missionPeriods,error:e8},
         {data:comptes,   error:e9},{data:contactComptes,error:e10},
       ] = await Promise.all([
-        sb.from('contacts').select('*').order('id').limit(10000),
+        sb.from('contacts').select('*').order('id').limit(L),
         sb.from('historique_actions').select('*').order('date',{ascending:false}).limit(histLimit),
-        sb.from('taches').select('*').order('due_date',{ascending:true,nullsFirst:false}).limit(10000),
-        sb.from('besoins').select('*').order('created_at',{ascending:false}).limit(10000),
-        sb.from('missions').select('*').order('consultant').limit(5000),
+        sb.from('taches').select('*').order('due_date',{ascending:true,nullsFirst:false}).limit(L),
+        sb.from('besoins').select('*').order('created_at',{ascending:false}).limit(L),
+        sb.from('missions').select('*').order('consultant').limit(isMobile?500:5000),
         sb.from('historique_missions').select('*').order('date',{ascending:false}).limit(histLimit),
         sb.from('besoin_candidats').select('*').order('created_at',{ascending:true}).limit(5000),
         sb.from('mission_periods').select('*').order('debut',{ascending:true}).limit(10000),
@@ -6940,7 +7163,7 @@ function App() {
       var p=res.data;
       setProfile(p);
       if(p){
-        loadAchievements(p.nom).then(function(a){setAchievements(a);});
+        setTimeout(function(){loadAchievements(p.nom).then(function(a){setAchievements(a);});},2000);
         if(!initialTabSetRef.current&&p.preferences&&p.preferences.default_tab){setTab(p.preferences.default_tab);initialTabSetRef.current=true;}
         setPrefs(p.preferences||{});
       } else {
@@ -7028,7 +7251,7 @@ function App() {
   var badgeCategory=_bdResolved.category;var badgeLevel=_bdResolved.level;var badgeMeta=BADGE_META[badgeCategory];
   const TABS=[
     {id:'taches',     label:<><Icon d={ICONS.check} size={14}/> Tâches ({tachesActives.length}){tachesRetard.length>0&&<span className="w-2 h-2 bg-coral-100 rounded-full inline-block ml-1"/>}</>},
-    {id:'prospects',  label:<><Icon d={ICONS.person} size={14}/> Contacts ({vContacts.length})</>},
+    {id:'prospects',  label:<><Icon d={ICONS.person} size={14}/> Comptes &amp; Contacts ({vContacts.length})</>},
     {id:'prospection',label:<><Icon d={ICONS.phone} size={14}/> Prosp.</>},
     {id:'besoins',    label:<><Icon d={ICONS.target} size={14}/> Besoins ({vBesoins.length})</>},
     {id:'pipe',       label:<><Icon d={ICONS.chart} size={14}/> Pipe ({besoinsPipeActifs.length})</>},
@@ -7145,7 +7368,23 @@ function App() {
   );
 }
 
-ReactDOM.render(<App />, document.getElementById('root'));
+class CRMErrorBoundary extends React.Component {
+  constructor(props){super(props);this.state={hasError:false,error:null};}
+  static getDerivedStateFromError(e){return{hasError:true,error:e};}
+  componentDidCatch(e,info){console.error('CRM crash:',e,info);}
+  render(){
+    if(this.state.hasError) return React.createElement('div',{style:{padding:32,fontFamily:'system-ui,sans-serif',textAlign:'center',maxWidth:400,margin:'80px auto'}},
+      React.createElement('div',{style:{fontSize:48,marginBottom:16}},'⚠️'),
+      React.createElement('h2',{style:{color:'#111',marginBottom:8}},'Une erreur est survenue'),
+      React.createElement('p',{style:{color:'#666',fontSize:14,marginBottom:24}},'Essayez de vider le cache ou contactez l\'administrateur.'),
+      React.createElement('button',{onClick:function(){try{localStorage.clear();}catch(e){}window.location.reload();},style:{padding:'12px 24px',background:'#FFD600',border:'none',borderRadius:8,fontWeight:700,fontSize:14,cursor:'pointer'}},'Réinitialiser et recharger'),
+      React.createElement('pre',{style:{fontSize:10,color:'#999',marginTop:24,textAlign:'left',whiteSpace:'pre-wrap',wordBreak:'break-all'}},this.state.error?.toString())
+    );
+    return this.props.children;
+  }
+}
+
+ReactDOM.render(<CRMErrorBoundary><App /></CRMErrorBoundary>, document.getElementById('root'));
 </script>
 </body>
 </html>
