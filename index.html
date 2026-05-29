@@ -1558,7 +1558,7 @@ function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
 // DETAIL PANELS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function ContactDetail({ contact, historique, taches, missions, besoins, profile, allProfiles, onClose, onRefresh, onNavToBesoin, onNavToMission, onNavToTache, fromCompte }) {
+function ContactDetail({ contact, historique, taches, missions, besoins, comptes, contactComptes, profile, allProfiles, onClose, onRefresh, onNavToBesoin, onNavToMission, onNavToTache, onNavToCompte, fromCompte }) {
   const [modal,setModal] = useState(null);
   const [deleting,setDeleting] = useState(false);
   const isOwner = profile.role==='admin' || contact.responsable===profile.nom;
@@ -1566,6 +1566,8 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
   const tachesContact = taches.filter(t=>t.contact_id===contact.id&&t.statut!=='fait'&&t.statut!=='annule');
   const besoinsContact = (besoins||[]).filter(b=>String(b.contact_id)===String(contact.id)||String(b.candidat_id)===String(contact.id));
   const missionsContact = (missions||[]).filter(m=>{const n=(contact.prenom+' '+contact.nom).trim().toUpperCase();return (m.consultant||'').toUpperCase()===n;});
+  // Phase 1.B.4 : comptes liés via contact_compte
+  const linkedComptes = ((contactComptes||[]).filter(cc=>cc.contact_id===contact.id).map(cc=>{const cmpt=(comptes||[]).find(x=>x.id===cc.compte_id);return cmpt?{...cmpt,role_compte:cc.role,is_primary:cc.is_primary}:null;}).filter(Boolean));
   const saved = () => { setModal(null); onRefresh(); };
   const handleDelete = async () => {
     setDeleting(true);
@@ -1612,6 +1614,20 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
         {contact.ats&&<div><span className="text-[11px] text-slate uppercase tracking-wide">ATS</span><br/><a href={contact.ats} target="_blank" className="text-iris-100 hover:underline text-xs">→ Fiche ATS</a></div>}
         {contact.date_dernier_suivi_client&&(()=>{const j=daysSince(contact.date_dernier_suivi_client);const dot=j<30?'🟢':j<=60?'🟡':'🔴';return <div className="col-span-2"><span className="text-[11px] text-slate uppercase tracking-wide">Dernier suivi client</span><br/><span className="text-carbon font-medium">{new Date(contact.date_dernier_suivi_client).toLocaleDateString('fr-FR')} — {dot} {j}j</span></div>;})()}
       </div>
+      {linkedComptes.length>0&&(
+        <div>
+          <div className="text-[11px] font-bold text-slate uppercase tracking-[0.1em] mb-2">Compte{linkedComptes.length>1?'s':''} associé{linkedComptes.length>1?'s':''}</div>
+          <div className="flex flex-wrap gap-2">
+            {linkedComptes.map(cmpt=>(
+              <button key={cmpt.id} onClick={()=>onNavToCompte&&onNavToCompte(cmpt.id)} className="inline-flex items-center gap-2 px-2.5 py-1 bg-azure-20 text-midnight text-xs font-semibold hover:bg-azure-100 hover:text-white cursor-pointer transition-colors group">
+                <span>🏢 {cmpt.nom}</span>
+                {cmpt.role_compte&&<span className="text-[10px] opacity-70 font-normal">· {cmpt.role_compte}</span>}
+                <span className="text-neutral-300 group-hover:text-white">→</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {contact.commentaires&&<div><div className="text-[11px] font-bold text-slate uppercase tracking-[0.1em] mb-2">Commentaires</div><div className="text-sm text-slate bg-neutral-50 rounded-lg p-3 whitespace-pre-wrap">{contact.commentaires}</div></div>}
       {(besoinsContact.length>0||missionsContact.length>0)&&(
         <div>
@@ -2283,6 +2299,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
   const [selected,setSelected]=useState(null); const [showAdd,setShowAdd]=useState(false);
   const [viewMode,setViewMode]=useState('contacts'); // 'contacts' | 'comptes'
   const [selectedCompte,setSelectedCompte]=useState(null);
+  const [fromContact,setFromContact]=useState(null); // contact origine pour breadcrumb sur CompteSidebar
   useEffect(()=>{ if(navContactId){ const c=contacts.find(x=>x.id===navContactId||String(x.id)===String(navContactId)); if(c) setSelected(c); } },[navContactKey]);
   const isAdmin=profile.role==='admin';
   const statuts=useMemo(()=>[...new Set(contacts.map(c=>c.statut).filter(Boolean))].sort(),[contacts]);
@@ -2412,15 +2429,15 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
         </table>
       </div>
       </>}
-      {viewMode==='comptes'&&<ComptesView comptes={comptes||[]} contactComptes={contactComptes||[]} contacts={contacts} historique={historique} profile={profile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} selected={selectedCompte} onSelect={setSelectedCompte} onNavToContact={cid=>{const c=contacts.find(x=>x.id===cid);if(c)setSelected(c);}}/>}
-      {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} missions={missions} besoins={besoins} profile={profile} allProfiles={allProfiles} fromCompte={viewMode==='comptes'?selectedCompte:null} onRefresh={()=>{onRefresh();setSelected(null);}} onClose={()=>setSelected(null)} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache}/>}
+      {viewMode==='comptes'&&<ComptesView comptes={comptes||[]} contactComptes={contactComptes||[]} contacts={contacts} historique={historique} profile={profile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} selected={selectedCompte} onSelect={c=>{setSelectedCompte(c);setFromContact(null);}} onNavToContact={cid=>{const c=contacts.find(x=>x.id===cid);if(c)setSelected(c);}} fromContact={fromContact} onBackToContact={()=>{setSelected(fromContact);setSelectedCompte(null);setFromContact(null);setViewMode('contacts');}}/>}
+      {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} missions={missions} besoins={besoins} comptes={comptes||[]} contactComptes={contactComptes||[]} profile={profile} allProfiles={allProfiles} fromCompte={viewMode==='comptes'?selectedCompte:null} onRefresh={()=>{onRefresh();setSelected(null);}} onClose={()=>setSelected(null)} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache} onNavToCompte={cid=>{const cmpt=(comptes||[]).find(x=>x.id===cid);if(cmpt){setFromContact(selected);setSelected(null);setSelectedCompte(cmpt);setViewMode('comptes');}}}/>}
       {showAdd&&<AddContactModal profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
     </div>
   );
 }
 
 // ── Vue Comptes (Phase 1.B.2) ─────────────────────────────────────────────────
-function ComptesView({ comptes, contactComptes, contacts, historique, profile, allProfiles, commerciauxParAgence, selected, onSelect, onNavToContact }) {
+function ComptesView({ comptes, contactComptes, contacts, historique, profile, allProfiles, commerciauxParAgence, selected, onSelect, onNavToContact, fromContact, onBackToContact }) {
   const [search,setSearch]=useState('');
   const [filterStatut,setFilterStatut]=useState('');
   const [filterResp,setFilterResp]=useState('');
@@ -2563,13 +2580,13 @@ function ComptesView({ comptes, contactComptes, contacts, historique, profile, a
           ))}</tbody>
         </table>
       </div>
-      {selected&&<CompteSidebar compte={selected} contactComptes={contactComptes} contacts={contacts} onClose={()=>onSelect(null)} onNavToContact={onNavToContact}/>}
+      {selected&&<CompteSidebar compte={selected} contactComptes={contactComptes} contacts={contacts} onClose={()=>onSelect(null)} onNavToContact={onNavToContact} fromContact={fromContact} onBackToContact={onBackToContact}/>}
     </>
   );
 }
 
-// ── Sidebar Compte (minimale en Phase 1.B.2, sera enrichie en 1.B.3) ─────────
-function CompteSidebar({ compte, contactComptes, contacts, onClose, onNavToContact }) {
+// ── Sidebar Compte (Phase 1.B.2 + breadcrumb back-to-contact en 1.B.4) ────────
+function CompteSidebar({ compte, contactComptes, contacts, onClose, onNavToContact, fromContact, onBackToContact }) {
   const contactMap = useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
   const linkedContacts = useMemo(()=>(
     contactComptes
@@ -2583,6 +2600,7 @@ function CompteSidebar({ compte, contactComptes, contacts, onClose, onNavToConta
     <div className="fixed top-0 right-0 w-full sm:w-96 h-full bg-white border-l-4 border-midnight shadow-2xl z-50 overflow-y-auto" data-detail>
       <div className="sticky top-0 bg-white border-b-2 border-neutral-100 p-4 flex items-start justify-between gap-2">
         <div className="min-w-0">
+          {fromContact&&onBackToContact&&<div className="text-xs font-normal text-slate mb-1"><button onClick={onBackToContact} className="hover:text-azure-100 hover:underline cursor-pointer">← {fromContact.prenom} {fromContact.nom}</button></div>}
           <div className="text-[10px] text-neutral-300 uppercase tracking-wider mb-1">Compte</div>
           <div className="font-bold text-midnight text-lg truncate">{compte.nom}</div>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
