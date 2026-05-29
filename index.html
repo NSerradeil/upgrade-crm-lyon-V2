@@ -1556,7 +1556,7 @@ function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
 // DETAIL PANELS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function ContactDetail({ contact, historique, taches, missions, besoins, profile, allProfiles, onClose, onRefresh, onNavToBesoin, onNavToMission, onNavToTache }) {
+function ContactDetail({ contact, historique, taches, missions, besoins, profile, allProfiles, onClose, onRefresh, onNavToBesoin, onNavToMission, onNavToTache, fromCompte }) {
   const [modal,setModal] = useState(null);
   const [deleting,setDeleting] = useState(false);
   const isOwner = profile.role==='admin' || contact.responsable===profile.nom;
@@ -1586,7 +1586,7 @@ function ContactDetail({ contact, historique, taches, missions, besoins, profile
     </div>
   );
   return (
-    <SidePanel title={`${contact.prenom} ${contact.nom}`}
+    <SidePanel title={fromCompte?<><div className="text-xs font-normal text-slate -mt-1 mb-0.5"><button onClick={onClose} className="hover:text-azure-100 hover:underline cursor-pointer">← {fromCompte.nom}</button></div>{contact.prenom} {contact.nom}</>:`${contact.prenom} ${contact.nom}`}
       badge={<><div className="text-sm text-slate">{contact.groupe} · {contact.role}</div><div className="mt-1"><StatutBadge statut={contact.statut}/></div></>}
       onClose={onClose} actions={actions}>
       {contact.ne_pas_recontacter&&(
@@ -2409,10 +2409,10 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
           ))}</tbody>
         </table>
       </div>
-      {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} missions={missions} besoins={besoins} profile={profile} allProfiles={allProfiles} onRefresh={()=>{onRefresh();setSelected(null);}} onClose={()=>setSelected(null)} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache}/>}
-      {showAdd&&<AddContactModal profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
       </>}
-      {viewMode==='comptes'&&<ComptesView comptes={comptes||[]} contactComptes={contactComptes||[]} contacts={contacts} historique={historique} profile={profile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} selected={selectedCompte} onSelect={setSelectedCompte} onNavToContact={cid=>{const c=contacts.find(x=>x.id===cid);if(c){setViewMode('contacts');setSelectedCompte(null);setSelected(c);}}}/>}
+      {viewMode==='comptes'&&<ComptesView comptes={comptes||[]} contactComptes={contactComptes||[]} contacts={contacts} historique={historique} profile={profile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} selected={selectedCompte} onSelect={setSelectedCompte} onNavToContact={cid=>{const c=contacts.find(x=>x.id===cid);if(c)setSelected(c);}}/>}
+      {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} missions={missions} besoins={besoins} profile={profile} allProfiles={allProfiles} fromCompte={viewMode==='comptes'?selectedCompte:null} onRefresh={()=>{onRefresh();setSelected(null);}} onClose={()=>setSelected(null)} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache}/>}
+      {showAdd&&<AddContactModal profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
     </div>
   );
 }
