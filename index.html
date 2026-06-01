@@ -1554,6 +1554,94 @@ function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
   );
 }
 
+// ── Modal : Créer / Modifier compte (Phase 1.C) ──────────────────────────────
+function CompteFormModal({ compte, profile, allProfiles, onClose, onSaved }) {
+  const isEdit = !!compte;
+  const [f, setF] = useState({
+    nom: compte?.nom || '',
+    secteur: compte?.secteur || '',
+    ville: compte?.ville || '',
+    statut: compte?.statut || 'Prospect',
+    responsable: compte?.responsable || profile.nom,
+    site_web: compte?.site_web || '',
+    notes: compte?.notes || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const s = k => e => setF(v => ({...v, [k]: e.target.value}));
+
+  const save = async () => {
+    if (!f.nom.trim()) { setErr('Le nom est obligatoire.'); return; }
+    setSaving(true); setErr('');
+    const payload = {
+      nom: f.nom.trim(),
+      secteur: (f.secteur||'').trim() || null,
+      ville: (f.ville||'').trim() || null,
+      statut: f.statut,
+      responsable: f.responsable || null,
+      site_web: (f.site_web||'').trim() || null,
+      notes: (f.notes||'').trim() || null,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = isEdit
+      ? await sb.from('comptes').update(payload).eq('id', compte.id)
+      : await sb.from('comptes').insert(payload);
+    if (error) {
+      setErr(error.code === '23505' ? 'Un compte avec ce nom existe déjà.' : error.message);
+      setSaving(false);
+    } else {
+      toast(isEdit ? 'Compte modifié' : 'Compte créé');
+      onSaved();
+    }
+  };
+
+  return (
+    <Modal title={<><Icon d={isEdit?ICONS.edit:ICONS.work} size={14}/> {isEdit ? `Modifier — ${compte.nom}` : 'Nouveau compte'}</>} onClose={onClose}
+      footer={<ModalFooter onClose={onClose} onSave={save} saving={saving} label={isEdit ? 'Enregistrer' : '+ Créer'}/>}>
+      <Field label="Nom *"><input type="text" value={f.nom} autoFocus onChange={s('nom')} className={inputCls} placeholder="ex: EDF, BNP Paribas..."/></Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Secteur"><input type="text" value={f.secteur} onChange={s('secteur')} className={inputCls} placeholder="ex: Banque, Énergie..."/></Field>
+        <Field label="Ville"><input type="text" value={f.ville} onChange={s('ville')} className={inputCls}/></Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Statut">
+          <select value={f.statut} onChange={s('statut')} className={inputCls}>
+            {['Prospect','Client actif','Client dormant','Ancien client'].map(x => <option key={x} value={x}>{x}</option>)}
+          </select>
+        </Field>
+        <Field label="Responsable">
+          <select value={f.responsable} onChange={s('responsable')} className={inputCls}>
+            {respOptions(allProfiles, f.responsable).map(p => <option key={p.nom} value={p.nom}>{p.nom}</option>)}
+          </select>
+        </Field>
+      </div>
+      <Field label="Site web"><input type="url" value={f.site_web} onChange={s('site_web')} className={inputCls} placeholder="https://..."/></Field>
+      <Field label="Notes"><textarea rows={3} value={f.notes} onChange={s('notes')} className={inputCls+' resize-none'}/></Field>
+      {err && <div className="text-xs text-coral-100 bg-coral-20 rounded px-3 py-2">{err}</div>}
+    </Modal>
+  );
+}
+
+// ── Modal : Confirmer suppression compte (admin only) ────────────────────────
+function ConfirmDeleteCompteModal({ compte, contactComptes, onClose, onConfirm, deleting }) {
+  const nbContacts = (contactComptes||[]).filter(cc => cc.compte_id === compte.id).length;
+  return (
+    <Modal title={<><Icon d={ICONS.delete} size={14}/> Supprimer le compte ?</>} onClose={onClose}
+      footer={<>
+        <button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button>
+        <button onClick={onConfirm} disabled={deleting} className="px-4 py-2 bg-coral-100 text-white text-sm font-medium hover:opacity-80 disabled:opacity-50 btn-brutal">{deleting ? 'Suppression...' : 'Supprimer'}</button>
+      </>}>
+      <div className="text-sm space-y-3">
+        <div>Tu vas supprimer définitivement le compte <strong>{compte.nom}</strong>.</div>
+        {nbContacts > 0 && <div className="text-xs bg-lemon-20 p-3 border-2 border-lemon-100">
+          ⚠️ {nbContacts} contact{nbContacts>1?'s':''} rattaché{nbContacts>1?'s':''} va{nbContacts>1?'nt':''} être délié{nbContacts>1?'s':''} du compte. Les contacts eux-mêmes ne sont PAS supprimés, juste leur lien.
+        </div>}
+        <div className="text-xs text-slate">Action irréversible.</div>
+      </div>
+    </Modal>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // DETAIL PANELS
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2300,6 +2388,10 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
   const [viewMode,setViewMode]=useState('contacts'); // 'contacts' | 'comptes'
   const [selectedCompte,setSelectedCompte]=useState(null);
   const [fromContact,setFromContact]=useState(null); // contact origine pour breadcrumb sur CompteSidebar
+  const [showAddCompte,setShowAddCompte]=useState(false);
+  const [editingCompte,setEditingCompte]=useState(null);
+  const [deletingCompte,setDeletingCompte]=useState(null);
+  const [compteDeleting,setCompteDeleting]=useState(false);
   useEffect(()=>{ if(navContactId){ const c=contacts.find(x=>x.id===navContactId||String(x.id)===String(navContactId)); if(c) setSelected(c); } },[navContactKey]);
   const isAdmin=profile.role==='admin';
   const statuts=useMemo(()=>[...new Set(contacts.map(c=>c.statut).filter(Boolean))].sort(),[contacts]);
@@ -2360,6 +2452,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
           <button onClick={()=>setViewMode('comptes')} className={`px-3 py-2 font-medium border-l ${viewMode==='comptes'?'bg-midnight text-white':'bg-white text-slate hover:bg-neutral-50'}`}>Comptes ({(comptes||[]).length})</button>
         </div>
         {viewMode==='contacts'&&<button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">+ Nouveau contact</button>}
+        {viewMode==='comptes'&&<button onClick={()=>setShowAddCompte(true)} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">+ Nouveau compte</button>}
       </div>
       {viewMode==='contacts'&&<>
       <div className="flex gap-2 sm:gap-3 mb-4 flex-wrap">
@@ -2429,15 +2522,18 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
         </table>
       </div>
       </>}
-      {viewMode==='comptes'&&<ComptesView comptes={comptes||[]} contactComptes={contactComptes||[]} contacts={contacts} historique={historique} profile={profile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} selected={selectedCompte} onSelect={c=>{setSelectedCompte(c);setFromContact(null);}} onNavToContact={cid=>{const c=contacts.find(x=>x.id===cid);if(c)setSelected(c);}} fromContact={fromContact} onBackToContact={()=>{setSelected(fromContact);setSelectedCompte(null);setFromContact(null);setViewMode('contacts');}}/>}
+      {viewMode==='comptes'&&<ComptesView comptes={comptes||[]} contactComptes={contactComptes||[]} contacts={contacts} historique={historique} profile={profile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} selected={selectedCompte} onSelect={c=>{setSelectedCompte(c);setFromContact(null);}} onNavToContact={cid=>{const c=contacts.find(x=>x.id===cid);if(c)setSelected(c);}} fromContact={fromContact} onBackToContact={()=>{setSelected(fromContact);setSelectedCompte(null);setFromContact(null);setViewMode('contacts');}} onEditCompte={setEditingCompte} onDeleteCompte={setDeletingCompte}/>}
       {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} missions={missions} besoins={besoins} comptes={comptes||[]} contactComptes={contactComptes||[]} profile={profile} allProfiles={allProfiles} fromCompte={viewMode==='comptes'?selectedCompte:null} onRefresh={()=>{onRefresh();setSelected(null);}} onClose={()=>setSelected(null)} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache} onNavToCompte={cid=>{const cmpt=(comptes||[]).find(x=>x.id===cid);if(cmpt){setFromContact(selected);setSelected(null);setSelectedCompte(cmpt);setViewMode('comptes');}}}/>}
       {showAdd&&<AddContactModal profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
+      {showAddCompte&&<CompteFormModal compte={null} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAddCompte(false)} onSaved={()=>{setShowAddCompte(false);onRefresh();}}/>}
+      {editingCompte&&<CompteFormModal compte={editingCompte} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingCompte(null)} onSaved={()=>{setEditingCompte(null);onRefresh();}}/>}
+      {deletingCompte&&<ConfirmDeleteCompteModal compte={deletingCompte} contactComptes={contactComptes||[]} deleting={compteDeleting} onClose={()=>{if(!compteDeleting)setDeletingCompte(null);}} onConfirm={async()=>{setCompteDeleting(true);const {error}=await sb.from('comptes').delete().eq('id',deletingCompte.id);if(error){toast('Erreur : '+error.message);setCompteDeleting(false);return;}toast('Compte supprimé');setSelectedCompte(null);setDeletingCompte(null);setCompteDeleting(false);onRefresh();}}/>}
     </div>
   );
 }
 
 // ── Vue Comptes (Phase 1.B.2) ─────────────────────────────────────────────────
-function ComptesView({ comptes, contactComptes, contacts, historique, profile, allProfiles, commerciauxParAgence, selected, onSelect, onNavToContact, fromContact, onBackToContact }) {
+function ComptesView({ comptes, contactComptes, contacts, historique, profile, allProfiles, commerciauxParAgence, selected, onSelect, onNavToContact, fromContact, onBackToContact, onEditCompte, onDeleteCompte }) {
   const [search,setSearch]=useState('');
   const [filterStatut,setFilterStatut]=useState('');
   const [filterResp,setFilterResp]=useState('');
@@ -2580,13 +2676,15 @@ function ComptesView({ comptes, contactComptes, contacts, historique, profile, a
           ))}</tbody>
         </table>
       </div>
-      {selected&&<CompteSidebar compte={selected} contactComptes={contactComptes} contacts={contacts} onClose={()=>onSelect(null)} onNavToContact={onNavToContact} fromContact={fromContact} onBackToContact={onBackToContact}/>}
+      {selected&&<CompteSidebar compte={selected} contactComptes={contactComptes} contacts={contacts} profile={profile} onClose={()=>onSelect(null)} onNavToContact={onNavToContact} fromContact={fromContact} onBackToContact={onBackToContact} onEdit={()=>onEditCompte(selected)} onDelete={()=>onDeleteCompte(selected)}/>}
     </>
   );
 }
 
-// ── Sidebar Compte (Phase 1.B.2 + breadcrumb back-to-contact en 1.B.4) ────────
-function CompteSidebar({ compte, contactComptes, contacts, onClose, onNavToContact, fromContact, onBackToContact }) {
+// ── Sidebar Compte (Phase 1.B.2 + breadcrumb 1.B.4 + édition 1.C) ────────────
+function CompteSidebar({ compte, contactComptes, contacts, profile, onClose, onNavToContact, fromContact, onBackToContact, onEdit, onDelete }) {
+  const isAdmin = profile?.role === 'admin';
+  const isOwner = isAdmin || compte.responsable === profile?.nom;
   const contactMap = useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
   const linkedContacts = useMemo(()=>(
     contactComptes
@@ -2610,6 +2708,10 @@ function CompteSidebar({ compte, contactComptes, contacts, onClose, onNavToConta
         </div>
         <button onClick={onClose} aria-label="Fermer" className="text-slate hover:text-carbon text-xl leading-none px-2">✕</button>
       </div>
+      {(isOwner||isAdmin)&&<div className="px-4 py-2 border-b border-neutral-100 flex gap-2 flex-wrap">
+        {isOwner&&<button onClick={onEdit} className="inline-flex items-center gap-1 px-3 py-1.5 bg-lemon-100 text-midnight text-xs font-semibold hover:bg-lemon-20 transition-colors"><Icon d={ICONS.edit} size={12}/> Modifier</button>}
+        {isAdmin&&<button onClick={onDelete} className="inline-flex items-center gap-1 px-3 py-1.5 bg-coral-20 text-coral-100 text-xs font-semibold hover:bg-coral-100 hover:text-white transition-colors"><Icon d={ICONS.delete} size={12}/> Supprimer</button>}
+      </div>}
       <div className="p-4 space-y-3 text-sm">
         {compte.secteur&&<div><div className="text-[10px] text-neutral-300 uppercase tracking-wider">Secteur</div><div className="text-carbon">{compte.secteur}</div></div>}
         {compte.ville&&<div><div className="text-[10px] text-neutral-300 uppercase tracking-wider">Ville</div><div className="text-carbon">{compte.ville}</div></div>}
