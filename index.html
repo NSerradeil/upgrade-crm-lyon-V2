@@ -3863,10 +3863,17 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
   const [statusForm, setStatusForm] = useState(null);
   const [statusSaving, setStatusSaving] = useState(false);
 
+  // Log un changement de statut dans l'historique (compte comme une activité → évite le faux "à risque")
+  const logStatutChange = async function(newStatut) {
+    if(!newStatut || newStatut===besoin.statut || !besoin.contact_id) return;
+    await sb.from('historique_actions').insert({id_prospect:besoin.contact_id, date:getToday(), type_action:'Changement de statut', details:`Statut : ${besoin.statut||'—'} → ${newStatut}`, responsable:profile.nom, besoin_id:besoin.id});
+  };
+
   // Simple status change — direct Supabase update
   const handleSimpleStatus = async function(newStatut) {
     var result = await sb.from('besoins').update({statut:newStatut,updated_at:new Date().toISOString()}).eq('id',besoin.id);
     if(result.error){toast('Erreur: '+result.error.message,'error');return;}
+    await logStatutChange(newStatut);
     toast('Statut → '+newStatut);
     onRefresh();
   };
@@ -3907,6 +3914,7 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
 
     var result = await sb.from('besoins').update(patch).eq('id',besoin.id);
     if(result.error){toast('Erreur: '+result.error.message,'error');setStatusSaving(false);return;}
+    await logStatutChange(statut);
     toast('Statut → '+statut);
     setStatusForm(null);
     setStatusSaving(false);
@@ -3934,6 +3942,7 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
       responsable:f.responsable,updated_at:new Date().toISOString()};
     const {error}=await sb.from('besoins').update(upd).eq('id',besoin.id);
     if(!error){
+      await logStatutChange(f.statut);
       // Auto-log push opportuniste
       if(f.statut==='Push opportuniste'&&f.contact_id&&f.candidat_id&&(f.candidat_id!==besoin.candidat_id||f.statut!==besoin.statut)){
         const cand=contacts.find(c=>c.id===f.candidat_id);
