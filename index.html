@@ -2421,6 +2421,19 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
     return commerciauxParAgence[filterAgence]||[];
   },[filterAgence,allProfiles,commerciauxParAgence]);
 
+  // Phase 1.E : "Société" dérivée de la source de vérité (junction contact_compte
+  // pour Prospect/Client) au lieu de lire contacts.groupe (condamné en 1.F).
+  // Consultants/Freelance/Prestataire : groupe (maintenu par le trigger). Candidat : groupe (employeur manuel).
+  const primaryCompteByContact=useMemo(()=>{const m={};(contactComptes||[]).forEach(l=>{if(l.is_primary&&m[l.contact_id]==null)m[l.contact_id]=l.compte_id;});return m;},[contactComptes]);
+  const societeOf=c=>{
+    if(c&&(c.statut==='Prospect'||c.statut==='Client')){
+      const cid=primaryCompteByContact[c.id];
+      const cpt=cid!=null?compteMap[cid]:null;
+      if(cpt&&cpt.nom) return cpt.nom;
+    }
+    return c?.groupe||'';
+  };
+
   const toggleSort = col => {
     if(sortCol===col) setSortDir(d=>d==='asc'?'desc':'asc');
     else { setSortCol(col); setSortDir(col==='date_dernier'?'desc':'asc'); }
@@ -2433,7 +2446,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
   const filtered=useMemo(()=>{
     const q=search.toLowerCase();
     const rows=contacts
-      .map(c=>({...c,jours:daysSince(c.date_dernier)}))
+      .map(c=>({...c,jours:daysSince(c.date_dernier),societe:societeOf(c)}))
       .filter(c=>{
         if(filterMine&&c.responsable!==profile.nom) return false;
         if(filterStatut&&c.statut!==filterStatut) return false;
@@ -2441,13 +2454,13 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
         if(!filterMine&&filterResp&&c.responsable!==filterResp) return false;
         if(filterPeriode==='7j'&&c.jours>7) return false;
         if(filterPeriode==='30j'&&c.jours>30) return false;
-        if(q&&![c.prenom,c.nom,c.groupe,c.ville,c.role,c.besoins].some(v=>norm(v).includes(norm(q)))) return false;
+        if(q&&![c.prenom,c.nom,c.societe,c.ville,c.role,c.besoins].some(v=>norm(v).includes(norm(q)))) return false;
         return true;
       });
     rows.sort((a,b)=>{
       let va,vb;
       if(sortCol==='nom')               { va=(a.nom||'').toLowerCase();   vb=(b.nom||'').toLowerCase(); }
-      else if(sortCol==='groupe')       { va=(a.groupe||'').toLowerCase(); vb=(b.groupe||'').toLowerCase(); }
+      else if(sortCol==='groupe')       { va=(a.societe||'').toLowerCase(); vb=(b.societe||'').toLowerCase(); }
       else if(sortCol==='ville')        { va=(a.ville||'').toLowerCase();  vb=(b.ville||'').toLowerCase(); }
       else if(sortCol==='statut')       { va=(a.statut||'').toLowerCase(); vb=(b.statut||'').toLowerCase(); }
       else if(sortCol==='responsable')  { va=(a.responsable||'').toLowerCase(); vb=(b.responsable||'').toLowerCase(); }
@@ -2458,7 +2471,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
       return 0;
     });
     return rows;
-  },[contacts,search,filterStatut,filterPeriode,filterResp,filterAgence,filterMine,profile.nom,sortCol,sortDir]);
+  },[contacts,search,filterStatut,filterPeriode,filterResp,filterAgence,filterMine,profile.nom,sortCol,sortDir,primaryCompteByContact,compteMap]);
 
   const hasFilter=search||filterStatut||filterPeriode||filterResp||filterAgence||filterMine;
   const resetAll=()=>{setSearch('');setFilterStatut('');setFilterPeriode('');setFilterResp('');setFilterAgence('');setFilterMine(false);};
@@ -2505,7 +2518,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <div className="font-bold text-midnight text-sm">{c.prenom} {c.nom}</div>
-                {c.groupe&&<div className="text-xs font-medium text-slate mt-0.5">{c.groupe}</div>}
+                {c.societe&&<div className="text-xs font-medium text-slate mt-0.5">{c.societe}</div>}
                 {c.role&&<div className="text-xs text-neutral-300">{c.role}</div>}
               </div>
               <StatutBadge statut={c.statut}/>
@@ -2532,7 +2545,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
           <tbody>{filtered.map(c=>(
             <tr key={c.id} onClick={()=>setSelected(c)} data-detail tabIndex="0" className={`border-t border-neutral-50 hover:bg-lemon-20 focus:bg-azure-20 focus:outline-none cursor-pointer transition-colors${selected&&selected.id===c.id?' bg-azure-20':''}`}>
               <td className="px-4 py-3"><div className="font-medium text-midnight">{c.prenom} {c.nom}</div>{c.role&&<div className="text-xs text-neutral-300">{c.role}</div>}</td>
-              <td className="px-4 py-3 text-slate">{c.groupe}</td>
+              <td className="px-4 py-3 text-slate">{c.societe}</td>
               <td className="px-4 py-3 text-slate hidden lg:table-cell">{c.ville}</td>
               <td className="px-4 py-3"><div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'nowrap'}}><StatutBadge statut={c.statut}/>{c.ne_pas_recontacter&&<span title="Ne pas recontacter" style={{display:'inline-flex',alignItems:'center',padding:'1px 5px',borderRadius:0,fontSize:9,fontWeight:700,letterSpacing:'0.05em',backgroundColor:'#FF3D2E',color:'#fff',border:'none',lineHeight:1,whiteSpace:'nowrap'}}>NPC</span>}</div></td>
               <td className="px-4 py-3 text-slate text-xs hidden lg:table-cell">{c.responsable||'—'}</td>
