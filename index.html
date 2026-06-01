@@ -1094,9 +1094,25 @@ function respOptions(allProfiles, current) {
 // MODALS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
+// ── Phase 1.D : champ compte/société contextuel selon statut + sync contact_compte ──
+const CONSULTANT_STATUTS=['Consultant CDI','Freelance','Prestataire'];
+function CompteAssocField({ statut, groupe, compteId, comptes, onPickCompte, onChangeText }) {
+  if (CONSULTANT_STATUTS.includes(statut))
+    return <Field label="Compte (auto · depuis missions)"><div className={inputCls} style={{background:'#f5f5f5',color:'#999',borderRadius:0}}>{groupe||'—'}</div></Field>;
+  if (statut==='Candidat')
+    return <Field label="Employeur actuel"><input type="text" value={groupe||''} onChange={e=>onChangeText(e.target.value)} className={inputCls} placeholder="Saisie manuelle"/></Field>;
+  const sorted=[...(comptes||[])].sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
+  return <Field label="Compte associé"><select value={compteId||''} onChange={e=>{const id=e.target.value;const c=sorted.find(x=>String(x.id)===String(id));onPickCompte(id||null,c?c.nom:'');}} className={inputCls}><option value="">— Aucun —</option>{sorted.map(c=><option key={c.id} value={c.id}>{c.nom}</option>)}</select></Field>;
+}
+async function syncContactComptePrimary(contactId, compteId){
+  await sb.from('contact_compte').update({is_primary:false}).eq('contact_id',contactId).eq('is_primary',true);
+  if(compteId) await sb.from('contact_compte').upsert({contact_id:contactId,compte_id:compteId,is_primary:true},{onConflict:'contact_id,compte_id'});
+}
+
+function ContactEditModal({ contact, profile, allProfiles, comptes, onClose, onSaved }) {
   const isAdmin=profile.role==='admin';
-  const [f,setF] = useState({ prenom:contact.prenom||'', nom:contact.nom||'', telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', responsable:contact.responsable||'', linkedin:contact.linkedin||'', ats:contact.ats||'', agence:contact.agence||'', ne_pas_recontacter:contact.ne_pas_recontacter||false, ne_pas_recontacter_note:contact.ne_pas_recontacter_note||'' });
+  const initCompteId=(()=>{const c=(comptes||[]).find(x=>x.nom&&x.nom===contact.groupe);return c?c.id:'';})();
+  const [f,setF] = useState({ prenom:contact.prenom||'', nom:contact.nom||'', telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', compte_id:initCompteId, responsable:contact.responsable||'', linkedin:contact.linkedin||'', ats:contact.ats||'', agence:contact.agence||'', ne_pas_recontacter:contact.ne_pas_recontacter||false, ne_pas_recontacter_note:contact.ne_pas_recontacter_note||'' });
   const canEditAgence = isAdmin || (contact.responsable === profile.nom);
   const [saving,setSaving]=useState(false); const [err,setErr]=useState('');
   const s = k => e => setF(v=>({...v,[k]:e.target.value}));
@@ -1124,6 +1140,9 @@ function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
           await sb.from('historique_actions').insert({id_prospect:contact.id,date:getToday(),type_action:'Flag NPC levé',details:'Flag levé par '+profile.nom,responsable:profile.nom});
         }
       }
+      if(['Prospect','Client'].includes(f.statut) && (f.compte_id||'')!==(initCompteId||'')){
+        await syncContactComptePrimary(contact.id, f.compte_id||null);
+      }
       toast('Contact modifié');onSaved();
     }
   };
@@ -1134,9 +1153,8 @@ function ContactEditModal({ contact, profile, allProfiles, onClose, onSaved }) {
         <Field label="Prénom"><input type="text" value={f.prenom} onChange={e=>setF(v=>({...v,prenom:normPrenom(e.target.value)}))} className={inputCls}/></Field>
         <Field label="Nom"><input type="text" value={f.nom} onChange={e=>setF(v=>({...v,nom:e.target.value.toUpperCase()}))} className={inputCls}/></Field>
       </div>
-      {[['Groupe / Société','groupe','text'],['Rôle / Poste','role','text']].map(([l,k,t])=>(
-        <Field key={k} label={l}><input type={t} value={f[k]} onChange={s(k)} className={inputCls}/></Field>
-      ))}
+      <CompteAssocField statut={f.statut} groupe={f.groupe} compteId={f.compte_id} comptes={comptes} onPickCompte={(id,nom)=>setF(v=>({...v,compte_id:id,groupe:nom}))} onChangeText={val=>setF(v=>({...v,groupe:val}))}/>
+      <Field label="Rôle / Poste"><input type="text" value={f.role} onChange={s('role')} className={inputCls}/></Field>
       <Field label="Ville"><input type="text" value={f.ville} onChange={e=>setF(v=>({...v,ville:normVille(e.target.value)}))} className={inputCls}/></Field>
       <Field label="Téléphone"><input type="tel" value={f.telephone} onChange={s('telephone')} className={inputCls}/></Field>
       <Field label="Email"><input type="email" value={f.email} onChange={e=>setF(v=>({...v,email:normEmail(e.target.value)}))} className={inputCls}/></Field>
@@ -1508,8 +1526,8 @@ function AddTacheModal({ contacts, besoins, missions, profile, allProfiles, onCl
     </Modal>
   );
 }
-function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
-  const [f,setF] = useState({ prenom:'', nom:'', groupe:'', ville:'', role:'', telephone:'', email:'', linkedin:'', ats:'', statut:'Prospect', responsable:profile.nom, commentaires:'' });
+function AddContactModal({ profile, allProfiles, comptes, onClose, onSaved }) {
+  const [f,setF] = useState({ prenom:'', nom:'', groupe:'', compte_id:'', ville:'', role:'', telephone:'', email:'', linkedin:'', ats:'', statut:'Prospect', responsable:profile.nom, commentaires:'' });
   const [saving,setSaving]=useState(false); const [err,setErr]=useState('');
   const s = k => e => setF(v=>({...v,[k]:e.target.value}));
   const sNorm = (k,fn) => e => setF(v=>({...v,[k]:fn(e.target.value)}));
@@ -1522,6 +1540,9 @@ function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
     if (error) { setErr(error.message); setSaving(false); }
     else {
       await sb.from('historique_actions').insert({ id_prospect:inserted.id, date:getToday(), type_action:'Note interne', details:`Contact créé (statut : ${f.statut})`, responsable:f.responsable });
+      if(['Prospect','Client'].includes(f.statut) && f.compte_id){
+        await syncContactComptePrimary(inserted.id, f.compte_id);
+      }
       toast('Contact créé');onSaved();
     }
   };
@@ -1532,9 +1553,8 @@ function AddContactModal({ profile, allProfiles, onClose, onSaved }) {
         <Field label="Prénom"><input type="text" value={f.prenom} autoFocus onChange={sNorm('prenom',normPrenom)} className={inputCls} placeholder="ex: Jean-Pierre"/></Field>
         <Field label="Nom *"><input type="text" value={f.nom} onChange={sNorm('nom',normNom)} className={inputCls} placeholder="ex: DUPONT"/></Field>
       </div>
-      {[['Groupe / Société','groupe','text'],['Rôle / Poste','role','text']].map(([l,k,t])=>(
-        <Field key={k} label={l}><input type={t} value={f[k]} onChange={s(k)} className={inputCls}/></Field>
-      ))}
+      <CompteAssocField statut={f.statut} groupe={f.groupe} compteId={f.compte_id} comptes={comptes} onPickCompte={(id,nom)=>setF(v=>({...v,compte_id:id,groupe:nom}))} onChangeText={val=>setF(v=>({...v,groupe:val}))}/>
+      <Field label="Rôle / Poste"><input type="text" value={f.role} onChange={s('role')} className={inputCls}/></Field>
       <Field label="Ville"><input type="text" value={f.ville} onChange={sNorm('ville',normVille)} className={inputCls}/></Field>
       <Field label="Téléphone"><input type="tel" value={f.telephone} onChange={s('telephone')} className={inputCls}/></Field>
       <Field label="Email"><input type="email" value={f.email} onChange={sNorm('email',normEmail)} className={inputCls}/></Field>
@@ -1753,7 +1773,7 @@ function ContactDetail({ contact, historique, taches, missions, besoins, comptes
             ))}</div>
         }
       </div>
-      {modal==='edit'  && <ContactEditModal   contact={contact} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved} />}
+      {modal==='edit'  && <ContactEditModal   contact={contact} profile={profile} allProfiles={allProfiles} comptes={comptes} onClose={()=>setModal(null)} onSaved={saved} />}
       {modal==='hist'  && <AddHistoriqueModal contact={contact} profile={profile} onClose={()=>setModal(null)} onSaved={saved}/>}
       {modal==='tache' && <AddTacheModal contacts={[contact]} besoins={besoins||[]} missions={missions||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved} defaultContactId={contact.id}/>}
     </SidePanel>
@@ -2524,7 +2544,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
       </>}
       {viewMode==='comptes'&&<ComptesView comptes={comptes||[]} contactComptes={contactComptes||[]} contacts={contacts} historique={historique} profile={profile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} selected={selectedCompte?((comptes||[]).find(c=>c.id===selectedCompte.id)||selectedCompte):null} onSelect={c=>{setSelectedCompte(c);setFromContact(null);}} onNavToContact={cid=>{const c=contacts.find(x=>x.id===cid);if(c)setSelected(c);}} fromContact={fromContact} onBackToContact={()=>{setSelected(fromContact);setSelectedCompte(null);setFromContact(null);setViewMode('contacts');}} onEditCompte={setEditingCompte} onDeleteCompte={setDeletingCompte}/>}
       {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} missions={missions} besoins={besoins} comptes={comptes||[]} contactComptes={contactComptes||[]} profile={profile} allProfiles={allProfiles} fromCompte={viewMode==='comptes'?selectedCompte:null} onRefresh={()=>{onRefresh();setSelected(null);}} onClose={()=>setSelected(null)} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache} onNavToCompte={cid=>{const cmpt=(comptes||[]).find(x=>x.id===cid);if(cmpt){setFromContact(selected);setSelected(null);setSelectedCompte(cmpt);setViewMode('comptes');}}}/>}
-      {showAdd&&<AddContactModal profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
+      {showAdd&&<AddContactModal profile={profile} allProfiles={allProfiles} comptes={comptes||[]} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
       {showAddCompte&&<CompteFormModal compte={null} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAddCompte(false)} onSaved={()=>{setShowAddCompte(false);onRefresh();}}/>}
       {editingCompte&&<CompteFormModal compte={editingCompte} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingCompte(null)} onSaved={()=>{setEditingCompte(null);onRefresh();}}/>}
       {deletingCompte&&<ConfirmDeleteCompteModal compte={deletingCompte} contactComptes={contactComptes||[]} deleting={compteDeleting} onClose={()=>{if(!compteDeleting)setDeletingCompte(null);}} onConfirm={async()=>{setCompteDeleting(true);const {error}=await sb.from('comptes').delete().eq('id',deletingCompte.id);if(error){toast('Erreur : '+error.message);setCompteDeleting(false);return;}toast('Compte supprimé');setSelectedCompte(null);setDeletingCompte(null);setCompteDeleting(false);onRefresh();}}/>}
