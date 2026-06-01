@@ -2522,7 +2522,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
         </table>
       </div>
       </>}
-      {viewMode==='comptes'&&<ComptesView comptes={comptes||[]} contactComptes={contactComptes||[]} contacts={contacts} historique={historique} profile={profile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} selected={selectedCompte} onSelect={c=>{setSelectedCompte(c);setFromContact(null);}} onNavToContact={cid=>{const c=contacts.find(x=>x.id===cid);if(c)setSelected(c);}} fromContact={fromContact} onBackToContact={()=>{setSelected(fromContact);setSelectedCompte(null);setFromContact(null);setViewMode('contacts');}} onEditCompte={setEditingCompte} onDeleteCompte={setDeletingCompte}/>}
+      {viewMode==='comptes'&&<ComptesView comptes={comptes||[]} contactComptes={contactComptes||[]} contacts={contacts} historique={historique} profile={profile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} selected={selectedCompte?((comptes||[]).find(c=>c.id===selectedCompte.id)||selectedCompte):null} onSelect={c=>{setSelectedCompte(c);setFromContact(null);}} onNavToContact={cid=>{const c=contacts.find(x=>x.id===cid);if(c)setSelected(c);}} fromContact={fromContact} onBackToContact={()=>{setSelected(fromContact);setSelectedCompte(null);setFromContact(null);setViewMode('contacts');}} onEditCompte={setEditingCompte} onDeleteCompte={setDeletingCompte}/>}
       {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} missions={missions} besoins={besoins} comptes={comptes||[]} contactComptes={contactComptes||[]} profile={profile} allProfiles={allProfiles} fromCompte={viewMode==='comptes'?selectedCompte:null} onRefresh={()=>{onRefresh();setSelected(null);}} onClose={()=>setSelected(null)} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache} onNavToCompte={cid=>{const cmpt=(comptes||[]).find(x=>x.id===cid);if(cmpt){setFromContact(selected);setSelected(null);setSelectedCompte(cmpt);setViewMode('comptes');}}}/>}
       {showAdd&&<AddContactModal profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
       {showAddCompte&&<CompteFormModal compte={null} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAddCompte(false)} onSaved={()=>{setShowAddCompte(false);onRefresh();}}/>}
@@ -2709,8 +2709,8 @@ function CompteSidebar({ compte, contactComptes, contacts, profile, onClose, onN
         <button onClick={onClose} aria-label="Fermer" className="text-slate hover:text-carbon text-xl leading-none px-2">✕</button>
       </div>
       {(isOwner||isAdmin)&&<div className="px-4 py-2 border-b border-neutral-100 flex gap-2 flex-wrap">
-        {isOwner&&<button onClick={onEdit} className="inline-flex items-center gap-1 px-3 py-1.5 bg-lemon-100 text-midnight text-xs font-semibold hover:bg-lemon-20 transition-colors"><Icon d={ICONS.edit} size={12}/> Modifier</button>}
-        {isAdmin&&<button onClick={onDelete} className="inline-flex items-center gap-1 px-3 py-1.5 bg-coral-20 text-coral-100 text-xs font-semibold hover:bg-coral-100 hover:text-white transition-colors"><Icon d={ICONS.delete} size={12}/> Supprimer</button>}
+        {isOwner&&<BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={onEdit}/>}
+        {isAdmin&&<BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={onDelete}/>}
       </div>}
       <div className="p-4 space-y-3 text-sm">
         {compte.secteur&&<div><div className="text-[10px] text-neutral-300 uppercase tracking-wider">Secteur</div><div className="text-carbon">{compte.secteur}</div></div>}
