@@ -2555,7 +2555,7 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
         </table>
       </div>
       </>}
-      {viewMode==='comptes'&&<ComptesView comptes={comptes||[]} contactComptes={contactComptes||[]} contacts={contacts} historique={historique} profile={profile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} selected={selectedCompte?((comptes||[]).find(c=>c.id===selectedCompte.id)||selectedCompte):null} onSelect={c=>{setSelectedCompte(c);setFromContact(null);}} onNavToContact={cid=>{const c=contacts.find(x=>x.id===cid);if(c)setSelected(c);}} fromContact={fromContact} onBackToContact={()=>{setSelected(fromContact);setSelectedCompte(null);setFromContact(null);setViewMode('contacts');}} onEditCompte={setEditingCompte} onDeleteCompte={setDeletingCompte}/>}
+      {viewMode==='comptes'&&<ComptesView comptes={comptes||[]} contactComptes={contactComptes||[]} contacts={contacts} missions={missions} historique={historique} profile={profile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} selected={selectedCompte?((comptes||[]).find(c=>c.id===selectedCompte.id)||selectedCompte):null} onSelect={c=>{setSelectedCompte(c);setFromContact(null);}} onNavToContact={cid=>{const c=contacts.find(x=>x.id===cid);if(c)setSelected(c);}} fromContact={fromContact} onBackToContact={()=>{setSelected(fromContact);setSelectedCompte(null);setFromContact(null);setViewMode('contacts');}} onEditCompte={setEditingCompte} onDeleteCompte={setDeletingCompte}/>}
       {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} missions={missions} besoins={besoins} comptes={comptes||[]} contactComptes={contactComptes||[]} profile={profile} allProfiles={allProfiles} fromCompte={viewMode==='comptes'?selectedCompte:null} onRefresh={()=>{onRefresh();setSelected(null);}} onClose={()=>setSelected(null)} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache} onNavToCompte={cid=>{const cmpt=(comptes||[]).find(x=>x.id===cid);if(cmpt){setFromContact(selected);setSelected(null);setSelectedCompte(cmpt);setViewMode('comptes');}}}/>}
       {showAdd&&<AddContactModal profile={profile} allProfiles={allProfiles} comptes={comptes||[]} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
       {showAddCompte&&<CompteFormModal compte={null} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAddCompte(false)} onSaved={()=>{setShowAddCompte(false);onRefresh();}}/>}
@@ -2566,12 +2566,12 @@ function TabProspects({ contacts, contactMap, historique, taches, missions, beso
 }
 
 // ── Vue Comptes (Phase 1.B.2) ─────────────────────────────────────────────────
-function ComptesView({ comptes, contactComptes, contacts, historique, profile, allProfiles, commerciauxParAgence, selected, onSelect, onNavToContact, fromContact, onBackToContact, onEditCompte, onDeleteCompte }) {
+function ComptesView({ comptes, contactComptes, contacts, missions, historique, profile, allProfiles, commerciauxParAgence, selected, onSelect, onNavToContact, fromContact, onBackToContact, onEditCompte, onDeleteCompte }) {
   const [search,setSearch]=useState('');
   const [filterStatut,setFilterStatut]=useState('');
   const [filterResp,setFilterResp]=useState('');
   const [filterMine,setFilterMine]=useState(false);
-  const [sortCol,setSortCol]=useState('nb_rdv_30j');
+  const [sortCol,setSortCol]=useState('ca_2026');
   const [sortDir,setSortDir]=useState('desc');
 
   // Pre-compute : map compte_id → [contact_id...]
@@ -2589,7 +2589,19 @@ function ComptesView({ comptes, contactComptes, contacts, historique, profile, a
     return d.toISOString().slice(0,10);
   },[]);
 
-  // Enrichit chaque compte avec nb_contacts, date_dernier_rdv, nb_rdv_30j
+  // CA 2026 YTD (jan→mois courant) par compte, à partir des missions rattachées (compte_id)
+  const caByCompte = useMemo(()=>{
+    const cm = new Date().getMonth();
+    const m={};
+    (missions||[]).forEach(mi=>{
+      if(mi.compte_id==null) return;
+      let j=0; for(let i=0;i<=cm;i++) j+=parseFloat(mi['jours_'+MOIS_KEYS[i]])||0;
+      if(j>0){ const tjm=parseFloat(mi.tjm)||0; m[mi.compte_id]=(m[mi.compte_id]||0)+j*tjm; }
+    });
+    return m;
+  },[missions]);
+
+  // Enrichit chaque compte avec nb_contacts, date_dernier_rdv, nb_rdv_30j, ca_2026
   const comptesEnriched = useMemo(()=>{
     return comptes.map(c=>{
       const linkedIds = compteContacts[c.id] || [];
@@ -2602,9 +2614,9 @@ function ComptesView({ comptes, contactComptes, contacts, historique, profile, a
         if(!lastDate || h.date > lastDate) lastDate = h.date;
         if(h.date >= date30jAgo) count30++;
       });
-      return { ...c, nb_contacts: linkedIds.length, date_dernier_rdv: lastDate, nb_rdv_30j: count30 };
+      return { ...c, nb_contacts: linkedIds.length, date_dernier_rdv: lastDate, nb_rdv_30j: count30, ca_2026: Math.round(caByCompte[c.id]||0) };
     });
-  },[comptes, compteContacts, historique, date30jAgo]);
+  },[comptes, compteContacts, historique, date30jAgo, caByCompte]);
 
   const responsables = useMemo(()=>[...new Set(comptesEnriched.map(c=>c.responsable).filter(Boolean))].sort(),[comptesEnriched]);
 
@@ -2626,6 +2638,7 @@ function ComptesView({ comptes, contactComptes, contacts, historique, profile, a
       else if(sortCol==='nb_contacts')       { va=a.nb_contacts;                    vb=b.nb_contacts; }
       else if(sortCol==='date_dernier_rdv')  { va=a.date_dernier_rdv||'0000-00-00'; vb=b.date_dernier_rdv||'0000-00-00'; }
       else if(sortCol==='nb_rdv_30j')        { va=a.nb_rdv_30j;                     vb=b.nb_rdv_30j; }
+      else if(sortCol==='ca_2026')           { va=a.ca_2026;                        vb=b.ca_2026; }
       else                                   { va=a.nom;                            vb=b.nom; }
       if(va<vb) return sortDir==='asc'?-1:1;
       if(va>vb) return sortDir==='asc'?1:-1;
@@ -2678,6 +2691,7 @@ function ComptesView({ comptes, contactComptes, contacts, historique, profile, a
             <div className="flex items-center gap-3 mt-2 text-xs text-neutral-300 flex-wrap">
               {c.ville&&<span>{c.ville}</span>}
               <span>{c.nb_contacts} contact{c.nb_contacts>1?'s':''}</span>
+              {c.ca_2026>0&&<span className="text-midnight font-medium">· {fmtK(c.ca_2026)}</span>}
               {c.date_dernier_rdv&&<span>· Dernier RDV {daysSince(c.date_dernier_rdv)}j</span>}
               {c.nb_rdv_30j>0&&<span className="text-azure-100 font-medium">· {c.nb_rdv_30j} RDV/30j</span>}
             </div>
@@ -2693,6 +2707,7 @@ function ComptesView({ comptes, contactComptes, contacts, historique, profile, a
             <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('responsable')}>Responsable<SortIcon col="responsable"/></th>
             <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('ville')}>Ville<SortIcon col="ville"/></th>
             <th className={thCls} onClick={()=>toggleSort('nb_contacts')}>Contacts<SortIcon col="nb_contacts"/></th>
+            <th className={thCls} onClick={()=>toggleSort('ca_2026')}>CA 2026<SortIcon col="ca_2026"/></th>
             <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('date_dernier_rdv')}>Dernier RDV<SortIcon col="date_dernier_rdv"/></th>
             <th className={thCls} onClick={()=>toggleSort('nb_rdv_30j')}>RDV / 30j<SortIcon col="nb_rdv_30j"/></th>
           </tr></thead>
@@ -2703,19 +2718,20 @@ function ComptesView({ comptes, contactComptes, contacts, historique, profile, a
               <td className="px-4 py-3 text-slate text-xs hidden lg:table-cell">{c.responsable||'—'}</td>
               <td className="px-4 py-3 text-slate hidden lg:table-cell">{c.ville||'—'}</td>
               <td className="px-4 py-3 text-slate">{c.nb_contacts}</td>
+              <td className="px-4 py-3">{c.ca_2026>0?<span className="font-medium text-midnight">{fmtK(c.ca_2026)}</span>:<span className="text-neutral-200">—</span>}</td>
               <td className="px-4 py-3 hidden lg:table-cell">{c.date_dernier_rdv?<span className={daysSince(c.date_dernier_rdv)>90?'text-coral-100 font-medium':'text-slate'}>{daysSince(c.date_dernier_rdv)}j</span>:<span className="text-neutral-200">—</span>}</td>
               <td className="px-4 py-3">{c.nb_rdv_30j>0?<span className="text-azure-100 font-medium">{c.nb_rdv_30j}</span>:<span className="text-neutral-200">—</span>}</td>
             </tr>
           ))}</tbody>
         </table>
       </div>
-      {selected&&<CompteSidebar compte={selected} contactComptes={contactComptes} contacts={contacts} profile={profile} onClose={()=>onSelect(null)} onNavToContact={onNavToContact} fromContact={fromContact} onBackToContact={onBackToContact} onEdit={()=>onEditCompte(selected)} onDelete={()=>onDeleteCompte(selected)}/>}
+      {selected&&<CompteSidebar compte={selected} contactComptes={contactComptes} contacts={contacts} missions={missions} profile={profile} onClose={()=>onSelect(null)} onNavToContact={onNavToContact} fromContact={fromContact} onBackToContact={onBackToContact} onEdit={()=>onEditCompte(selected)} onDelete={()=>onDeleteCompte(selected)}/>}
     </>
   );
 }
 
 // ── Sidebar Compte (Phase 1.B.2 + breadcrumb 1.B.4 + édition 1.C) ────────────
-function CompteSidebar({ compte, contactComptes, contacts, profile, onClose, onNavToContact, fromContact, onBackToContact, onEdit, onDelete }) {
+function CompteSidebar({ compte, contactComptes, contacts, missions, profile, onClose, onNavToContact, fromContact, onBackToContact, onEdit, onDelete }) {
   const isAdmin = profile?.role === 'admin';
   const isOwner = isAdmin || compte.responsable === profile?.nom;
   const contactMap = useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
@@ -2726,6 +2742,22 @@ function CompteSidebar({ compte, contactComptes, contacts, profile, onClose, onN
       .filter(Boolean)
       .sort((a,b)=>(b.is_primary?1:0)-(a.is_primary?1:0)||(a.nom||'').localeCompare(b.nom||''))
   ),[contactComptes, compte.id, contactMap]);
+
+  // KPIs Activité 2026 (Phase 2) — CA/marge YTD (jan→mois courant), nb missions + TJM moyen sur les missions du compte ayant des jours 2026
+  const compteKpis = useMemo(()=>{
+    const cm = new Date().getMonth(); // 0=janvier → YTD inclus jusqu'au mois courant
+    let ca=0, marge=0, nb=0, sumTjm=0, nbTjm=0;
+    (missions||[]).filter(m=>m.compte_id===compte.id).forEach(m=>{
+      let j=0; for(let i=0;i<=cm;i++) j+=parseFloat(m['jours_'+MOIS_KEYS[i]])||0;
+      if(j>0){
+        const tjm=parseFloat(m.tjm)||0, cjm=parseFloat(m.cjm)||0;
+        ca+=j*tjm; marge+=j*(tjm-cjm); nb++;
+        if(tjm>0){ sumTjm+=tjm; nbTjm++; }
+      }
+    });
+    return { ca:Math.round(ca), marge:Math.round(marge), nb, tjmMoyen: nbTjm?Math.round(sumTjm/nbTjm):0 };
+  },[missions, compte.id]);
+  const fmtEuro = n => Math.round(n).toLocaleString('fr-FR')+' €';
 
   return (
     <div className="fixed top-0 right-0 w-full sm:w-96 h-full bg-white border-l-4 border-midnight shadow-2xl z-50 overflow-y-auto" data-detail>
@@ -2746,6 +2778,32 @@ function CompteSidebar({ compte, contactComptes, contacts, profile, onClose, onN
         {isAdmin&&<BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={onDelete}/>}
       </div>}
       <div className="p-4 space-y-3 text-sm">
+        {/* KPIs Activité 2026 (Phase 2) */}
+        <div>
+          <div className="text-[10px] text-neutral-300 uppercase tracking-wider mb-2">Activité 2026</div>
+          {compteKpis.nb>0 ? (
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-neutral-50 p-2 border border-neutral-100">
+                <div className="text-[10px] text-neutral-300 uppercase tracking-wider">CA</div>
+                <div className="font-bold text-midnight">{fmtEuro(compteKpis.ca)}</div>
+              </div>
+              <div className="bg-neutral-50 p-2 border border-neutral-100">
+                <div className="text-[10px] text-neutral-300 uppercase tracking-wider">Marge</div>
+                <div className={'font-bold '+(compteKpis.marge<0?'text-coral-100':'text-jade-100')}>{fmtEuro(compteKpis.marge)}</div>
+              </div>
+              <div className="bg-neutral-50 p-2 border border-neutral-100">
+                <div className="text-[10px] text-neutral-300 uppercase tracking-wider">Missions</div>
+                <div className="font-bold text-midnight">{compteKpis.nb}</div>
+              </div>
+              <div className="bg-neutral-50 p-2 border border-neutral-100">
+                <div className="text-[10px] text-neutral-300 uppercase tracking-wider">TJM moyen</div>
+                <div className="font-bold text-midnight">{compteKpis.tjmMoyen?fmtEuro(compteKpis.tjmMoyen):'—'}</div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-neutral-200 italic">Aucune mission en 2026</div>
+          )}
+        </div>
         {compte.secteur&&<div><div className="text-[10px] text-neutral-300 uppercase tracking-wider">Secteur</div><div className="text-carbon">{compte.secteur}</div></div>}
         {compte.ville&&<div><div className="text-[10px] text-neutral-300 uppercase tracking-wider">Ville</div><div className="text-carbon">{compte.ville}</div></div>}
         {compte.site_web&&<div><div className="text-[10px] text-neutral-300 uppercase tracking-wider">Site web</div><a href={compte.site_web} target="_blank" rel="noopener noreferrer" className="text-azure-100 hover:underline break-all">{compte.site_web}</a></div>}
