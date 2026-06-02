@@ -2571,7 +2571,7 @@ function ComptesView({ comptes, contactComptes, contacts, missions, historique, 
   const [filterStatut,setFilterStatut]=useState('');
   const [filterResp,setFilterResp]=useState('');
   const [filterMine,setFilterMine]=useState(false);
-  const [sortCol,setSortCol]=useState('nb_rdv_30j');
+  const [sortCol,setSortCol]=useState('ca_2026');
   const [sortDir,setSortDir]=useState('desc');
 
   // Pre-compute : map compte_id → [contact_id...]
@@ -2589,7 +2589,19 @@ function ComptesView({ comptes, contactComptes, contacts, missions, historique, 
     return d.toISOString().slice(0,10);
   },[]);
 
-  // Enrichit chaque compte avec nb_contacts, date_dernier_rdv, nb_rdv_30j
+  // CA 2026 YTD (jan→mois courant) par compte, à partir des missions rattachées (compte_id)
+  const caByCompte = useMemo(()=>{
+    const cm = new Date().getMonth();
+    const m={};
+    (missions||[]).forEach(mi=>{
+      if(mi.compte_id==null) return;
+      let j=0; for(let i=0;i<=cm;i++) j+=parseFloat(mi['jours_'+MOIS_KEYS[i]])||0;
+      if(j>0){ const tjm=parseFloat(mi.tjm)||0; m[mi.compte_id]=(m[mi.compte_id]||0)+j*tjm; }
+    });
+    return m;
+  },[missions]);
+
+  // Enrichit chaque compte avec nb_contacts, date_dernier_rdv, nb_rdv_30j, ca_2026
   const comptesEnriched = useMemo(()=>{
     return comptes.map(c=>{
       const linkedIds = compteContacts[c.id] || [];
@@ -2602,9 +2614,9 @@ function ComptesView({ comptes, contactComptes, contacts, missions, historique, 
         if(!lastDate || h.date > lastDate) lastDate = h.date;
         if(h.date >= date30jAgo) count30++;
       });
-      return { ...c, nb_contacts: linkedIds.length, date_dernier_rdv: lastDate, nb_rdv_30j: count30 };
+      return { ...c, nb_contacts: linkedIds.length, date_dernier_rdv: lastDate, nb_rdv_30j: count30, ca_2026: Math.round(caByCompte[c.id]||0) };
     });
-  },[comptes, compteContacts, historique, date30jAgo]);
+  },[comptes, compteContacts, historique, date30jAgo, caByCompte]);
 
   const responsables = useMemo(()=>[...new Set(comptesEnriched.map(c=>c.responsable).filter(Boolean))].sort(),[comptesEnriched]);
 
@@ -2626,6 +2638,7 @@ function ComptesView({ comptes, contactComptes, contacts, missions, historique, 
       else if(sortCol==='nb_contacts')       { va=a.nb_contacts;                    vb=b.nb_contacts; }
       else if(sortCol==='date_dernier_rdv')  { va=a.date_dernier_rdv||'0000-00-00'; vb=b.date_dernier_rdv||'0000-00-00'; }
       else if(sortCol==='nb_rdv_30j')        { va=a.nb_rdv_30j;                     vb=b.nb_rdv_30j; }
+      else if(sortCol==='ca_2026')           { va=a.ca_2026;                        vb=b.ca_2026; }
       else                                   { va=a.nom;                            vb=b.nom; }
       if(va<vb) return sortDir==='asc'?-1:1;
       if(va>vb) return sortDir==='asc'?1:-1;
@@ -2678,6 +2691,7 @@ function ComptesView({ comptes, contactComptes, contacts, missions, historique, 
             <div className="flex items-center gap-3 mt-2 text-xs text-neutral-300 flex-wrap">
               {c.ville&&<span>{c.ville}</span>}
               <span>{c.nb_contacts} contact{c.nb_contacts>1?'s':''}</span>
+              {c.ca_2026>0&&<span className="text-midnight font-medium">· {fmtK(c.ca_2026)}</span>}
               {c.date_dernier_rdv&&<span>· Dernier RDV {daysSince(c.date_dernier_rdv)}j</span>}
               {c.nb_rdv_30j>0&&<span className="text-azure-100 font-medium">· {c.nb_rdv_30j} RDV/30j</span>}
             </div>
@@ -2693,6 +2707,7 @@ function ComptesView({ comptes, contactComptes, contacts, missions, historique, 
             <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('responsable')}>Responsable<SortIcon col="responsable"/></th>
             <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('ville')}>Ville<SortIcon col="ville"/></th>
             <th className={thCls} onClick={()=>toggleSort('nb_contacts')}>Contacts<SortIcon col="nb_contacts"/></th>
+            <th className={thCls} onClick={()=>toggleSort('ca_2026')}>CA 2026<SortIcon col="ca_2026"/></th>
             <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('date_dernier_rdv')}>Dernier RDV<SortIcon col="date_dernier_rdv"/></th>
             <th className={thCls} onClick={()=>toggleSort('nb_rdv_30j')}>RDV / 30j<SortIcon col="nb_rdv_30j"/></th>
           </tr></thead>
@@ -2703,6 +2718,7 @@ function ComptesView({ comptes, contactComptes, contacts, missions, historique, 
               <td className="px-4 py-3 text-slate text-xs hidden lg:table-cell">{c.responsable||'—'}</td>
               <td className="px-4 py-3 text-slate hidden lg:table-cell">{c.ville||'—'}</td>
               <td className="px-4 py-3 text-slate">{c.nb_contacts}</td>
+              <td className="px-4 py-3">{c.ca_2026>0?<span className="font-medium text-midnight">{fmtK(c.ca_2026)}</span>:<span className="text-neutral-200">—</span>}</td>
               <td className="px-4 py-3 hidden lg:table-cell">{c.date_dernier_rdv?<span className={daysSince(c.date_dernier_rdv)>90?'text-coral-100 font-medium':'text-slate'}>{daysSince(c.date_dernier_rdv)}j</span>:<span className="text-neutral-200">—</span>}</td>
               <td className="px-4 py-3">{c.nb_rdv_30j>0?<span className="text-azure-100 font-medium">{c.nb_rdv_30j}</span>:<span className="text-neutral-200">—</span>}</td>
             </tr>
