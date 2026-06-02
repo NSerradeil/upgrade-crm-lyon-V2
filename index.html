@@ -2707,7 +2707,7 @@ function ComptesView({ comptes, contactComptes, contacts, missions, historique, 
             <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('responsable')}>Responsable<SortIcon col="responsable"/></th>
             <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('ville')}>Ville<SortIcon col="ville"/></th>
             <th className={thCls} onClick={()=>toggleSort('nb_contacts')}>Contacts<SortIcon col="nb_contacts"/></th>
-            <th className={thCls} onClick={()=>toggleSort('ca_2026')} title="Year-to-date : CA réalisé depuis janvier (jours × TJM)">CA <span className="text-neutral-200">YTD</span><SortIcon col="ca_2026"/></th>
+            <th className={thCls} onClick={()=>toggleSort('ca_2026')} title="Year-to-date : CA réalisé depuis janvier (jours × TJM)">CA <span className="text-neutral-300">(YTD)</span><SortIcon col="ca_2026"/></th>
             <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('date_dernier_rdv')}>Dernier RDV<SortIcon col="date_dernier_rdv"/></th>
             <th className={thCls} onClick={()=>toggleSort('nb_rdv_30j')}>RDV / 30j<SortIcon col="nb_rdv_30j"/></th>
           </tr></thead>
@@ -2784,11 +2784,11 @@ function CompteSidebar({ compte, contactComptes, contacts, missions, profile, on
           {compteKpis.nb>0 ? (
             <div className="grid grid-cols-2 gap-2">
               <div className="bg-neutral-50 p-2 border border-neutral-100">
-                <div className="text-[10px] text-neutral-300 uppercase tracking-wider" title="Year-to-date : CA réalisé depuis janvier (jours travaillés × TJM)">CA <span className="text-[9px] text-neutral-200">YTD</span></div>
+                <div className="text-[10px] text-neutral-300 uppercase tracking-wider" title="Year-to-date : CA réalisé depuis janvier (jours travaillés × TJM)">CA <span className="text-[9px] text-slate">(YTD)</span></div>
                 <div className="font-bold text-midnight">{fmtEuro(compteKpis.ca)}</div>
               </div>
               <div className="bg-neutral-50 p-2 border border-neutral-100">
-                <div className="text-[10px] text-neutral-300 uppercase tracking-wider" title="Year-to-date : marge réalisée depuis janvier (jours × (TJM − CJM))">Marge <span className="text-[9px] text-neutral-200">YTD</span></div>
+                <div className="text-[10px] text-neutral-300 uppercase tracking-wider" title="Year-to-date : marge réalisée depuis janvier (jours × (TJM − CJM))">Marge <span className="text-[9px] text-slate">(YTD)</span></div>
                 <div className={'font-bold '+(compteKpis.marge<0?'text-coral-100':'text-jade-100')}>{fmtEuro(compteKpis.marge)}</div>
               </div>
               <div className="bg-neutral-50 p-2 border border-neutral-100">
