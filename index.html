@@ -2823,9 +2823,9 @@ function CompteSidebar({ compte, contactComptes, contacts, missions, historique,
   const [activeTab,setActiveTab] = useState(compteMissions.length>0?'consultants':'contacts');
   useEffect(()=>{ setActiveTab(compteMissions.length>0?'consultants':'contacts'); },[compte.id]);
   const TABS = [
-    {key:'consultants', label:`Consultants ${consultantsMission.length}`},
-    {key:'contacts',    label:`Contacts ${linkedContacts.length}`},
-    {key:'activite',    label:`Activité ${activityFeed.length>40?'40+':activityFeed.length}`},
+    {key:'consultants', label:`Consultants (${consultantsMission.length})`},
+    {key:'contacts',    label:`Contacts (${linkedContacts.length})`},
+    {key:'activite',    label:`Activité (${activityFeed.length>40?'40+':activityFeed.length})`},
     {key:'infos',       label:'Infos'},
   ];
   const tabBtnCls = active => 'text-[11px] font-bold uppercase tracking-wider px-3 py-2.5 border transition-colors whitespace-nowrap '+(active?'bg-midnight text-white border-midnight':'bg-white text-slate border-neutral-200 hover:border-midnight');
