@@ -1096,13 +1096,53 @@ function respOptions(allProfiles, current) {
 
 // ── Phase 1.D : champ compte/société contextuel selon statut + sync contact_compte ──
 const CONSULTANT_STATUTS=['Consultant CDI','Freelance','Prestataire'];
+
+// ── Picker compte searchable (remplace le <select> natif pour Prospect/Client) ──
+function CompteAssocPicker({ comptes, compteId, onPickCompte }) {
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const sorted = useMemo(() => [...(comptes||[])].sort((a,b)=>(a.nom||'').localeCompare(b.nom||'')), [comptes]);
+  const filtered = useMemo(() => {
+    const q = norm(query.trim());
+    if (!q) return sorted.slice(0,15);
+    return sorted.filter(c => norm(c.nom||'').includes(q)).slice(0,15);
+  }, [query, sorted]);
+  const selectedNom = compteId ? ((comptes||[]).find(x=>String(x.id)===String(compteId))?.nom || '') : '';
+  if (selectedNom) return (
+    <div className="flex items-center gap-2 px-3 py-2 border border-blue-200 rounded-lg bg-azure-20">
+      <span className="text-sm font-medium text-midnight flex-1 truncate">{selectedNom}</span>
+      <button type="button" onClick={()=>{onPickCompte(null,'');setQuery('');}} className="text-azure-50 hover:text-red-500 text-xl leading-none font-light shrink-0">×</button>
+    </div>
+  );
+  return (
+    <div className="relative">
+      <input type="text" value={query}
+        onChange={e=>{setQuery(e.target.value);setOpen(true);}}
+        onFocus={()=>setOpen(true)}
+        onBlur={()=>setTimeout(()=>setOpen(false),200)}
+        placeholder="Rechercher un compte…"
+        className={inputCls}/>
+      {open&&filtered.length>0&&(
+        <div className="absolute z-50 w-full mt-1 bg-white border-2 border-midnight overflow-hidden max-h-48 overflow-y-auto">
+          {filtered.map(c=>(
+            <button key={c.id} type="button" onMouseDown={()=>{onPickCompte(String(c.id),c.nom);setQuery('');setOpen(false);}}
+              className="w-full text-left px-3 py-2 hover:bg-azure-20 text-sm text-midnight border-b border-neutral-50 last:border-0">{c.nom}</button>
+          ))}
+        </div>
+      )}
+      {open&&filtered.length===0&&query.trim().length>=1&&(
+        <div className="absolute z-50 w-full mt-1 bg-white border-2 border-neutral-200 px-3 py-2 text-sm text-neutral-300">Aucun compte trouvé</div>
+      )}
+    </div>
+  );
+}
+
 function CompteAssocField({ statut, groupe, compteId, comptes, onPickCompte, onChangeText }) {
   if (CONSULTANT_STATUTS.includes(statut))
     return <Field label="Compte (auto · depuis missions)"><div className={inputCls} style={{background:'#f5f5f5',color:'#999',borderRadius:0}}>{groupe||'—'}</div></Field>;
   if (statut==='Candidat')
     return <Field label="Employeur actuel"><input type="text" value={groupe||''} onChange={e=>onChangeText(e.target.value)} className={inputCls} placeholder="Saisie manuelle"/></Field>;
-  const sorted=[...(comptes||[])].sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
-  return <Field label="Compte associé"><select value={compteId||''} onChange={e=>{const id=e.target.value;const c=sorted.find(x=>String(x.id)===String(id));onPickCompte(id||null,c?c.nom:'');}} className={inputCls}><option value="">— Aucun —</option>{sorted.map(c=><option key={c.id} value={c.id}>{c.nom}</option>)}</select></Field>;
+  return <Field label="Compte associé"><CompteAssocPicker comptes={comptes} compteId={compteId} onPickCompte={onPickCompte}/></Field>;
 }
 async function syncContactComptePrimary(contactId, compteId){
   await sb.from('contact_compte').update({is_primary:false}).eq('contact_id',contactId).eq('is_primary',true);
@@ -1849,8 +1889,19 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, on
       const {error}=await sb.from('missions').update(row).eq('id',mission.id);
       if(error){toast('Erreur : '+error.message,'error');setSaving(false);return;}
     } else {
-      const {error}=await sb.from('missions').insert(row);
+      const {data:newMission,error}=await sb.from('missions').insert(row).select().single();
       if(error){toast('Erreur : '+error.message,'error');setSaving(false);return;}
+      // Auto-création de la période initiale (mission_periods) — même logique que le backfill
+      const pDebut=f.date_debut_mission||f.date_demarrage_initiale||null;
+      if(newMission&&newMission.id&&pDebut){
+        let pFin=f.date_fin_mission||null;
+        if(!pFin||pFin<=pDebut){const d=new Date(pDebut);d.setMonth(d.getMonth()+6);pFin=d.toISOString().slice(0,10);}
+        const {error:pErr}=await sb.from('mission_periods').insert({
+          mission_id:newMission.id,label:'Période initiale',debut:pDebut,fin:pFin,
+          numero_commande:f.num_commande||null,tjm_vente:parseFloat(f.tjm)||null,
+          cjm_consultant:parseFloat(f.cjm)||null,created_by:profile.nom});
+        if(pErr){toast('Mission créée, mais période initiale non créée : '+pErr.message,'error');}
+      }
     }
     // Auto-passage en Client du référent lié
     if(f.contact_referent_id){
