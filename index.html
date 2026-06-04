@@ -1849,8 +1849,19 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, on
       const {error}=await sb.from('missions').update(row).eq('id',mission.id);
       if(error){toast('Erreur : '+error.message,'error');setSaving(false);return;}
     } else {
-      const {error}=await sb.from('missions').insert(row);
+      const {data:newMission,error}=await sb.from('missions').insert(row).select().single();
       if(error){toast('Erreur : '+error.message,'error');setSaving(false);return;}
+      // Auto-création de la période initiale (mission_periods) — même logique que le backfill
+      const pDebut=f.date_debut_mission||f.date_demarrage_initiale||null;
+      if(newMission&&newMission.id&&pDebut){
+        let pFin=f.date_fin_mission||null;
+        if(!pFin||pFin<=pDebut){const d=new Date(pDebut);d.setMonth(d.getMonth()+6);pFin=d.toISOString().slice(0,10);}
+        const {error:pErr}=await sb.from('mission_periods').insert({
+          mission_id:newMission.id,label:'Période initiale',debut:pDebut,fin:pFin,
+          numero_commande:f.num_commande||null,tjm_vente:parseFloat(f.tjm)||null,
+          cjm_consultant:parseFloat(f.cjm)||null,created_by:profile.nom});
+        if(pErr){toast('Mission créée, mais période initiale non créée : '+pErr.message,'error');}
+      }
     }
     // Auto-passage en Client du référent lié
     if(f.contact_referent_id){
