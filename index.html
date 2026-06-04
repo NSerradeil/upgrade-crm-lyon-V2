@@ -1929,7 +1929,24 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, on
             if(!bid){setF(function(v){var nv={};for(var k in v)nv[k]=v[k];nv.besoin_id='';return nv;});return;}
             var b=(besoins||[]).find(function(x){return String(x.id)===String(bid);});
             var contactRef=b&&b.contact_id?(contacts||[]).find(function(c){return c.id===b.contact_id;}):null;
-            setF(function(v){var nv={};for(var k in v)nv[k]=v[k];nv.besoin_id=bid;if(contactRef&&!v.contact_referent_id){nv.contact_referent_id=contactRef.id;nv.referent=contactRef.prenom+' '+contactRef.nom;}return nv;});
+            setF(function(v){
+              var nv={};for(var k in v)nv[k]=v[k];nv.besoin_id=bid;
+              if(!b) return nv;
+              // Pré-remplissage auto depuis le besoin gagné (uniquement les champs encore vides)
+              if(contactRef&&!v.contact_referent_id){nv.contact_referent_id=contactRef.id;nv.referent=contactRef.prenom+' '+contactRef.nom;}
+              var consId=b.consultant_id||b.candidat_id;
+              if(consId&&!v.contact_consultant_id){var cons=(contacts||[]).find(function(c){return String(c.id)===String(consId);});if(cons){nv.contact_consultant_id=cons.id;nv.consultant=cons.prenom+' '+cons.nom;}}
+              if(b.compte&&!v.client)nv.client=b.compte;
+              var tjmB=b.tjm_vente||b.budget_tjm;
+              if(tjmB&&!v.tjm)nv.tjm=tjmB;
+              if(b.cjm_achat&&!v.cjm)nv.cjm=b.cjm_achat;
+              var ddSrc=b.date_demarrage||b.budget_date_debut;var dd=ddSrc?extractDate(ddSrc):'';
+              if(dd&&!v.date_debut_mission)nv.date_debut_mission=dd;
+              if(dd&&!v.date_demarrage_initiale)nv.date_demarrage_initiale=dd;
+              var dfSrc=b.date_fin||b.budget_date_fin;var df=dfSrc?extractDate(dfSrc):'';
+              if(df&&!v.date_fin_mission)nv.date_fin_mission=df;
+              return nv;
+            });
           }}/>
         </Field>}
         <div className="grid grid-cols-3 gap-3">
