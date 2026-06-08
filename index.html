@@ -4011,7 +4011,7 @@ function AddBesoinModal({ contacts, profile, allProfiles, onClose, onSaved }) {
       titre:f.titre.trim(),statut:f.statut,type:f.type,lien:f.lien||null,compte:f.compte||null,
       contact_id:f.contact_id||null,description:f.description||null,budget:f.budget||10000,
       budget_tjm:f.budget_tjm,budget_jours:f.budget_jours,budget_date_debut:f.budget_date_debut,budget_date_fin:f.budget_date_fin,
-      candidat_id:f.candidat_id||null,responsable:f.responsable,agence:profile.agence||'Lyon'
+      candidat_id:f.candidat_id||null,responsable:f.responsable,agence:(allProfiles.find(function(p){return p.nom===f.responsable;})||{}).agence||profile.agence||'Lyon'
     }).select('id').single();
     if(error){setErr(error.message);setSaving(false);return;}
     // Auto-log push opportuniste
@@ -4236,7 +4236,7 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
       date_entretien:f.date_entretien||null,compte_rendu:f.compte_rendu||null,
       date_demarrage:f.date_demarrage||null,date_fin:f.date_fin||null,tjm_vente:f.tjm_vente||null,cjm_achat:f.cjm_achat||null,
       motif_perte:f.motif_perte||null,motif_perte_precision:f.motif_perte_precision||null,
-      responsable:f.responsable,updated_at:new Date().toISOString()};
+      responsable:f.responsable,agence:f.agence||besoin.agence||null,updated_at:new Date().toISOString()};
     const {error}=await sb.from('besoins').update(upd).eq('id',besoin.id);
     if(!error){
       await logStatutChange(f.statut);
@@ -4304,6 +4304,7 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div><span className="text-[11px] text-slate uppercase tracking-wide">Responsable</span><br/>{editing&&isAdmin?<select value={f.responsable} onChange={e=>setF(v=>({...v,responsable:e.target.value}))} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select>:<span className="text-carbon font-medium">{besoin.responsable}</span>}</div>
         <div><span className="text-[11px] text-slate uppercase tracking-wide">Compte</span><br/>{editing?<CompteSearchField contacts={contacts} value={f.compte||''} onChange={compte=>setF(v=>({...v,compte}))}/>:<span className="text-carbon font-medium">{besoin.compte||'—'}</span>}</div>
+        <div><span className="text-[11px] text-slate uppercase tracking-wide">Agence</span><br/>{editing&&isOwner?<select value={f.agence||''} onChange={e=>setF(v=>({...v,agence:e.target.value}))} className={inputCls}><option value="Lyon">Lyon</option><option value="Paris">Paris</option><option value="Bordeaux">Bordeaux</option><option value="Nantes">Nantes</option></select>:<span className="text-carbon font-medium">{besoin.agence||'—'}</span>}</div>
         {contact&&!editing&&<div className="col-span-2"><span className="text-[11px] text-slate uppercase tracking-wide">Contact</span><br/>{onNavToContact?<button onClick={()=>{onClose();onNavToContact(contact.id);}} className="text-midnight font-medium underline decoration-2 decoration-lemon-100 underline-offset-2 hover:decoration-lemon-100 hover:bg-lemon-20 cursor-pointer transition-colors">{contact.prenom} {contact.nom} — {contact.groupe}</button>:<span>{contact.prenom} {contact.nom} — {contact.groupe}</span>}</div>}
         {besoin.lien&&!editing&&<div className="col-span-2"><span className="text-[11px] text-slate uppercase tracking-wide">Lien</span><br/><a href={besoin.lien} target="_blank" className="text-azure-100 hover:underline text-xs">{besoin.lien}</a></div>}
         {editing&&<div className="col-span-2"><Field label="Lien"><input type="url" value={f.lien||''} onChange={e=>setF(v=>({...v,lien:e.target.value}))} className={inputCls}/></Field></div>}
