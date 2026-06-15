@@ -2023,8 +2023,9 @@ function TerminerMissionModal({ mission, profile, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const handleTerminer = async () => {
     setSaving(true);
-    const {error} = await sb.from('missions').update({date_fin_mission: dateFin, statut: 'Terminée'}).eq('id', mission.id);
+    const {data, error} = await sb.from('missions').update({date_fin_mission: dateFin, statut: 'Terminée'}).eq('id', mission.id).select('id,statut');
     if(error){toast('Erreur: '+error.message,'error');setSaving(false);return;}
+    if(!data||data.length===0){toast("Échec : aucune mission modifiée (droits insuffisants ou mission introuvable). Le statut n'a PAS changé.",'error');setSaving(false);return;}
     await sb.from('historique_missions').insert({mission_id:mission.id,date:getToday(),type_action:'Mission terminée',details:`Mission terminée le ${dateFin}`,responsable:profile.nom});
     toast('Mission terminée');
     setSaving(false);
@@ -2295,11 +2296,9 @@ async function syncMissionFromPeriods(missionId) {
     if (active.tjm_vente) patch.tjm = Number(active.tjm_vente);
     if (active.cjm_consultant) patch.cjm = Number(active.cjm_consultant);
   }
-  // Mission terminée mais une période couvre aujourd'hui → repasser en cours
-  if (maxFin >= today) {
-    const { data: m } = await sb.from('missions').select('statut').eq('id', missionId).single();
-    if (m && m.statut === 'Terminée') patch.statut = 'En cours';
-  }
+  // On NE réécrit PLUS le statut ici : une mission explicitement passée à "Terminée"
+  // par l'utilisateur ne doit jamais être ré-ouverte automatiquement par la sync des
+  // périodes (sinon impossible de la terminer tant qu'une période couvre aujourd'hui).
   await sb.from('missions').update(patch).eq('id', missionId);
 }
 
@@ -4120,8 +4119,9 @@ function BesoinMicroForm({ targetStatut, besoin, onConfirm, onCancel, saving }) 
 
       {targetStatut==='Besoin Gagné'&&<>
         <Field label="Date de démarrage *"><input type="date" value={formData.date_demarrage||''} onChange={function(e){upd('date_demarrage',e.target.value);}} className={inputCls}/></Field>
-        <Field label="Durée estimée"><input value={formData.duree||''} onChange={function(e){upd('duree',e.target.value);}} placeholder="ex: 3 mois" className={inputCls}/></Field>
-        <Field label="TJM négocié (€)"><input type="number" value={formData.tjm||''} onChange={function(e){upd('tjm',e.target.value);}} className={inputCls}/></Field>
+        <Field label="Date de fin (estimée)"><input type="date" value={formData.date_fin||''} onChange={function(e){upd('date_fin',e.target.value);}} className={inputCls}/></Field>
+        <Field label="TJM vente (€)"><input type="number" value={formData.tjm||''} onChange={function(e){upd('tjm',e.target.value);}} className={inputCls}/></Field>
+        <Field label="CJM achat (€)"><input type="number" value={formData.cjm||''} onChange={function(e){upd('cjm',e.target.value);}} className={inputCls}/></Field>
       </>}
 
       {targetStatut==='Besoin Perdu'&&<>
@@ -4204,7 +4204,9 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
     }
     if(statut==='Besoin Gagné') {
       patch.date_demarrage = formData.date_demarrage;
+      if(formData.date_fin) patch.date_fin = formData.date_fin;
       if(formData.tjm) patch.tjm_vente = parseFloat(formData.tjm);
+      if(formData.cjm) patch.cjm_achat = parseFloat(formData.cjm);
     }
     if(statut==='Besoin Perdu') {
       patch.motif_perte = formData.motif_perte;
