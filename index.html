@@ -7595,12 +7595,12 @@ function App() {
         }
         return false;
       });
-      // Missions terminées mais avec une période couvrant aujourd'hui → repasser en cours
-      const reactivate=mList.filter(m=>m.statut==='Terminée'&&periodsList.some(p=>p.mission_id===m.id&&p.debut<=today&&p.fin>=today));
-      reactivate.forEach(m=>{m.statut='En cours';});
-      const allAutoUpdates=[...autoUpdates,...reactivate];
-      if(allAutoUpdates.length>0){
-        await Promise.all(allAutoUpdates.map(m=>{
+      // NOTE: on ne "réactive" PLUS automatiquement une mission "Terminée", même si une
+      // période la couvre aujourd'hui. Sinon une terminaison manuelle est annulée à chaque
+      // rechargement (bug "impossible de terminer une mission"). Une mission terminée par
+      // l'utilisateur reste terminée ; un renouvellement se rouvre explicitement à la main.
+      if(autoUpdates.length>0){
+        await Promise.all(autoUpdates.map(m=>{
           const newStatut=m.statut==='New'?'En cours':m.statut;
           m.statut=newStatut;
           return sb.from('missions').update({statut:newStatut}).eq('id',m.id);
