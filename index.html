@@ -2018,7 +2018,11 @@ function DeleteMissionModal({ mission, onClose, onDeleted }) {
 }
 
 function TerminerMissionModal({ mission, profile, onClose, onSaved }) {
-  const defaultDate = mission.date_fin_mission ? extractDate(mission.date_fin_mission) : getToday();
+  // Date de fin effective par défaut : JAMAIS dans le futur. Si la fin prévue est déjà
+  // passée on la conserve (vraie date de fin) ; sinon on propose la date du jour.
+  const today = getToday();
+  const planned = mission.date_fin_mission ? extractDate(mission.date_fin_mission) : '';
+  const defaultDate = (planned && planned < today) ? planned : today;
   const [dateFin, setDateFin] = useState(defaultDate);
   const [saving, setSaving] = useState(false);
   const handleTerminer = async () => {
@@ -2026,6 +2030,16 @@ function TerminerMissionModal({ mission, profile, onClose, onSaved }) {
     const {data, error} = await sb.from('missions').update({date_fin_mission: dateFin, statut: 'Terminée'}).eq('id', mission.id).select('id,statut');
     if(error){toast('Erreur: '+error.message,'error');setSaving(false);return;}
     if(!data||data.length===0){toast("Échec : aucune mission modifiée (droits insuffisants ou mission introuvable). Le statut n'a PAS changé.",'error');setSaving(false);return;}
+    // Aligner les périodes sur la date de fin effective : aucune période ne doit dépasser
+    // la fin de mission (sinon elle "couvre aujourd'hui" et brouille le statut).
+    const {data:ps}=await sb.from('mission_periods').select('id,debut,fin').eq('mission_id',mission.id);
+    if(ps&&ps.length){
+      await Promise.all(ps.filter(p=>p.fin>dateFin).map(p=>
+        p.debut<dateFin
+          ? sb.from('mission_periods').update({fin:dateFin}).eq('id',p.id)   // période en cours → tronquée à la date de fin
+          : sb.from('mission_periods').delete().eq('id',p.id)                // période entièrement après la fin → supprimée
+      ));
+    }
     await sb.from('historique_missions').insert({mission_id:mission.id,date:getToday(),type_action:'Mission terminée',details:`Mission terminée le ${dateFin}`,responsable:profile.nom});
     toast('Mission terminée');
     setSaving(false);
