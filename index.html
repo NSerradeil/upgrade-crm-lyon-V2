@@ -246,6 +246,13 @@ function joursOuvres(debut, fin) {
   return count;
 }
 
+// Jours ouvrés réels d'un mois (lun-ven moins fériés FR) — moisIdx 0-11. Réutilise joursOuvres + FERIES_FR.
+function joursOuvresMois(annee, moisIdx){
+  const m = String(moisIdx+1).padStart(2,'0');
+  const lastDay = new Date(annee, moisIdx+1, 0).getDate();
+  return joursOuvres(`${annee}-${m}-01`, `${annee}-${m}-${String(lastDay).padStart(2,'0')}`);
+}
+
 // ── Toast ────────────────────────────────────────────────────────────────────
 function toast(msg,type='success'){window.dispatchEvent(new CustomEvent('crm-toast',{detail:{msg,type}}));}
 function ToastContainer(){
@@ -896,7 +903,6 @@ function MissionStatutBadge({ statut }) {
   const s = ({
     'En cours':     { bg:'#00C218', color:'#1C1F35' },
     'New':          { bg:'#FFE500', color:'#1C1F35' },
-    'Intercontrat': { bg:'#FF3D2E', color:'#FFFFFF' },
     'Terminée':     { bg:'#E4E4E6', color:'#1C1F35' },
   })[statut] || { bg:'#E4E4E6', color:'#1C1F35' };
   return <ColorBadge label={statut} bg={s.bg} color={s.color}/>;
@@ -1149,6 +1155,84 @@ async function syncContactComptePrimary(contactId, compteId){
   if(compteId) await sb.from('contact_compte').upsert({contact_id:contactId,compte_id:compteId,is_primary:true},{onConflict:'contact_id,compte_id'});
 }
 
+// Module de saisie intercontrat (fiche Consultant CDI) — jours par mois, raccourcis 100/50%, historique cliquable.
+function IntercoEditor({ contact, profile }) {
+  const annee = new Date().getFullYear();
+  const curIdx = new Date().getMonth();
+  const MOIS = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'];
+  const [rows,setRows] = useState([]);
+  const [sel,setSel] = useState(curIdx);
+  const [val,setVal] = useState('');
+  const editable = profile.role==='admin' || contact.agence===profile.agence || contact.responsable===profile.nom;
+  const isMobile = typeof window!=='undefined' && window.matchMedia('(max-width:640px)').matches;
+  const load = async () => {
+    const { data } = await sb.from('interco_imputations').select('mois,jours,cjm_snapshot').eq('contact_consultant_id',contact.id).eq('annee',annee);
+    setRows(data||[]);
+  };
+  useEffect(()=>{ load(); },[contact.id]);
+  const joursOf = (m) => { const r=rows.find(x=>x.mois===m+1); return r?parseFloat(r.jours)||0:0; };
+  useEffect(()=>{ setVal(String(joursOf(sel)||'')); },[sel,rows]);
+  const persist = async (jours) => {
+    if(!editable) return;
+    const cjm = parseFloat(contact.cjm)||0;
+    const { error } = await sb.from('interco_imputations').upsert(
+      { contact_consultant_id:contact.id, annee, mois:sel+1, jours, cjm_snapshot:cjm, updated_by:profile.nom, updated_at:new Date().toISOString() },
+      { onConflict:'contact_consultant_id,annee,mois' });
+    if(error) toast(error.message,'error'); else await load();
+  };
+  const ouv = joursOuvresMois(annee,sel);
+  const ytd = rows.reduce((s,r)=>s+(parseFloat(r.jours)||0),0);
+  const cout = rows.reduce((s,r)=>s+(parseFloat(r.jours)||0)*(parseFloat(r.cjm_snapshot)||0),0);
+  return (
+    <div style={{border:'1px solid #E4E4E6',borderRadius:0,padding:12,marginTop:12,background:'#fff'}}>
+      <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'#6b7280',fontWeight:700,marginBottom:6,display:'flex',justifyContent:'space-between'}}>
+        <span>Interco — {MOIS[sel]} {annee}{sel===curIdx?' • mois courant':''}</span>
+        {sel!==curIdx && <span onClick={()=>setSel(curIdx)} style={{color:'#4A7FE5',cursor:'pointer'}}>↩ mois courant</span>}
+      </div>
+      <div style={{display:'flex',gap:8,alignItems:'center',background:'#f0f5ff',border:'1px solid #4A7FE5',borderRadius:0,padding:8}}>
+        <input type="number" min="0" step="0.5" inputMode="numeric" value={val} disabled={!editable}
+          onChange={e=>setVal(e.target.value)}
+          onBlur={()=>{ const j=parseFloat(val)||0; if(j!==joursOf(sel)) persist(j); }}
+          onKeyDown={e=>{ if(e.key==='Enter') e.target.blur(); }}
+          style={{width:isMobile?'100%':64,textAlign:'center',border:'1px solid #4A7FE5',borderRadius:0,padding:isMobile?12:6,fontSize:isMobile?24:18,fontWeight:700}}/>
+        <span style={{fontSize:12,whiteSpace:'nowrap'}}>jours</span>
+        {editable && <div style={{marginLeft:'auto',display:'flex',gap:6}}>
+          <button type="button" onClick={()=>persist(ouv)} style={{padding:'8px 12px',borderRadius:0,border:'1px solid #4A7FE5',background:'#4A7FE5',color:'#fff',fontWeight:700,fontSize:12}}>100%</button>
+          <button type="button" onClick={()=>persist(ouv/2)} style={{padding:'8px 12px',borderRadius:0,border:'1px solid #cbd5e1',background:'#fff',fontWeight:600,fontSize:12}}>50%</button>
+        </div>}
+      </div>
+      <div style={{fontSize:10,textTransform:'uppercase',color:'#9ca3af',fontWeight:700,margin:'10px 0 4px'}}>Historique {annee} · {isMobile?'touche':'clique'} un mois</div>
+      {isMobile ? (
+        <div style={{display:'flex',gap:8,overflowX:'auto',paddingBottom:6}}>
+          {MOIS.map((m,i)=>{ const j=joursOf(i); const onSel=i===sel, has=j>0;
+            return <div key={i} onClick={()=>setSel(i)} style={{flex:'0 0 auto',padding:'8px 12px',borderRadius:20,
+              background:onSel?'#eef4ff':(has?'#fffbe6':'#f3f4f6'),
+              border:onSel?'2px solid #4A7FE5':(has?'1px solid #f59e0b':'1px solid transparent'),
+              color:onSel?'#4A7FE5':(has?'#92400e':'#9ca3af'),fontSize:13,fontWeight:(has||onSel)?700:600,whiteSpace:'nowrap'}}>
+              {m} {j>0?`${j.toFixed(j%1?1:0)}j`:''}</div>; })}
+        </div>
+      ) : (
+        <div>
+          <div style={{display:'flex',gap:3,alignItems:'flex-end',height:42}}>
+            {MOIS.map((_,i)=>{ const j=joursOf(i); const h=Math.max(4,Math.min(36,j*4));
+              const col=i===sel?'#92400e':(j>0?'#f59e0b':(i===curIdx?'#4A7FE5':'#e5e7eb'));
+              return <div key={i} onClick={()=>setSel(i)} title={`${MOIS[i]} ${j}j`}
+                style={{flex:1,background:col,height:h,borderRadius:2,cursor:'pointer',outline:i===sel?'2px solid #92400e':'none',outlineOffset:1}}/>; })}
+          </div>
+          <div style={{display:'flex',gap:3,fontSize:8,color:'#9ca3af',textAlign:'center',marginTop:3}}>
+            {MOIS.map((m,i)=><span key={i} style={{flex:1,fontWeight:i===sel?700:400}}>{m[0]}</span>)}
+          </div>
+        </div>
+      )}
+      <div style={{marginTop:10,paddingTop:8,borderTop:'2px solid #1C1F35',display:'flex',justifyContent:'space-between',fontSize:12,fontWeight:700}}>
+        <span>YTD : {ytd.toFixed(ytd%1?1:0)}j</span><span style={{color:'#FF3D2E'}}>{Math.round(cout).toLocaleString('fr-FR')}€</span>
+      </div>
+      {!editable && <div style={{fontSize:11,color:'#9ca3af',marginTop:6}}>Lecture seule (hors agence/responsable).</div>}
+      {!(parseFloat(contact.cjm)>0) && editable && <div style={{fontSize:11,color:'#92400e',marginTop:6}}>⚠️ CJM du consultant non renseigné → coût à 0.</div>}
+    </div>
+  );
+}
+
 function ContactEditModal({ contact, profile, allProfiles, comptes, onClose, onSaved }) {
   const isAdmin=profile.role==='admin';
   const initCompteId=(()=>{const c=(comptes||[]).find(x=>x.nom&&x.nom===contact.groupe);return c?c.id:'';})();
@@ -1206,6 +1290,7 @@ function ContactEditModal({ contact, profile, allProfiles, comptes, onClose, onS
       </div>
       {['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)&&<Field label="ATS (lien candidat)"><input type="url" value={f.ats} onChange={s('ats')} className={inputCls} placeholder="Lien Recruitee"/></Field>}
       {['Consultant CDI','Freelance','Prestataire'].includes(f.statut)&&<Field label="CJM (coût journalier moyen, €)"><input type="number" value={f.cjm||''} onChange={s('cjm')} className={inputCls} placeholder="ex: 450"/></Field>}
+      {f.statut==='Consultant CDI' && <IntercoEditor contact={contact} profile={profile} />}
       <Field label="Commentaires"><textarea rows={3} value={f.commentaires} onChange={s('commentaires')} className={inputCls+' resize-none'}/></Field>
       <div style={{borderTop:'2px solid #E4E4E6',paddingTop:12,marginTop:12}}>
         <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
@@ -1860,7 +1945,7 @@ function AddHistMissionModal({ mission, profile, onClose, onSaved }) {
 }
 
 // ── Modal : Créer / Modifier mission ─────────────────────────────────────────
-const MISSION_STATUTS=['En cours','New','Intercontrat','Terminée'];
+const MISSION_STATUTS=['En cours','New','Terminée'];
 const MISSION_CONTRATS=['CDI','Freelance','Prestataire','CDD','Alternance'];
 
 function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, onClose, onSaved, prefillBesoinId }) {
@@ -5408,6 +5493,9 @@ function TabTDB({ missions, histMissions, missionPeriods, contacts, taches, beso
   const [filterResp,setFilterResp] = useState('');
   const [tick,setTick] = useState(0); // force re-render on optimistic update
   const forceUpdate=useCallback(()=>setTick(t=>t+1),[]);
+  // Intercontrat : imputations rattachées aux contacts « Consultant CDI » (refonte)
+  const [intercoRows,setIntercoRows] = useState([]);
+  useEffect(()=>{ let on=true; (async()=>{ const { data } = await sb.from('interco_imputations').select('contact_consultant_id,annee,mois,jours,cjm_snapshot'); if(on) setIntercoRows(data||[]); })(); return ()=>{on=false;}; },[tick]);
   const reorderMobile = useListReorder('missions_mobile_order');
   const [activeChart, setActiveChart] = useState(prefs?.tdb_default_chart||'ca');
   const isAdmin = profile.role==='admin';
@@ -5441,8 +5529,7 @@ function TabTDB({ missions, histMissions, missionPeriods, contacts, taches, beso
   const resetAll=()=>{setSearch('');setFilterStatut('');setFilterResp('');setFilterAgence(isAdmin||myMultiAgence?'':profile.agence);};
 
   const enMission    = missionsFiltrees.filter(m=>m.statut==='En cours'||m.statut==='New');
-  const intercontrat = missionsFiltrees.filter(m=>m.statut==='Intercontrat');
-  const caYTD = missionsFiltrees.reduce((sum,m)=>{ const tjm=parseFloat(m.tjm)||0; return sum+MOIS_KEYS.reduce((s,k)=>s+(parseFloat(m[`jours_${k}`])||0)*tjm,0); },0);
+  const caYTD =missionsFiltrees.reduce((sum,m)=>{ const tjm=parseFloat(m.tjm)||0; return sum+MOIS_KEYS.reduce((s,k)=>s+(parseFloat(m[`jours_${k}`])||0)*tjm,0); },0);
   const margeYTD = missionsFiltrees.reduce((sum,m)=>{ const mg=(parseFloat(m.tjm)||0)-(parseFloat(m.cjm)||0); return sum+MOIS_KEYS.reduce((s,k)=>s+(parseFloat(m[`jours_${k}`])||0)*mg,0); },0);
   const tauxMarge = caYTD>0?(margeYTD/caYTD*100):0;
 
@@ -5454,23 +5541,27 @@ function TabTDB({ missions, histMissions, missionPeriods, contacts, taches, beso
   // Marge mensuelle
   const margeMensuel = MOIS_KEYS.map(k => missionsFiltrees.reduce((s,m) => s+(parseFloat(m[`jours_${k}`])||0)*((parseFloat(m.tjm)||0)-(parseFloat(m.cjm)||0)),0));
 
-  // Intercontrat mensuel
-  const JOURS_OUV = 18.16;
-  const missionsAll = missions || [];
-  const cdiMissions = missionsAll.filter(m => m.type_contrat==='CDI'||m.statut==='Intercontrat');
-  const CY_IC=new Date().getFullYear();
-  const nbCdiParMois = MOIS_KEYS.map((k,i) => cdiMissions.filter(m => {
-    const dY = m.date_debut_mission ? new Date(m.date_debut_mission).getFullYear() : CY_IC;
-    const fY = m.date_fin_mission ? new Date(m.date_fin_mission).getFullYear() : CY_IC;
-    const debut = m.date_debut_mission ? (dY<CY_IC?0:dY>CY_IC?12:new Date(m.date_debut_mission).getMonth()) : 0;
-    const fin = m.date_fin_mission ? (fY>CY_IC?11:fY<CY_IC?-1:new Date(m.date_fin_mission).getMonth()) : 11;
-    return i >= debut && i <= fin;
-  }).length);
-  const joursInterParMois = MOIS_KEYS.map(k => intercontrat.reduce((s,m) => s+(parseFloat(m[`jours_${k}`])||0),0));
-  const tauxInterM = MOIS_KEYS.map((_,i) => nbCdiParMois[i]>0?(joursInterParMois[i]/(nbCdiParMois[i]*JOURS_OUV))*100:0);
+  // Intercontrat mensuel — basé sur interco_imputations + effectif contacts « Consultant CDI »
+  const CY_IC = currentYear;
+  // Périmètre CDI : agence filtrée si présente, sinon scope de l'utilisateur (admin = tout)
+  const scopeAgences = filterAgence ? [filterAgence]
+    : (isAdmin ? null
+      : [...new Set([profile.agence, ...missions.filter(m=>m.responsable===profile.nom).map(m=>m.agence)].filter(Boolean))]);
+  const cdiContacts = (contacts||[]).filter(c => c.statut==='Consultant CDI'
+    && (scopeAgences===null || scopeAgences.includes(c.agence)));
+  const nbCdi = cdiContacts.length;
+  const cdiIds = new Set(cdiContacts.map(c=>c.id));
+  const interCY = intercoRows.filter(r => r.annee===CY_IC && cdiIds.has(r.contact_consultant_id));
+  const joursInterParMois = MOIS_KEYS.map((_,i) => interCY.filter(r=>r.mois===i+1).reduce((s,r)=>s+(parseFloat(r.jours)||0),0));
+  const coutInterParMois  = MOIS_KEYS.map((_,i) => interCY.filter(r=>r.mois===i+1).reduce((s,r)=>s+(parseFloat(r.jours)||0)*(parseFloat(r.cjm_snapshot)||0),0));
+  const tauxInterM = MOIS_KEYS.map((_,i) => { const denom = nbCdi*joursOuvresMois(CY_IC,i); return denom>0?(joursInterParMois[i]/denom)*100:0; });
   const joursInterYTD = joursInterParMois.slice(0,curMonthIdx+1).reduce((a,b)=>a+b,0);
-  const avgCdi = nbCdiParMois.slice(0,curMonthIdx+1).reduce((a,b)=>a+b,0)/(curMonthIdx+1);
-  const tauxInterAnn = avgCdi>0?(joursInterYTD/(avgCdi*JOURS_OUV*(curMonthIdx+1)))*100:0;
+  const coutInterYTD  = coutInterParMois.slice(0,curMonthIdx+1).reduce((a,b)=>a+b,0);
+  const denomYTD = nbCdi * Array.from({length:curMonthIdx+1},(_,i)=>joursOuvresMois(CY_IC,i)).reduce((a,b)=>a+b,0);
+  const tauxInterAnn = denomYTD>0?(joursInterYTD/denomYTD)*100:0;
+  const nbInterCourant = interCY.filter(r=>r.mois===curMonthIdx+1 && (parseFloat(r.jours)||0)>0).length;
+  const nomsInterCourant = interCY.filter(r=>r.mois===curMonthIdx+1 && (parseFloat(r.jours)||0)>0)
+    .map(r=>{ const c=cdiContacts.find(x=>x.id===r.contact_consultant_id); return c?((c.prenom||c.nom||'').split(' ')[0]):''; }).filter(Boolean);
 
   // Mission flow
   const missionFlow = MOIS_KEYS.map((_,i) => ({
@@ -5489,8 +5580,8 @@ function TabTDB({ missions, histMissions, missionPeriods, contacts, taches, beso
 
   const KPI_CARDS = [
     {id:'missions',color:'#00C218',value:enMission.length,label:'EN MISSION',sub:`${enMission.length} consultant${enMission.length>1?'s':''} actifs`},
-    {id:'inter',color:intercontrat.length>0?'#FFE500':'#ccc',value:intercontrat.length,label:'INTERCONTRAT',
-      sub:intercontrat.length>0?intercontrat.map(m=>(m.consultant||'').split(' ')[0]).join(', '):'Aucun',
+    {id:'inter',color:nbInterCourant>0?'#FFE500':'#ccc',value:nbInterCourant,label:'INTERCONTRAT',
+      sub:nbInterCourant>0?`${joursInterYTD.toFixed(joursInterYTD%1?1:0)}j YTD · ${fmtK(coutInterYTD)} · ${nomsInterCourant.join(', ')}`:'Aucun',
       badge:tauxInterAnn>=8?'MALUS':tauxInterAnn>=5?'Attention':null,
       badgeColor:tauxInterAnn>=8?'#FF3D2E':'#92400e'},
     {id:'ca',color:'#4A7FE5',value:fmtK(caYTD),label:'CA YTD',sub:'toutes missions'},
@@ -5553,7 +5644,6 @@ function TabTDB({ missions, histMissions, missionPeriods, contacts, taches, beso
             <option value="">Tous statuts</option>
             <option value="En cours">En cours</option>
             <option value="New">New</option>
-            <option value="Intercontrat">Intercontrat</option>
             <option value="Terminée">Terminée</option>
           </select>
           {isAdmin&&agences.length>1&&(
@@ -5881,7 +5971,6 @@ function AdminPanel({ orgDefaults, allProfiles, profile, onSave }) {
               <option value="">Tous les statuts</option>
               <option value="En cours">En cours</option>
               <option value="New">New</option>
-              <option value="Intercontrat">Intercontrat</option>
               <option value="Terminée">Terminée</option>
             </select>
           </div>
@@ -6330,7 +6419,6 @@ function PreferencesPanel({ prefs, onSave, profileNom }) {
               <option value="">Tous les statuts</option>
               <option value="En cours">En cours</option>
               <option value="New">New</option>
-              <option value="Intercontrat">Intercontrat</option>
               <option value="Terminée">Terminée</option>
             </select>
           </div>

@@ -1,0 +1,11 @@
+-- db/03 — Suppression des missions interco source (exécuté dans Supabase SQL Editor le 2026-06-27).
+-- Migration des jours faite AVANT, via les outils MCP crm_set_interco (pas par SQL) :
+--   ID 1   Laurie MARTINEAU      (active)   — 87,5j
+--   ID 125 Marie PEDRO           (active)   — 70j
+--   ID 132 Eryne HEUZE-ETENDARD  (active)   — 25j
+--   ID 139 Pierre BEAUVALLET     (terminée) — 4j (historique planqué)
+-- Total migré : 186,5j (vérifié via crm_list_interco 2026 → 186.5j, taux 1.1%).
+--
+-- Contrôle avant suppression :
+--   select id, consultant, statut, client from missions where id in (1,125,132,139);
+delete from missions where id in (1, 125, 132, 139);
