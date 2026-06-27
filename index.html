@@ -5559,8 +5559,13 @@ function TabTDB({ missions, histMissions, missionPeriods, contacts, taches, beso
   const coutInterYTD  = coutInterParMois.slice(0,curMonthIdx+1).reduce((a,b)=>a+b,0);
   const denomYTD = nbCdi * Array.from({length:curMonthIdx+1},(_,i)=>joursOuvresMois(CY_IC,i)).reduce((a,b)=>a+b,0);
   const tauxInterAnn = denomYTD>0?(joursInterYTD/denomYTD)*100:0;
-  const nbInterCourant = interCY.filter(r=>r.mois===curMonthIdx+1 && (parseFloat(r.jours)||0)>0).length;
-  const nomsInterCourant = interCY.filter(r=>r.mois===curMonthIdx+1 && (parseFloat(r.jours)||0)>0)
+  // Saisie de l'interco en fin de mois → si le mois courant n'est pas encore rempli, on retombe sur M-1 (présumés encore en interco)
+  const MOIS_LBL_INTER=['jan','fév','mar','avr','mai','juin','juil','août','sep','oct','nov','déc'];
+  const moisCourantRempli = interCY.some(r=>r.mois===curMonthIdx+1 && (parseFloat(r.jours)||0)>0);
+  const idxInterAff = (moisCourantRempli || curMonthIdx===0) ? curMonthIdx : curMonthIdx-1;
+  const interFallbackM1 = !moisCourantRempli && idxInterAff!==curMonthIdx;
+  const nbInterCourant = interCY.filter(r=>r.mois===idxInterAff+1 && (parseFloat(r.jours)||0)>0).length;
+  const nomsInterCourant = interCY.filter(r=>r.mois===idxInterAff+1 && (parseFloat(r.jours)||0)>0)
     .map(r=>{ const c=cdiContacts.find(x=>x.id===r.contact_consultant_id); return c?((c.prenom||c.nom||'').split(' ')[0]):''; }).filter(Boolean);
 
   // Mission flow
@@ -5581,7 +5586,7 @@ function TabTDB({ missions, histMissions, missionPeriods, contacts, taches, beso
   const KPI_CARDS = [
     {id:'missions',color:'#00C218',value:enMission.length,label:'EN MISSION',sub:`${enMission.length} consultant${enMission.length>1?'s':''} actifs`},
     {id:'inter',color:nbInterCourant>0?'#FFE500':'#ccc',value:nbInterCourant,label:'INTERCONTRAT',
-      sub:nbInterCourant>0?`${joursInterYTD.toFixed(joursInterYTD%1?1:0)}j YTD · ${fmtK(coutInterYTD)} · ${nomsInterCourant.join(', ')}`:'Aucun',
+      sub:nbInterCourant>0?`${interFallbackM1?`${MOIS_LBL_INTER[idxInterAff]} (M-1) · `:''}${joursInterYTD.toFixed(joursInterYTD%1?1:0)}j YTD · ${fmtK(coutInterYTD)} · ${nomsInterCourant.join(', ')}`:'Aucun',
       badge:tauxInterAnn>=8?'MALUS':tauxInterAnn>=5?'Attention':null,
       badgeColor:tauxInterAnn>=8?'#FF3D2E':'#92400e'},
     {id:'ca',color:'#4A7FE5',value:fmtK(caYTD),label:'CA YTD',sub:'toutes missions'},
