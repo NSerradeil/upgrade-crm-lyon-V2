@@ -5567,6 +5567,13 @@ function TabTDB({ missions, histMissions, missionPeriods, contacts, taches, beso
   const nbInterCourant = interCY.filter(r=>r.mois===idxInterAff+1 && (parseFloat(r.jours)||0)>0).length;
   const nomsInterCourant = interCY.filter(r=>r.mois===idxInterAff+1 && (parseFloat(r.jours)||0)>0)
     .map(r=>{ const c=cdiContacts.find(x=>x.id===r.contact_consultant_id); return c?((c.prenom||c.nom||'').split(' ')[0]):''; }).filter(Boolean);
+  // Liste détaillée des consultants en interco du mois affiché (pour le tableau sous le graphe)
+  const listeInterAff = interCY.filter(r=>r.mois===idxInterAff+1 && (parseFloat(r.jours)||0)>0)
+    .map(r=>{ const c=cdiContacts.find(x=>x.id===r.contact_consultant_id); const j=parseFloat(r.jours)||0;
+      return c?{id:c.id,nom:`${c.prenom||''} ${c.nom||''}`.trim()||'(sans nom)',agence:c.agence||'',jours:j,cout:j*(parseFloat(r.cjm_snapshot)||0)}:null; })
+    .filter(Boolean).sort((a,b)=>b.jours-a.jours);
+  const joursMoisAff = listeInterAff.reduce((s,x)=>s+x.jours,0);
+  const coutMoisAff = listeInterAff.reduce((s,x)=>s+x.cout,0);
 
   // Mission flow
   const missionFlow = MOIS_KEYS.map((_,i) => ({
@@ -5639,6 +5646,29 @@ function TabTDB({ missions, histMissions, missionPeriods, contacts, taches, beso
         {activeChart==='missions'&&<ChartMissions flow={missionFlow} curMonth={curMonthIdx}/>}
       </div>
       <div style={{marginTop:8,fontSize:11,color:'#bbb',textAlign:'right',fontFamily:'Outfit,sans-serif'}}>Cliquer sur une dalle pour changer la vue</div>
+
+      {/* Liste des consultants en intercontrat (vue interco) — clic ligne = fiche contact */}
+      {activeChart==='inter' && (
+        <div style={{marginTop:12,marginBottom:4,background:'#fff',border:'2px solid #1C1F35',borderRadius:0,fontFamily:'Outfit,sans-serif'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 16px',borderBottom:'2px solid #1C1F35',background:'#FFE500'}}>
+            <span style={{fontSize:13,fontWeight:800,color:'#1C1F35',textTransform:'uppercase',letterSpacing:.5}}>En intercontrat — {MOIS_LBL_INTER[idxInterAff]} {currentYear}{interFallbackM1?' (M-1)':''}</span>
+            <span style={{marginLeft:'auto',fontSize:12,fontWeight:700,color:'#1C1F35'}}>{listeInterAff.length} consultant{listeInterAff.length>1?'s':''} · {joursMoisAff.toFixed(joursMoisAff%1?1:0)}j · {fmtK(coutMoisAff)}</span>
+          </div>
+          {listeInterAff.length===0 ? (
+            <div style={{padding:16,fontSize:13,color:'#9ca3af'}}>Aucun consultant en intercontrat ce mois-ci.</div>
+          ) : listeInterAff.map(x=>(
+            <div key={x.id} onClick={()=>onNavToContact&&onNavToContact(x.id)}
+              className="hover:bg-azure-20 transition-colors"
+              style={{display:'flex',alignItems:'center',gap:12,padding:'10px 16px',borderBottom:'1px solid #E4E4E6',cursor:'pointer'}}>
+              <span style={{flex:1,fontSize:13,fontWeight:700,color:'#1C1F35'}}>{x.nom}</span>
+              <span style={{width:90,fontSize:12,color:'#6b7280'}}>{x.agence||'—'}</span>
+              <span style={{width:48,textAlign:'right',fontSize:13,fontWeight:700,color:'#1C1F35'}}>{x.jours.toFixed(x.jours%1?1:0)}j</span>
+              <span style={{width:64,textAlign:'right',fontSize:13,fontWeight:700,color:'#FF3D2E'}}>{fmtK(x.cout)}</span>
+              <span style={{width:16,textAlign:'right',color:'#4A7FE5',fontWeight:800}}>→</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Table missions — cliquer sur une ligne ouvre le détail */}
       <div className="bg-white border border-neutral-200 rounded-lg overflow-hidden shadow-sm">
