@@ -790,7 +790,7 @@ function ChartMarge({ margeMensuel, margeYTD, caMensuel, tauxMarge, curMonth }) 
   </>;
 }
 
-function ChartInter({ tauxM, tauxAnn, curMonth }) {
+function ChartInter({ tauxM, tauxAnn, curMonth, selMonth, onMonthClick }) {
   const max = Math.max(...tauxM, 10, 1);
   const col = v => v>=8?'#FF3D2E':v>=5?'#FFE500':'#00C218';
   const status = tauxAnn<5?{label:'OK',bg:'#dcfce7',color:'#166534'}:tauxAnn<8?{label:'Attention',bg:'#fef9c3',color:'#92400e'}:{label:'MALUS',bg:'#fee2e2',color:'#991b1b'};
@@ -815,10 +815,11 @@ function ChartInter({ tauxM, tauxAnn, curMonth }) {
           const future = i>curMonth;
           const c = future?'#E4E4E6':col(v);
           return (
-            <div key={i} style={{flex:1,position:'relative',minWidth:0}}>
+            <div key={i} onClick={()=>onMonthClick&&onMonthClick(i)} style={{flex:1,position:'relative',minWidth:0,cursor:onMonthClick?'pointer':'default'}}>
+              {i===selMonth&&<div style={{position:'absolute',left:0,right:0,top:0,bottom:0,background:'rgba(28,31,53,0.06)'}}/>}
               <div style={{position:'absolute',left:0,right:0,bottom:CH.BOT,height:bh,background:c,opacity:future?0.35:1,transition:'height 300ms'}}/>
               {v>0&&<div style={{position:'absolute',left:0,right:0,bottom:CH.BOT+bh+2,textAlign:'center',fontSize:10,fontWeight:700,color:future?'#ddd':col(v),whiteSpace:'nowrap'}}>{v.toFixed(1)}%</div>}
-              <div style={{position:'absolute',left:0,right:0,bottom:3,textAlign:'center',fontSize:10,fontWeight:600,color:i===curMonth?'#1C1F35':'#ccc'}}>{MOIS[i]}</div>
+              <div style={{position:'absolute',left:0,right:0,bottom:3,textAlign:'center'}}><span style={{fontSize:10,fontWeight:i===selMonth?800:600,padding:i===selMonth?'1px 5px':0,background:i===selMonth?'#1C1F35':'transparent',color:i===selMonth?'#FFE500':(i===curMonth?'#1C1F35':'#ccc')}}>{MOIS[i]}</span></div>
             </div>
           );
         })}
@@ -5495,6 +5496,7 @@ function TabTDB({ missions, histMissions, missionPeriods, contacts, taches, beso
   const forceUpdate=useCallback(()=>setTick(t=>t+1),[]);
   // Intercontrat : imputations rattachées aux contacts « Consultant CDI » (refonte)
   const [intercoRows,setIntercoRows] = useState([]);
+  const [interMoisSel,setInterMoisSel] = useState(null); // mois choisi au clic sur le graphe interco (null = mois auto/M-1)
   useEffect(()=>{ let on=true; (async()=>{ const { data } = await sb.from('interco_imputations').select('contact_consultant_id,annee,mois,jours,cjm_snapshot'); if(on) setIntercoRows(data||[]); })(); return ()=>{on=false;}; },[tick]);
   const reorderMobile = useListReorder('missions_mobile_order');
   const [activeChart, setActiveChart] = useState(prefs?.tdb_default_chart||'ca');
@@ -5567,8 +5569,11 @@ function TabTDB({ missions, histMissions, missionPeriods, contacts, taches, beso
   const nbInterCourant = interCY.filter(r=>r.mois===idxInterAff+1 && (parseFloat(r.jours)||0)>0).length;
   const nomsInterCourant = interCY.filter(r=>r.mois===idxInterAff+1 && (parseFloat(r.jours)||0)>0)
     .map(r=>{ const c=cdiContacts.find(x=>x.id===r.contact_consultant_id); return c?((c.prenom||c.nom||'').split(' ')[0]):''; }).filter(Boolean);
+  // Mois affiché dans le tableau : celui cliqué sur le graphe, sinon le mois auto (courant/M-1)
+  const idxTable = interMoisSel!=null ? interMoisSel : idxInterAff;
+  const tableFallbackM1 = interMoisSel==null && interFallbackM1;
   // Liste détaillée des consultants en interco du mois affiché (pour le tableau sous le graphe)
-  const listeInterAff = interCY.filter(r=>r.mois===idxInterAff+1 && (parseFloat(r.jours)||0)>0)
+  const listeInterAff = interCY.filter(r=>r.mois===idxTable+1 && (parseFloat(r.jours)||0)>0)
     .map(r=>{ const c=cdiContacts.find(x=>x.id===r.contact_consultant_id); const j=parseFloat(r.jours)||0;
       return c?{id:c.id,nom:`${c.prenom||''} ${c.nom||''}`.trim()||'(sans nom)',agence:c.agence||'',jours:j,cout:j*(parseFloat(r.cjm_snapshot)||0)}:null; })
     .filter(Boolean).sort((a,b)=>b.jours-a.jours);
@@ -5642,16 +5647,17 @@ function TabTDB({ missions, histMissions, missionPeriods, contacts, taches, beso
       <div style={{background:'#fff',borderTop:'2px solid #E4E4E6',borderRight:'2px solid #E4E4E6',borderBottom:'2px solid #E4E4E6',borderLeft:`5px solid ${KPI_CARDS.find(c=>c.id===activeChart)?.color||'#E4E4E6'}`,padding:'20px 24px 24px',borderRadius:0}}>
         {activeChart==='ca'&&<ChartCA caMensuel={caMensuel} caYTD={caYTD} curMonth={curMonthIdx}/>}
         {activeChart==='marge'&&<ChartMarge margeMensuel={margeMensuel} margeYTD={margeYTD} caMensuel={caMensuel} tauxMarge={tauxMarge} curMonth={curMonthIdx}/>}
-        {activeChart==='inter'&&<ChartInter tauxM={tauxInterM} tauxAnn={tauxInterAnn} curMonth={curMonthIdx}/>}
+        {activeChart==='inter'&&<ChartInter tauxM={tauxInterM} tauxAnn={tauxInterAnn} curMonth={curMonthIdx} selMonth={idxTable} onMonthClick={i=>setInterMoisSel(i===idxTable?null:i)}/>}
         {activeChart==='missions'&&<ChartMissions flow={missionFlow} curMonth={curMonthIdx}/>}
       </div>
-      <div style={{marginTop:8,fontSize:11,color:'#bbb',textAlign:'right',fontFamily:'Outfit,sans-serif'}}>Cliquer sur une dalle pour changer la vue</div>
+      <div style={{marginTop:8,fontSize:11,color:'#bbb',textAlign:'right',fontFamily:'Outfit,sans-serif'}}>{activeChart==='inter'?'Cliquer sur un mois pour voir ses interco · cliquer une autre dalle pour changer la vue':'Cliquer sur une dalle pour changer la vue'}</div>
 
       {/* Liste des consultants en intercontrat (vue interco) — clic ligne = fiche contact */}
       {activeChart==='inter' && (
         <div style={{marginTop:12,marginBottom:4,background:'#fff',border:'2px solid #1C1F35',borderRadius:0,fontFamily:'Outfit,sans-serif'}}>
           <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 16px',borderBottom:'2px solid #1C1F35',background:'#FFE500'}}>
-            <span style={{fontSize:13,fontWeight:800,color:'#1C1F35',textTransform:'uppercase',letterSpacing:.5}}>En intercontrat — {MOIS_LBL_INTER[idxInterAff]} {currentYear}{interFallbackM1?' (M-1)':''}</span>
+            <span style={{fontSize:13,fontWeight:800,color:'#1C1F35',textTransform:'uppercase',letterSpacing:.5}}>En intercontrat — {MOIS_LBL_INTER[idxTable]} {currentYear}{tableFallbackM1?' (M-1)':''}</span>
+            {interMoisSel!=null && <span onClick={()=>setInterMoisSel(null)} style={{fontSize:11,fontWeight:700,color:'#1C1F35',cursor:'pointer',textDecoration:'underline'}}>↩ mois courant</span>}
             <span style={{marginLeft:'auto',fontSize:12,fontWeight:700,color:'#1C1F35'}}>{listeInterAff.length} consultant{listeInterAff.length>1?'s':''} · {joursMoisAff.toFixed(joursMoisAff%1?1:0)}j · {fmtK(coutMoisAff)}</span>
           </div>
           {listeInterAff.length===0 ? (

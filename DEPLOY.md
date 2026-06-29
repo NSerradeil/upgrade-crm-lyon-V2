@@ -32,6 +32,13 @@ sauvegarder AVANT. (Autre piège vécu le 27/06.)
 
 Build : ~1-2 min. Suivre : `gh run list --repo NSerradeil/upgrade-crm-lyon-V2 --limit 3`.
 
+### 🔴 RÈGLE (Nicolas, 29/06) : LOCAL D'ABORD, JAMAIS DE PUSH DIRECT EN PROD
+Tout changement de `index.html` se valide **en local AVANT le push sur `main`** :
+1. servir en local (`python3 -m http.server`), ouvrir l'app, vérifier visuellement le changement ;
+2. **soumettre la preview à Nicolas** (URL localhost ou screenshot) et **attendre son OK** ;
+3. **seulement après**, `git push origin main` (= prod, live immédiat).
+Il n'y a pas de staging GitHub Pages (Pages ne sert que `main`) → la preview locale EST l'étape de validation.
+
 ### Vérifier AVANT de pousser (pas de tests auto)
 Aucun framework de test. `index.html` est un mono-fichier React compilé par **Babel standalone
 en navigateur** → une erreur de syntaxe JSX casse TOUTE l'app (écran blanc). Donc avant push :
