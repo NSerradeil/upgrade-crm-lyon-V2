@@ -3195,7 +3195,7 @@ function CompleteTaskModal({ task, contact, profile, onClose, onSaved }) {
   const save=async()=>{
     if(createRelance&&!relanceDate) return;
     setSaving(true);
-    await sb.from('taches').update({statut:'fait',date_completion:getToday(),updated_at:new Date().toISOString()}).eq('id',task.id);
+    await sb.from('taches').update({statut:'fait',date_completion:getToday(),notes:note?((task.notes||'')+`\n✅ ${note}`).trim():task.notes,updated_at:new Date().toISOString()}).eq('id',task.id);
     if(task.contact_id){
       const details=note?`✅ ${task.titre} — ${note}`:`✅ ${task.titre}`;
       await sb.from('historique_actions').insert({id_prospect:task.contact_id,date:getToday(),type_action:'Tâche accomplie',details,responsable:profile.nom,tache_id:task.id,besoin_id:task.besoin_id||null});
