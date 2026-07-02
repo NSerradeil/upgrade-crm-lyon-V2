@@ -6211,7 +6211,7 @@ function TabSettings({ user, profile, taches, subTab, onSubTabChange, prefs, onS
         </div>
       )}
 
-      {subTab==='preferences'&&<PreferencesPanel prefs={prefs||{}} onSave={onSavePrefs} profileNom={profile.nom}/>}
+      {subTab==='preferences'&&<PreferencesPanel prefs={prefs||{}} onSave={onSavePrefs} profileNom={profile.nom} isPartner={(viewAs||profile)?.role==='partner'}/>}
 
       {subTab==='exploits'&&(function(){
         var ach=achievements||{};
@@ -6242,7 +6242,8 @@ function TabSettings({ user, profile, taches, subTab, onSubTabChange, prefs, onS
   );
 }
 
-function PreferencesPanel({ prefs, onSave, profileNom }) {
+function PreferencesPanel({ prefs, onSave, profileNom, isPartner }) {
+  const PARTNER_TABS=['taches','prospects','tdb','historique'];
   const [defaultTab,setDefaultTab]=useState(prefs.default_tab||'taches');
   const [tachesView,setTachesView]=useState(prefs.taches_view||'list');
   const [besoinsView,setBesoinsView]=useState(prefs.besoins_view||'list');
@@ -6313,7 +6314,7 @@ function PreferencesPanel({ prefs, onSave, profileNom }) {
         {secNav&&<div className="mt-4">
           <label className="block text-sm font-medium text-carbon mb-1.5">Onglet au démarrage</label>
           <select value={defaultTab} onChange={e=>setDefaultTab(e.target.value)} style={selectStyle}>
-            {TAB_OPTIONS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+            {TAB_OPTIONS.filter(o=>!isPartner||PARTNER_TABS.includes(o.v)).map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
           </select>
           <p className="text-xs text-neutral-300 mt-1.5">L'onglet affiché dès que vous ouvrez le CRM</p>
         </div>}
