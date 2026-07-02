@@ -7708,6 +7708,7 @@ function App() {
         {data:besoinCandidats,error:e7},
         {data:missionPeriods,error:e8},
         {data:comptes,   error:e9},{data:contactComptes,error:e10},
+        {data:partnerConsultants,error:e11},
       ] = await Promise.all([
         sb.from('contacts').select('*').order('id').limit(L),
         sb.from('historique_actions').select('*').order('date',{ascending:false}).limit(histLimit),
@@ -7719,6 +7720,7 @@ function App() {
         sb.from('mission_periods').select('*').order('debut',{ascending:true}).limit(10000),
         sb.from('comptes').select('*').order('nom').limit(10000),
         sb.from('contact_compte').select('*').limit(20000),
+        sb.from('partner_consultants').select('contact_consultant_id').limit(10000),
       ]);
       const err=e1||e2||e3||e4;
       if(err) throw new Error(err.message);
@@ -7760,7 +7762,7 @@ function App() {
           }));
         }
       }
-      setData({contacts,historique,taches,besoins,missions:mList,histMissions:histMiss||[],besoinCandidats:besoinCandidats||[],missionPeriods:missionPeriods||[],comptes:comptes||[],contactComptes:contactComptes||[]});
+      setData({contacts,historique,taches,besoins,missions:mList,histMissions:histMiss||[],besoinCandidats:besoinCandidats||[],missionPeriods:missionPeriods||[],comptes:comptes||[],contactComptes:contactComptes||[],partnerConsultants:partnerConsultants||[]});
       setLastRefresh(new Date().toLocaleTimeString('fr-FR'));
     } catch(err){ setError(err.message); } finally{ setLoading(false); }
   },[]);
@@ -7829,7 +7831,7 @@ function App() {
   if(!data||!profile) return <Loader label="Chargement depuis Supabase..."/>;
   if(error) return <div className="flex items-center justify-center min-h-screen"><div className="bg-coral-20 border border-coral-20 p-6 max-w-md text-center"><div className="text-3xl mb-3">❌</div><div className="font-semibold text-coral-100">Erreur Supabase</div><div className="text-sm text-coral-100 mt-2 font-mono">{error}</div><button onClick={fetchAll} className="mt-4 px-4 py-2 bg-coral-100 text-white rounded-lg text-sm">Réessayer</button></div></div>;
 
-  const {contacts,historique,taches,besoins,missions,histMissions,besoinCandidats,missionPeriods,comptes,contactComptes}=data;
+  const {contacts,historique,taches,besoins,missions,histMissions,besoinCandidats,missionPeriods,comptes,contactComptes,partnerConsultants}=data;
   const contactMap = Object.fromEntries(contacts.map(c=>[c.id,c]));
   const commerciauxParAgence={};
   allProfiles.forEach(p=>{if(p.agence&&p.nom){if(!commerciauxParAgence[p.agence])commerciauxParAgence[p.agence]=[];commerciauxParAgence[p.agence].push(p.nom);}});
@@ -7840,13 +7842,18 @@ function App() {
   const activeProfile = viewAs || profile;
   const activeIsAdmin = activeProfile.role==='admin';
   const contactAgenceMap = Object.fromEntries(Object.entries(contactMap).map(([id,c])=>[id,c.agence]));
-  const vContacts   = contacts; // tous voient tous les contacts
-  const vHistorique = activeIsAdmin ? historique : historique.filter(h=>h.responsable===activeProfile.nom);
-  const vTaches     = activeIsAdmin ? taches     : taches.filter(t=>t.responsable===activeProfile.nom);
-  const vMissions   = activeIsAdmin ? missions   : missions.filter(m=>m.responsable===activeProfile.nom);
-  const vBesoins    = activeIsAdmin ? besoins    : besoins.filter(b=>contactAgenceMap[b.contact_id]===activeProfile.agence||b.agence===activeProfile.agence);
+  // ── Rôle partner : périmètre limité à ses consultants (table partner_consultants) ──
+  const isPartner = activeProfile.role==='partner';
+  const partnerSet = new Set((partnerConsultants||[]).map(x=>x.contact_consultant_id));
+  const missionInPartnerScope = m => partnerSet.has(m.contact_consultant_id);
+  const vContacts   = isPartner ? contacts.filter(c=>partnerSet.has(c.id)) : contacts; // sinon tous voient tous les contacts
+  const vHistorique = isPartner ? historique.filter(h=>partnerSet.has(h.id_prospect)) : (activeIsAdmin ? historique : historique.filter(h=>h.responsable===activeProfile.nom));
+  const vTaches     = isPartner ? taches.filter(t=>partnerSet.has(t.contact_id)||(t.mission_id&&missions.some(m=>m.id===t.mission_id&&missionInPartnerScope(m)))) : (activeIsAdmin ? taches : taches.filter(t=>t.responsable===activeProfile.nom));
+  const vMissions   = isPartner ? missions.filter(missionInPartnerScope) : (activeIsAdmin ? missions : missions.filter(m=>m.responsable===activeProfile.nom));
+  const vBesoins    = isPartner ? [] : (activeIsAdmin ? besoins : besoins.filter(b=>contactAgenceMap[b.contact_id]===activeProfile.agence||b.agence===activeProfile.agence));
   const vHistMiss   = histMissions; // filtré par missions déjà
-  const vComptes        = comptes||[];        // Phase 1.B : tous voient tous les comptes (RLS et UX)
+  const _partnerClients = isPartner ? new Set(missions.filter(missionInPartnerScope).map(m=>m.client)) : null;
+  const vComptes        = isPartner ? (comptes||[]).filter(c=>_partnerClients.has(c.nom)) : (comptes||[]);        // partner : comptes de ses missions ; sinon tous
   const vContactComptes = contactComptes||[]; // junction M2M contact↔compte
   const compteMap        = Object.fromEntries(vComptes.map(c=>[c.id,c]));
 
@@ -7865,7 +7872,7 @@ function App() {
     {id:'pipe',       label:<><Icon d={ICONS.chart} size={14}/> Pipe ({besoinsPipeActifs.length})</>},
     {id:'tdb',        label:<><Icon d={ICONS.work} size={14}/> Missions ({vMissions.length})</>},
     {id:'historique', label:<><Icon d={ICONS.history} size={14}/> Historique ({vHistorique.length})</>},
-  ];
+  ].filter(t=> !isPartner || ['taches','prospects','tdb','historique'].includes(t.id)); // partner : Tâches / Comptes&Contacts / Missions / Historique uniquement
 
   return (
     <div className="min-h-screen" style={{background:'#FFFFFF'}}>
