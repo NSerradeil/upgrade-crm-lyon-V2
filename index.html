@@ -1796,7 +1796,7 @@ function ConfirmDeleteCompteModal({ compte, contactComptes, onClose, onConfirm, 
 function ContactDetail({ contact, historique, taches, missions, besoins, comptes, contactComptes, profile, allProfiles, onClose, onRefresh, onNavToBesoin, onNavToMission, onNavToTache, onNavToCompte, fromCompte }) {
   const [modal,setModal] = useState(null);
   const [deleting,setDeleting] = useState(false);
-  const isOwner = profile.role==='admin' || contact.responsable===profile.nom;
+  const isOwner = profile.role==='admin' || contact.responsable===profile.nom || profile.role==='partner';
   const hist = historique.filter(h=>h.id_prospect===contact.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const tachesContact = taches.filter(t=>t.contact_id===contact.id&&t.statut!=='fait'&&t.statut!=='annule');
   const besoinsContact = (besoins||[]).filter(b=>String(b.contact_id)===String(contact.id)||String(b.candidat_id)===String(contact.id));
@@ -1819,9 +1819,9 @@ function ContactDetail({ contact, historique, taches, missions, besoins, comptes
       <BtnAction variant="primary" icon={ICONS.add} label="Action" onClick={()=>setModal('hist')}/>
       <BtnAction variant="task" icon={ICONS.check} label="Tâche" onClick={()=>setModal('tache')}/>
       <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setModal('edit')}/>
-      {modal!=='confirmDel'
+      {profile.role!=='partner'&&(modal!=='confirmDel'
         ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
-        : <ConfirmDelete onConfirm={handleDelete} onCancel={()=>setModal(null)} loading={deleting}/>}
+        : <ConfirmDelete onConfirm={handleDelete} onCancel={()=>setModal(null)} loading={deleting}/>)}
     </div>
   );
   return (
@@ -2058,7 +2058,7 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, on
           <Field label="CJM achat (€)"><input type="number" value={f.cjm} onChange={s('cjm')} className={inputCls}/></Field>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Statut"><select value={f.statut} onChange={s('statut')} className={inputCls}>{MISSION_STATUTS.map(x=><option key={x} value={x}>{x}</option>)}</select></Field>
+          <Field label="Statut">{profile.role==='partner'?<span className="text-sm text-carbon">{f.statut}</span>:<select value={f.statut} onChange={s('statut')} className={inputCls}>{MISSION_STATUTS.map(x=><option key={x} value={x}>{x}</option>)}</select>}</Field>
           <Field label="Contrat"><select value={f.type_contrat||''} onChange={s('type_contrat')} className={inputCls}><option value="">—</option>{MISSION_CONTRATS.map(x=><option key={x} value={x}>{x}</option>)}</select></Field>
           {isAdmin?<Field label="Responsable"><select value={f.responsable} onChange={e=>{const nom=e.target.value;const p=allProfiles.find(x=>x.nom===nom);setF(v=>({...v,responsable:nom,agence:p?p.agence:v.agence}));}} className={inputCls}>{respOptions(allProfiles,f.responsable).map(p=><option key={p.nom} value={p.nom}>{p.nom}</option>)}</select></Field>
             :<Field label="Responsable"><span className="text-sm text-carbon">{f.responsable}</span></Field>}
@@ -2409,7 +2409,7 @@ function MissionDetail({ mission, histMissions, missionPeriods, contacts, taches
   const [tick,setTick]=useState(0);
   const [deleting,setDeleting]=useState(false);
   const isAdmin=profile.role==='admin';
-  const canEdit = isAdmin || mission.responsable===profile.nom;
+  const canEdit = isAdmin || mission.responsable===profile.nom || profile.role==='partner';
   const hist = (histMissions||[]).filter(h=>h.mission_id===mission.id)
     .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   // Matcher consultant et référent aux contacts
@@ -2445,10 +2445,10 @@ function MissionDetail({ mission, histMissions, missionPeriods, contacts, taches
       <BtnAction variant="task" icon={ICONS.check} label="Tâche" onClick={()=>setModal('tache')}/>
       <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setModal('edit')}/>
       {mission.statut==='Terminée'&&<span style={{fontSize:11,fontWeight:700,background:'#E4E4E6',color:'#1C1F35',padding:'4px 10px',borderRadius:0,textTransform:'uppercase',letterSpacing:'0.05em'}}>Mission terminée</span>}
-      {mission.statut!=='Terminée'&&<BtnAction variant="close" icon={ICONS.stop} label="Terminer" onClick={()=>setModal('terminer')}/>}
-      {modal!=='confirmDel'
+      {mission.statut!=='Terminée'&&profile.role!=='partner'&&<BtnAction variant="close" icon={ICONS.stop} label="Terminer" onClick={()=>setModal('terminer')}/>}
+      {profile.role!=='partner'&&(modal!=='confirmDel'
         ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
-        : <ConfirmDelete onConfirm={handleDelete} onCancel={()=>setModal(null)} loading={deleting}/>}
+        : <ConfirmDelete onConfirm={handleDelete} onCancel={()=>setModal(null)} loading={deleting}/>)}
     </div>
   ) : null;
 
@@ -3355,7 +3355,7 @@ function CalendarTaches({ taches, contactMap, profile, isAdmin, onComplete }) {
               <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday?'bg-midnight text-white':'text-slate'}`}>{day}</div>
               <div className="space-y-0.5">
                 {dayTasks.slice(0,3).map(t=>{
-                  const canEdit=isAdmin||t.responsable===profile.nom;
+                  const canEdit=isAdmin||t.responsable===profile.nom||profile.role==='partner';
                   const isEntretien=(t.titre||'').toLowerCase().startsWith('entretien');
                   const cls=t.overdue?'bg-coral-20 text-coral-100 hover:bg-red-200':isEntretien?'bg-iris-20 text-iris-100 hover:bg-iris-20':'bg-azure-20 text-azure-100 hover:bg-azure-20';
                   return (
@@ -3542,7 +3542,7 @@ function TacheSection({ label, taches, contactMap, besoinMap, missionMap, profil
           const besoinLabel = t.besoin_id ? besoinMap[t.besoin_id] : null;
           const m = t.mission_id ? (missionMap||{})[t.mission_id] : null;
           const missionLabel = m ? `${m.consultant}${m.client?' · '+m.client:''}` : null;
-          const canEdit = isAdmin || t.responsable===profile.nom;
+          const canEdit = isAdmin || t.responsable===profile.nom || profile.role==='partner';
           return <div key={t.id} draggable onDragStart={e=>reorder.onDragStart(e,t)} onDragEnd={reorder.onDragEnd} onDragEnter={e=>reorder.onCardEnter(e,t)} onDragLeave={e=>reorder.onCardLeave(e,t)} style={{borderTop:reorder.dragOverId===t.id&&reorder.dragId!==t.id?'3px solid #FFE500':'none'}}>
             <TacheCard t={t} contact={contact} besoinLabel={besoinLabel} missionLabel={missionLabel} canEdit={canEdit}
               onDetail={onDetail} onComplete={onComplete} onDelete={onDelete} onEdit={onEdit}/>
@@ -3823,7 +3823,7 @@ function TabTaches({ taches, contacts, contactMap, besoins, missions, historique
         <CalendarTaches taches={actives} contactMap={contactMap} profile={profile} isAdmin={isAdmin} onComplete={setCompletingModal}/>
       )}
       {showAdd&&<AddTacheModal contacts={contacts} besoins={besoins} missions={missions} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
-      {detailTask&&(()=>{const t=detailTask;const contact=t.contact_id?contactMap[t.contact_id]:null;const besoinLabel=t.besoin_id?besoinMap[t.besoin_id]:null;const mission=t.mission_id?missionMap[t.mission_id]:null;const besoin=t.besoin_id?besoinObjMap[t.besoin_id]:null;const canEdit=isAdmin||t.responsable===profile.nom;return<TacheDetailPanel task={t} contact={contact} besoinLabel={besoinLabel} mission={mission} besoin={besoin} historique={historique} profile={profile} canEdit={canEdit} onClose={()=>setDetailTask(null)} onEdit={()=>handleEdit(t)} onComplete={()=>handleComplete(t)} onDelete={()=>handleDelete(t)} onAddAction={()=>{setDetailTask(null);onRefresh();}} onViewContact={c=>{setDetailTask(null);onNavToContact&&onNavToContact(c.id);}} onViewMission={m=>{setDetailTask(null);onNavToMission&&onNavToMission(m.id);}} onViewBesoin={b=>{setDetailTask(null);onNavToBesoin&&onNavToBesoin(b.id);}}/>;})()}
+      {detailTask&&(()=>{const t=detailTask;const contact=t.contact_id?contactMap[t.contact_id]:null;const besoinLabel=t.besoin_id?besoinMap[t.besoin_id]:null;const mission=t.mission_id?missionMap[t.mission_id]:null;const besoin=t.besoin_id?besoinObjMap[t.besoin_id]:null;const canEdit=isAdmin||t.responsable===profile.nom||profile.role==='partner';return<TacheDetailPanel task={t} contact={contact} besoinLabel={besoinLabel} mission={mission} besoin={besoin} historique={historique} profile={profile} canEdit={canEdit} onClose={()=>setDetailTask(null)} onEdit={()=>handleEdit(t)} onComplete={()=>handleComplete(t)} onDelete={()=>handleDelete(t)} onAddAction={()=>{setDetailTask(null);onRefresh();}} onViewContact={c=>{setDetailTask(null);onNavToContact&&onNavToContact(c.id);}} onViewMission={m=>{setDetailTask(null);onNavToMission&&onNavToMission(m.id);}} onViewBesoin={b=>{setDetailTask(null);onNavToBesoin&&onNavToBesoin(b.id);}}/>;})()}
       {completingModal&&<CompleteTaskModal task={completingModal} contact={contactMap[completingModal.contact_id]||null} profile={profile} onClose={()=>setCompletingModal(null)} onSaved={()=>{setCompletingModal(null);onRefresh();}}/>}
       {editingTask&&<EditTacheModal task={editingTask} contacts={contacts} besoins={besoins} missions={missions} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingTask(null)} onSaved={()=>{setEditingTask(null);onRefresh();}}/>}
       {deletingTask&&<DeleteTacheModal task={deletingTask} onClose={()=>setDeletingTask(null)} onDeleted={()=>{setDeletingTask(null);onRefresh();}}/>}
@@ -5622,7 +5622,7 @@ function TabTDB({ missions, histMissions, missionPeriods, contacts, taches, beso
           <span className="inline-block w-3 h-3 rounded-sm" style={{background:'#FF3D2E'}}/>
           <span className="text-sm font-bold text-carbon uppercase tracking-wide">Tableau de bord</span>
         </div>
-        <button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">+ Nouvelle mission</button>
+        {profile.role!=='partner'&&<button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">+ Nouvelle mission</button>}
       </div>
       {/* KPI cards — clickable */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:12}}>
