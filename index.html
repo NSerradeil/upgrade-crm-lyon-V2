@@ -3724,7 +3724,7 @@ function BadgeMiniDisplay({ achievements, prefs, onClick }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function TabTaches({ taches, contacts, contactMap, besoins, missions, historique, profile, allProfiles, onRefresh, navKey, navEcheance, navTacheId, navTacheKey, onNavToContact, onNavToBesoin, onNavToMission, prefs }) {
-  const tPrefResp=prefs?.filter_responsable==='moi'?profile.nom:(prefs?.filter_responsable||profile.nom);
+  const tPrefResp=profile.role==='partner'?'':(prefs?.filter_responsable==='moi'?profile.nom:(prefs?.filter_responsable||profile.nom));
   const [search,setSearch]=useState(''); const [showAdd,setShowAdd]=useState(false);
   const [filterResp,setFilterResp]=useState(tPrefResp);
   const [filterEcheance,setFilterEcheance]=useState(prefs?.taches_filter_echeance&&prefs.taches_filter_echeance!=='all'?prefs.taches_filter_echeance:'');
