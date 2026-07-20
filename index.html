@@ -1814,14 +1814,16 @@ function ContactDetail({ contact, historique, taches, missions, besoins, comptes
     if(res.error){toast('Erreur : '+res.error.message);setDeleting(false);return;}
     toast('Contact supprimé');onRefresh(); onClose();
   };
-  const actions = isOwner && (
+  const actions = (
     <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
       <BtnAction variant="primary" icon={ICONS.add} label="Action" onClick={()=>setModal('hist')}/>
       <BtnAction variant="task" icon={ICONS.check} label="Tâche" onClick={()=>setModal('tache')}/>
-      <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setModal('edit')}/>
-      {profile.role!=='partner'&&(modal!=='confirmDel'
-        ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
-        : <ConfirmDelete onConfirm={handleDelete} onCancel={()=>setModal(null)} loading={deleting}/>)}
+      {isOwner && <>
+        <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setModal('edit')}/>
+        {profile.role!=='partner'&&(modal!=='confirmDel'
+          ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
+          : <ConfirmDelete onConfirm={handleDelete} onCancel={()=>setModal(null)} loading={deleting}/>)}
+      </>}
     </div>
   );
   return (
@@ -2439,18 +2441,20 @@ function MissionDetail({ mission, histMissions, missionPeriods, contacts, taches
   };
 
   const missionTaches = (taches||[]).filter(t=>t.mission_id===mission.id&&t.statut!=='fait'&&t.statut!=='annule');
-  const actions = canEdit ? (
+  const actions = (
     <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
       <BtnAction variant="primary" icon={ICONS.add} label="Action" onClick={()=>setShowAdd(true)}/>
       <BtnAction variant="task" icon={ICONS.check} label="Tâche" onClick={()=>setModal('tache')}/>
-      <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setModal('edit')}/>
-      {mission.statut==='Terminée'&&<span style={{fontSize:11,fontWeight:700,background:'#E4E4E6',color:'#1C1F35',padding:'4px 10px',borderRadius:0,textTransform:'uppercase',letterSpacing:'0.05em'}}>Mission terminée</span>}
-      {mission.statut!=='Terminée'&&profile.role!=='partner'&&<BtnAction variant="close" icon={ICONS.stop} label="Terminer" onClick={()=>setModal('terminer')}/>}
-      {profile.role!=='partner'&&(modal!=='confirmDel'
-        ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
-        : <ConfirmDelete onConfirm={handleDelete} onCancel={()=>setModal(null)} loading={deleting}/>)}
+      {canEdit && <>
+        <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setModal('edit')}/>
+        {mission.statut==='Terminée'&&<span style={{fontSize:11,fontWeight:700,background:'#E4E4E6',color:'#1C1F35',padding:'4px 10px',borderRadius:0,textTransform:'uppercase',letterSpacing:'0.05em'}}>Mission terminée</span>}
+        {mission.statut!=='Terminée'&&profile.role!=='partner'&&<BtnAction variant="close" icon={ICONS.stop} label="Terminer" onClick={()=>setModal('terminer')}/>}
+        {profile.role!=='partner'&&(modal!=='confirmDel'
+          ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
+          : <ConfirmDelete onConfirm={handleDelete} onCancel={()=>setModal(null)} loading={deleting}/>)}
+      </>}
     </div>
-  ) : null;
+  );
 
   return (
     <SidePanel title={consultantContact?<span className="cursor-pointer text-azure-100 hover:underline" onClick={()=>{if(onNavToContact){onClose();onNavToContact(consultantContact.id);}else setViewContact(consultantContact);}}>{mission.consultant}</span>:mission.consultant} badge={<div className="flex gap-2 flex-wrap"><MissionStatutBadge statut={mission.statut}/>{mission.agence&&<span className="text-xs bg-azure-20 text-azure-100 px-2 py-0.5 rounded-full font-medium">{mission.agence}</span>}{mission.type_contrat&&<span className="text-xs bg-neutral-100 text-slate px-2 py-0.5 rounded-full">{mission.type_contrat}</span>}</div>} onClose={onClose} actions={actions}>
@@ -3411,16 +3415,18 @@ function TacheDetailPanel({ task, contact, besoinLabel, mission, besoin, histori
   const statusColor = task.statut==='fait'?'bg-jade-20 text-jade-100':task.overdue?'bg-coral-20 text-coral-100':'bg-azure-20 text-azure-100';
   const statusLabel = task.statut==='fait'?'Fait':task.overdue?'En retard':task.statut==='en_cours'?'En cours':'À faire';
   const taskHist = (historique||[]).filter(h=>h.tache_id===task.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  const actions = canEdit ? (
+  const actions = (
     <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
       <BtnAction variant="primary" icon={ICONS.add} label="Action" onClick={()=>setShowAddAction(true)}/>
-      <BtnAction variant="success" icon={ICONS.check} label="Fait" onClick={onComplete}/>
-      <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={onEdit}/>
-      {modal!=='confirmDel'
-        ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
-        : <ConfirmDelete onConfirm={onDelete} onCancel={()=>setModal(null)} loading={false}/>}
+      {canEdit && <>
+        <BtnAction variant="success" icon={ICONS.check} label="Fait" onClick={onComplete}/>
+        <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={onEdit}/>
+        {modal!=='confirmDel'
+          ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
+          : <ConfirmDelete onConfirm={onDelete} onCancel={()=>setModal(null)} loading={false}/>}
+      </>}
     </div>
-  ) : null;
+  );
   return (
     <SidePanel title={task.titre} badge={<span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:0,textTransform:'uppercase',letterSpacing:'0.04em'}} className={statusColor}>{statusLabel}</span>} onClose={onClose} actions={actions}>
       <div className="space-y-4">
@@ -4380,16 +4386,18 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
     onRefresh();setModal(null);
   };
 
-  const actions=isOwner&&(
+  const actions=(
     <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
       <BtnAction variant="primary" icon={ICONS.add} label="Action" onClick={()=>setModal('hist')}/>
       <BtnAction variant="task" icon={ICONS.check} label="Tâche" onClick={()=>setModal('tache')}/>
-      {editing
-        ? <BtnAction variant="task" icon={ICONS.close} label="Annuler" onClick={()=>setEditing(false)}/>
-        : <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setEditing(true)}/>}
-      {!editing && (modal!=='confirmDel'
-        ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
-        : <ConfirmDelete onConfirm={handleDelete} onCancel={()=>setModal(null)} loading={deleting}/>)}
+      {isOwner && <>
+        {editing
+          ? <BtnAction variant="task" icon={ICONS.close} label="Annuler" onClick={()=>setEditing(false)}/>
+          : <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setEditing(true)}/>}
+        {!editing && (modal!=='confirmDel'
+          ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
+          : <ConfirmDelete onConfirm={handleDelete} onCancel={()=>setModal(null)} loading={deleting}/>)}
+      </>}
     </div>
   );
 
