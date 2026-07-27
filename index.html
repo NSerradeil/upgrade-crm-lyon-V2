@@ -3750,7 +3750,17 @@ function TabTaches({ taches, contacts, contactMap, besoins, missions, historique
   const missionMap=useMemo(()=>Object.fromEntries((missions||[]).map(m=>[String(m.id),m])),[missions]);
   const besoinObjMap=useMemo(()=>Object.fromEntries((besoins||[]).map(b=>[String(b.id),b])),[besoins]);
   const isAdmin=profile.role==='admin';
-  const responsables=useMemo(()=>[...new Set(taches.map(t=>t.responsable).filter(Boolean))].sort(),[taches]);
+  // Les options viennent de allProfiles (identités canoniques), pas des valeurs
+  // brutes de taches.responsable : sinon une donnée non normalisée (email, prénom
+  // seul) crée une entrée fantôme et éclate les tâches d'une même personne sur
+  // plusieurs lignes du filtre. On ne garde que les profils qui ont des tâches,
+  // + toute valeur legacy encore présente en base pour ne rien rendre inatteignable.
+  const responsables=useMemo(()=>{
+    const used=new Set(taches.map(t=>t.responsable).filter(Boolean));
+    const canon=(allProfiles||[]).map(p=>p.nom).filter(n=>used.has(n));
+    const legacy=[...used].filter(n=>!(allProfiles||[]).some(p=>p.nom===n));
+    return [...new Set([...canon,...legacy])].sort();
+  },[taches,allProfiles]);
   const endOfWeek=useMemo(()=>{
     const d=new Date(TODAY); const dow=d.getDay(); const diff=dow===0?0:7-dow;
     d.setDate(d.getDate()+diff); return d.toISOString().slice(0,10);

@@ -1,0 +1,287 @@
+{
+ "historique_actions_Jules": [
+  {
+   "id": 5202,
+   "id_prospect": 1461,
+   "date": "2026-06-15",
+   "type_action": "LinkedIn",
+   "details": "Invitation LinkedIn sans note envoyée (campagne placement Laurie Martineau, PO/PM senior dispo Lyon/remote). 1er message au GO dès acceptation.",
+   "responsable": "Jules",
+   "besoin_id": null,
+   "tache_id": null,
+   "created_at": "2026-06-15T20:49:18.207848+00:00"
+  },
+  {
+   "id": 5203,
+   "id_prospect": 1463,
+   "date": "2026-06-15",
+   "type_action": "LinkedIn",
+   "details": "Invitation LinkedIn sans note envoyée (campagne placement Laurie Martineau, PO/PM senior dispo Lyon/remote).",
+   "responsable": "Jules",
+   "besoin_id": null,
+   "tache_id": null,
+   "created_at": "2026-06-15T20:49:18.752813+00:00"
+  },
+  {
+   "id": 5204,
+   "id_prospect": 1208,
+   "date": "2026-06-15",
+   "type_action": "LinkedIn",
+   "details": "Invitation LinkedIn sans note envoyée (campagne placement Laurie Martineau, PO/PM senior dispo Lyon/remote).",
+   "responsable": "Jules",
+   "besoin_id": null,
+   "tache_id": null,
+   "created_at": "2026-06-15T20:49:20.723347+00:00"
+  },
+  {
+   "id": 5205,
+   "id_prospect": 1464,
+   "date": "2026-06-15",
+   "type_action": "LinkedIn",
+   "details": "Invitation LinkedIn sans note envoyée (campagne placement Laurie Martineau, PO/PM senior dispo Lyon/remote).",
+   "responsable": "Jules",
+   "besoin_id": null,
+   "tache_id": null,
+   "created_at": "2026-06-15T20:49:22.048646+00:00"
+  },
+  {
+   "id": 5206,
+   "id_prospect": 1850,
+   "date": "2026-06-15",
+   "type_action": "LinkedIn",
+   "details": "Invitation LinkedIn sans note envoyée (campagne placement Laurie Martineau, PO/PM senior dispo Lyon/remote).",
+   "responsable": "Jules",
+   "besoin_id": null,
+   "tache_id": null,
+   "created_at": "2026-06-15T20:49:23.50732+00:00"
+  },
+  {
+   "id": 5207,
+   "id_prospect": 1455,
+   "date": "2026-06-15",
+   "type_action": "LinkedIn",
+   "details": "Invitation LinkedIn sans note envoyée (campagne placement Laurie Martineau, PO/PM senior dispo Lyon/remote).",
+   "responsable": "Jules",
+   "besoin_id": null,
+   "tache_id": null,
+   "created_at": "2026-06-15T20:49:25.552417+00:00"
+  },
+  {
+   "id": 5208,
+   "id_prospect": 1456,
+   "date": "2026-06-15",
+   "type_action": "LinkedIn",
+   "details": "Invitation LinkedIn sans note envoyée (campagne placement Laurie Martineau, PO/PM senior dispo Lyon/remote).",
+   "responsable": "Jules",
+   "besoin_id": null,
+   "tache_id": null,
+   "created_at": "2026-06-15T20:49:26.758384+00:00"
+  },
+  {
+   "id": 5209,
+   "id_prospect": 1210,
+   "date": "2026-06-15",
+   "type_action": "LinkedIn",
+   "details": "Invitation LinkedIn sans note envoyée (campagne placement Laurie Martineau, PO/PM senior dispo Lyon/remote).",
+   "responsable": "Jules",
+   "besoin_id": null,
+   "tache_id": null,
+   "created_at": "2026-06-15T20:49:28.646459+00:00"
+  },
+  {
+   "id": 5210,
+   "id_prospect": 1460,
+   "date": "2026-06-15",
+   "type_action": "LinkedIn",
+   "details": "Invitation LinkedIn sans note envoyée (campagne placement Laurie Martineau, PO/PM senior dispo Lyon/remote).",
+   "responsable": "Jules",
+   "besoin_id": null,
+   "tache_id": null,
+   "created_at": "2026-06-15T20:49:30.162805+00:00"
+  },
+  {
+   "id": 5211,
+   "id_prospect": 1215,
+   "date": "2026-06-15",
+   "type_action": "LinkedIn",
+   "details": "Invitation LinkedIn sans note envoyée (campagne placement Laurie Martineau, PO/PM senior dispo Lyon/remote).",
+   "responsable": "Jules",
+   "besoin_id": null,
+   "tache_id": null,
+   "created_at": "2026-06-15T20:49:31.525249+00:00"
+  },
+  {
+   "id": 5212,
+   "id_prospect": 1056,
+   "date": "2026-06-15",
+   "type_action": "LinkedIn",
+   "details": "Invitation LinkedIn sans note envoyée (campagne placement Laurie Martineau, PO/PM senior dispo Lyon/remote).",
+   "responsable": "Jules",
+   "besoin_id": null,
+   "tache_id": null,
+   "created_at": "2026-06-15T20:49:33.33924+00:00"
+  },
+  {
+   "id": 5213,
+   "id_prospect": 966,
+   "date": "2026-06-15",
+   "type_action": "LinkedIn",
+   "details": "Invitation LinkedIn sans note envoyée (campagne placement Laurie Martineau, PO/PM senior dispo Lyon/remote).",
+   "responsable": "Jules",
+   "besoin_id": null,
+   "tache_id": null,
+   "created_at": "2026-06-15T20:49:34.859556+00:00"
+  },
+  {
+   "id": 5214,
+   "id_prospect": 1057,
+   "date": "2026-06-15",
+   "type_action": "LinkedIn",
+   "details": "Invitation LinkedIn sans note envoyée (campagne placement Laurie Martineau, PO/PM senior dispo Lyon/remote).",
+   "responsable": "Jules",
+   "besoin_id": null,
+   "tache_id": null,
+   "created_at": "2026-06-15T20:49:35.927511+00:00"
+  },
+  {
+   "id": 5251,
+   "id_prospect": 967,
+   "date": "2026-06-16",
+   "type_action": "LinkedIn",
+   "details": "Invitation LinkedIn SANS note envoyée (campagne Laurie Martineau, PO/PM senior dispo). Profil COMEX/open-profile, connexion via menu Plus.",
+   "responsable": "Jules",
+   "besoin_id": null,
+   "tache_id": null,
+   "created_at": "2026-06-16T21:22:25.116055+00:00"
+  },
+  {
+   "id": 5252,
+   "id_prospect": 971,
+   "date": "2026-06-16",
+   "type_action": "LinkedIn",
+   "details": "Invitation LinkedIn SANS note envoyée (campagne Laurie Martineau). Profil COMEX Schneider, connexion via menu Plus.",
+   "responsable": "Jules",
+   "besoin_id": null,
+   "tache_id": null,
+   "created_at": "2026-06-16T21:22:26.05169+00:00"
+  },
+  {
+   "id": 5253,
+   "id_prospect": 1214,
+   "date": "2026-06-16",
+   "type_action": "LinkedIn",
+   "details": "Invitation LinkedIn SANS note envoyée (campagne Laurie Martineau). Resp IA Factory Biogaran, connexion via menu Plus.",
+   "responsable": "Jules",
+   "besoin_id": null,
+   "tache_id": null,
+   "created_at": "2026-06-16T21:22:27.10033+00:00"
+  },
+  {
+   "id": 5254,
+   "id_prospect": 1633,
+   "date": "2026-06-16",
+   "type_action": "LinkedIn",
+   "details": "Invitation LinkedIn SANS note envoyée (campagne Laurie Martineau). DSI Adjoint Apicil Épargne, connexion via menu Plus.",
+   "responsable": "Jules",
+   "besoin_id": null,
+   "tache_id": null,
+   "created_at": "2026-06-16T21:22:28.982829+00:00"
+  },
+  {
+   "id": 5255,
+   "id_prospect": 1218,
+   "date": "2026-06-16",
+   "type_action": "LinkedIn",
+   "details": "Invitation LinkedIn SANS note envoyée (campagne Laurie Martineau). Marketing Director Europe / digital transfo Relyens Lyon, connexion via menu Plus.",
+   "responsable": "Jules",
+   "besoin_id": null,
+   "tache_id": null,
+   "created_at": "2026-06-16T21:22:30.886373+00:00"
+  },
+  {
+   "id": 5256,
+   "id_prospect": 1462,
+   "date": "2026-06-16",
+   "type_action": "LinkedIn",
+   "details": "Message LinkedIn envoyé (relance chaleureuse, dernier contact juil 2024). Pitch Laurie Martineau PO/PM senior dispo + angle énergie/flexibilité Energy Pool + dispo design. Demande échange 15 min.",
+   "responsable": "Jules",
+   "besoin_id": null,
+   "tache_id": null,
+   "created_at": "2026-06-16T21:22:32.743272+00:00"
+  }
+ ],
+ "historique_missions_email": [
+  {
+   "id": 196,
+   "mission_id": 12,
+   "date": "2026-03-27",
+   "type_action": "RDV consultant",
+   "details": "Point suivi consultant 27/03/26 — Mission EDF West App (SI Déchet). Démarrage mi-mars 2026. Contact client : Charpy Lucas. Équipe : Hugo (PO) + 7 dev + 2 BO (Emile Rousselle, Niels Ostine). Mission UI dominante : refonte maquettes DS Indigo → Lumi sur appli gestion déchets nucléaires (en prod depuis 2019). Ressenti : bien pris en main la doc EDF, équipe sympa. Formations souhaitées : Accessibilité, UX Writing.",
+   "responsable": "nicolas.serradeil@upgrade.fr",
+   "created_at": "2026-05-13T15:30:03.967068+00:00"
+  },
+  {
+   "id": 197,
+   "mission_id": 12,
+   "date": "2026-04-29",
+   "type_action": "RDV consultant",
+   "details": "Point suivi consultant 29/04/26 — L'équipe a reporté les MEP. Collaboration bonne avec PO Hugo (dispo, fait des études UX). Univers Westapp complexe, jargon très spécifique. Tâches : maquettes Indigo → Lumi, desktop fait, passe aux tablettes. Aimerait faire de l'UX. Prochains chantiers : audit UX (écart Figma/dev à corriger), harmonisation wording, Maido à prévoir (conseil auprès de Mathilde).",
+   "responsable": "nicolas.serradeil@upgrade.fr",
+   "created_at": "2026-05-13T15:30:06.250261+00:00"
+  },
+  {
+   "id": 198,
+   "mission_id": 11,
+   "date": "2026-02-27",
+   "type_action": "RDV consultant",
+   "details": "Point suivi consultant 27/02/26 — Mission EDF SI Prescriptif (SIP). Démarrage février 2026. Contact : Nicolas Clement. Équipe : 3 UX. Projet : refonte façon de transmettre la documentation SI prescriptif. Démarré il y a 1 an, pas encore en prod. Kick-off en préparation. Bienveillance des prestataires. Process compliqué, beaucoup de conduite du changement à prévoir (par l'équipe change). Formation : aucune pour l'instant. Idées formation : attend d'en savoir plus. Souhait suivi Upgrade : 2 mois indiv + 3-4 mois point avec client. Prochain suivi prévu fin avril 2026.",
+   "responsable": "nicolas.serradeil@upgrade.fr",
+   "created_at": "2026-05-13T15:30:08.394445+00:00"
+  },
+  {
+   "id": 199,
+   "mission_id": 7,
+   "date": "2026-01-27",
+   "type_action": "RDV consultant",
+   "details": "Point suivi consultant 27/01/26 — Mission EDF débutée oct 2025. Contact : Andra Bonhomme. Équipe : SI PLURI composé de 5 designers. 2 projets : PF (planification arrêts, en prod depuis 1 an, PO Jeremy Brie remplacé prochainement par Clément XXX, enjeux dataviz complexes, travaux simplification arborescence — questionnaire + go décideurs difficile à obtenir) + DATAREP (planning arrêts de tranche, 4 utilisateurs actifs, PO peu collaboratif, gros enjeux dataviz). Difficultés : DATAREP compliqué côté PO, à approfondir. Formation : aucune. Idées : Accessibilité, Ecoconception, DS (comment construire un design system). Souhait suivi : 2 mois indiv + 3-4 mois point client.",
+   "responsable": "nicolas.serradeil@upgrade.fr",
+   "created_at": "2026-05-13T15:30:13.258935+00:00"
+  },
+  {
+   "id": 200,
+   "mission_id": 7,
+   "date": "2026-04-08",
+   "type_action": "Suivi client",
+   "details": "Point client 08/04/26 avec Céline. Ressenti Melissa : bon que Julien (manager SI Pluri) soit arrivé sur DATAREP. Inquiétude sur réduction effectifs. PF : dynamique bonne, gros travail migration à venir, pas assez de discovery. DATAREP : forte personnalité rechallenge design, difficile de s'imposer, arrivée Fiona (PO) bienvenue. Impression générale : ok sur équilibre UI/UX, commence à s'imposer. Retour Céline : très satisfaite depuis le début, Melissa a le caractère pour PF, transparente et challenge, envisager qu'elle acculturel'équipe PF au discovery. Visibilité : répartition lots avec ESN dans 1-2 semaines, SI PLURI aura toujours besoin de designers. Mon impression : DATAREP problématique (PO Mathieu part bientôt, bloquait discovery). Risque potentiel sortie de mission selon répartition des lots. Prochain point : à définir.",
+   "responsable": "nicolas.serradeil@upgrade.fr",
+   "created_at": "2026-05-13T15:30:16.054119+00:00"
+  },
+  {
+   "id": 201,
+   "mission_id": 6,
+   "date": "2026-01-27",
+   "type_action": "RDV consultant",
+   "details": "Point suivi consultant 27/01/26 — Mission Enedis débutée mars 2025. Contact : Megane MOREIRA (megane.moreira@enedis.fr). Fonctionnement agence interne, 3 projets : E-stock (binôme, gestion stock 1000 users, PO ne le consulte pas toujours), Manufacture (plusieurs applis 7 PO, UI, bonne collab PM/PO), E-park (plus UX que UI). Centre d'intérêt : UI > UX, veut DS Enedis ou autre client. Rôle transverse souhaité : talks Lyon, meetup. Retour augmentation 33k+1,5k : déçu, juge en dessous du marché, souhaite revalorisation en cours d'année. Formation : aucune 2025. Idées : DS, Design ops, Techno front, Vision produit/Agilité, Ecoconception, Accessibilité. Souhait suivi : 2-3 mois indiv + 4-6 mois point client.",
+   "responsable": "nicolas.serradeil@upgrade.fr",
+   "created_at": "2026-05-13T15:30:19.166163+00:00"
+  },
+  {
+   "id": 202,
+   "mission_id": 6,
+   "date": "2026-03-12",
+   "type_action": "Suivi client",
+   "details": "Point client 12/03/26 — Participants : Megane MOREIRA (pilote opé Lyon/Paris), Lucas, Mattéo. Sorti de e-stock (moins de besoins). 3 missions actives : E-park (bonnes relations PO, dev réfractaires au design, pousse intégration DS), BVE avec Megane (se passe bien, apprécie designers expérimentés), Jour transverse DS (icônes + composant carte). Distinction : oscar interne meilleur contributeur DS. Souhaits : 1j/sem pour le DS, à terme mission DS. Retours Megane : e-park (très bons tests users, efforts tech, doit apprendre à prioriser), manufacture (switche bien entre projets, aide interview/maquette), BVE (très bonne intégration, jovial, proactif DS). Visibilité : E-park jusqu'à fin année, Manufacture encore 6 mois, Megane assure garder Lucas. Mon retour : excellent profil, sait se mettre les supérieurs dans la poche. ⚠️ Risque de départ Upgrade d'ici 1 an si pas de mission DS (peut gagner +5k chez la concurrence). Risque d'internalisation par Megane. Junior mais bonne progression. Prochain point : juin-juillet.",
+   "responsable": "nicolas.serradeil@upgrade.fr",
+   "created_at": "2026-05-13T15:30:23.569895+00:00"
+  },
+  {
+   "id": 203,
+   "mission_id": 6,
+   "date": "2026-03-27",
+   "type_action": "Note interne",
+   "details": "Renégociation salariale 27/03/26 — Arguments Lucas : client satisfait, salaire en dessous marché, veut évoluer vers le DS, veut continuer Enedis et Upgrade. Demande 38k, ne descend pas en dessous de 37. Actuellement 33k, passage à 34,5k imminent.",
+   "responsable": "nicolas.serradeil@upgrade.fr",
+   "created_at": "2026-05-13T15:30:24.941686+00:00"
+  }
+ ]
+}
