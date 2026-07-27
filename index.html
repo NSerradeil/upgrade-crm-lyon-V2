@@ -2622,7 +2622,7 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
       .filter(c=>{
         if(filterMine&&c.responsable!==profile.nom) return false;
         if(filterStatut&&c.statut!==filterStatut) return false;
-        if(!filterMine&&filterAgence&&c.agence!==filterAgence) return false;
+        if(!filterMine&&filterAgence&&c.agence!==filterAgence&&c.responsable!==profile.nom) return false;
         if(!filterMine&&filterResp&&c.responsable!==filterResp) return false;
         if(filterPeriode==='7j'&&c.jours>7) return false;
         if(filterPeriode==='30j'&&c.jours>30) return false;
@@ -5032,7 +5032,7 @@ function TabPipe({ besoins, contacts, contactMap, besoinCandidats, historique, t
 
   // Filtrage
   const filtered=useMemo(()=>enriched.filter(b=>{
-    if(filterAgence&&b.agence!==filterAgence) return false;
+    if(filterAgence&&b.agence!==filterAgence&&b.responsable!==profile.nom) return false;
     if(filterResp&&b.responsable!==filterResp) return false;
     if(riskFilter&&!b.atRisk) return false;
     if(donutFilter){
@@ -7869,7 +7869,12 @@ function App() {
   const vHistorique = isPartner ? historique.filter(h=>partnerSet.has(h.id_prospect)) : (activeIsAdmin ? historique : historique.filter(h=>h.responsable===activeProfile.nom));
   const vTaches     = isPartner ? taches.filter(t=>partnerSet.has(t.contact_id)||(t.mission_id&&missions.some(m=>m.id===t.mission_id&&missionInPartnerScope(m)))) : (activeIsAdmin ? taches : taches.filter(t=>t.responsable===activeProfile.nom));
   const vMissions   = isPartner ? missions.filter(missionInPartnerScope) : (activeIsAdmin ? missions : missions.filter(m=>m.responsable===activeProfile.nom));
-  const vBesoins    = isPartner ? [] : (activeIsAdmin ? besoins : besoins.filter(b=>contactAgenceMap[b.contact_id]===activeProfile.agence||b.agence===activeProfile.agence));
+  // Pré-filtre appliqué AVANT les onglets : un commercial voit les besoins de son agence,
+  // PLUS ceux dont il est responsable même s'ils sont rattachés à une autre agence.
+  // Sans la clause `responsable`, un besoin était retiré ici et la clause de secours du
+  // filtre d'onglet (ligne ~4714) n'avait jamais l'occasion de jouer — cas réel : Louis Py
+  // (agence Paris) ne voyait pas BPM002771, son propre besoin en agence Lyon.
+  const vBesoins    = isPartner ? [] : (activeIsAdmin ? besoins : besoins.filter(b=>contactAgenceMap[b.contact_id]===activeProfile.agence||b.agence===activeProfile.agence||b.responsable===activeProfile.nom));
   const vHistMiss   = histMissions; // filtré par missions déjà
   const _partnerClients = isPartner ? new Set(missions.filter(missionInPartnerScope).map(m=>m.client)) : null;
   const vComptes        = isPartner ? (comptes||[]).filter(c=>_partnerClients.has(c.nom)) : (comptes||[]);        // partner : comptes de ses missions ; sinon tous

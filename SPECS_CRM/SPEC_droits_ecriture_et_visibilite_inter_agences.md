@@ -1,10 +1,27 @@
+
 # SPEC — Droits d'écriture élargis + visibilité inter-agences
 **CRM Upgrade Lyon V2** · 27/07/2026 · validé par Nicolas en brainstorming
 
 Deux chantiers distincts mais qui répondent au même besoin : **arrêter de bloquer un
-commercial sur un objet qui le concerne**. Aucune migration de base : les policies RLS
-ne restreignent que le rôle `partner`, les commerciaux ont déjà l'écriture ouverte au
-niveau DB. Tout se joue dans `index.html`.
+commercial sur un objet qui le concerne**.
+
+> ⚠️ **CORRECTION du 27/07 — la première version de cette spec était fausse.** Elle
+> affirmait « aucune migration de base, les RLS ne restreignent que le rôle `partner` ».
+> J'avais déduit ça du commentaire d'en-tête de `db/04` sans lire les policies réelles.
+> L'audit de `pg_policies`, déclenché par un cas concret de Nicolas (Louis Py ne voit pas
+> le besoin BPM002771), montre le contraire :
+>
+> ```
+> besoins_commercial_select : role='commercial' AND agence = get_my_agence()
+> besoins_commercial_update : role='commercial' AND responsable = get_my_nom()
+> besoins_commercial_delete : role='commercial' AND responsable = get_my_nom()
+> missions.write_missions   : admin OR responsable = get_my_nom()
+> ```
+>
+> **Conséquences :** (1) le chantier B a un volet BASE, sans quoi la ligne ne quitte même
+> pas la base ; (2) le chantier A aurait produit des **échecs silencieux** — bouton
+> « Modifier » affiché, UPDATE rejeté par la base. Toute affirmation sur les droits doit
+> venir de `pg_policies`, jamais d'un commentaire de fichier.
 
 ---
 
@@ -71,7 +88,20 @@ de l'objet**. Exemple de Nicolas : un besoin à Lyon dont le responsable est un 
 doit apparaître chez le Parisien (il en est responsable) *et* chez le Lyonnais (c'est sa
 région).
 
-### État des lieux — la règle existe déjà à 2 endroits sur 4
+### Volet BASE — à faire AVANT le volet app (`db/08`)
+Les policies SELECT de `besoins` exigent `agence = get_my_agence()` sans échappatoire par
+le responsable. C'est la vraie cause du cas Louis Py / BPM002771 : la ligne ne quitte pas
+la base, donc aucun correctif d'affichage ne peut la faire apparaître.
+
+`besoins` est la **seule** table dans ce cas — `comptes`, `contacts` et `missions` ont une
+policy SELECT `true` (lecture ouverte, périmètre fait côté app). C'est une anomalie isolée,
+pas un choix d'architecture.
+
+→ `db/08_besoins_visibles_par_leur_responsable.sql` ajoute `OR responsable = get_my_nom()`
+aux deux policies SELECT. On ne bascule pas en lecture ouverte : on ajoute juste le cas
+« c'est mon besoin ». 7 besoins sont concernés (3 de Nicolas, 3 de Louis, 1 d'Anne-Claire).
+
+### Volet APP — la règle existe déjà à 2 endroits sur 4
 Les onglets **Besoins** et **Missions** appliquent déjà l'union. Les 2 autres ont oublié
 la clause `|| responsable === moi` :
 
