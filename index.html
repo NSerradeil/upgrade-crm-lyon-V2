@@ -1089,6 +1089,63 @@ function ModalFooter({ onClose, onSave, saving, disabled, label='Enregistrer' })
     </button>
   </>;
 }
+// ── Trace des modifications faites par un NON-responsable ──────────────────────
+// Depuis db/09, tout commercial peut modifier n'importe quel objet. Le propriétaire
+// d'une fiche doit donc pouvoir constater qui a touché quoi. On n'écrit RIEN quand le
+// responsable travaille sur ses propres fiches, sinon l'historique devient illisible.
+// La ligne porte le nom du VRAI auteur : c'est la lecture de l'historique qui a été
+// ouverte (db/09) pour que le propriétaire la voie, plutôt que de falsifier l'auteur.
+// Le formulaire CONTACT a déjà sa propre trace détaillée (plus riche) : ne pas doublonner.
+const CHAMPS_TRACES = {
+  compte:  {nom:'nom', secteur:'secteur', ville:'ville', statut:'statut', site_web:'site web'},
+  besoin:  {titre:'titre', statut:'statut', compte:'compte', budget:'budget',
+            tjm_vente:'TJM vente', cjm_achat:'CJM achat',
+            date_demarrage:'date de démarrage', date_fin:'date de fin'},
+  mission: {client:'client', statut:'statut', tjm:'TJM', cjm:'CJM',
+            date_debut_mission:'début de mission', date_fin_mission:'fin de mission',
+            num_commande:'n° de commande', referent:'référent'},
+  tache:   {titre:'titre', statut:'statut', due_date:'échéance', notes:'notes'},
+};
+
+function diffChamps(type, avant, apres) {
+  const champs = CHAMPS_TRACES[type] || {};
+  const out = [];
+  for (const k in champs) {
+    if (!(k in apres)) continue;                       // champ absent du formulaire
+    const a = avant?.[k], b = apres?.[k];
+    const va = (a===null||a===undefined||a==='') ? '' : String(a);
+    const vb = (b===null||b===undefined||b==='') ? '' : String(b);
+    if (va !== vb) out.push(`${champs[k]} : ${va||'(vide)'} → ${vb||'(vide)'}`);
+  }
+  return out;
+}
+
+// contactId : l'historique des actions est rattaché à un contact. Un objet sans contact
+// lié ne peut pas être tracé par ce canal — on le signale au lieu de perdre l'info.
+async function logEdits(type, objet, avant, apres, profile, contactId) {
+  try {
+    if (!objet || !profile) return;
+    if (objet.responsable === profile.nom) return;      // le propriétaire : pas de bruit
+    const diffs = diffChamps(type, avant, apres);
+    if (!diffs.length) return;
+    const details = `${profile.nom} a modifié : ${diffs.join(', ')}`;
+    if (type === 'mission' && objet.id) {
+      await sb.from('historique_missions').insert({
+        mission_id: objet.id, date: getToday(), type_action: 'Note interne',
+        details, responsable: profile.nom });
+      return;
+    }
+    const cid = contactId ?? objet.contact_id ?? null;
+    if (!cid) { console.warn(`logEdits: ${type} sans contact lié, modification non tracée`); return; }
+    await sb.from('historique_actions').insert({
+      id_prospect: cid, date: getToday(), type_action: 'Note interne',
+      details, responsable: profile.nom });
+  } catch (e) {
+    // Une trace qui échoue ne doit JAMAIS faire échouer la sauvegarde de l'utilisateur.
+    console.warn('logEdits a échoué :', e);
+  }
+}
+
 // Renvoie les options allProfiles + éventuellement la valeur courante si absente (protection données legacy)
 function respOptions(allProfiles, current) {
   const list = allProfiles&&allProfiles.length>0 ? allProfiles : [];
@@ -1981,6 +2038,8 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, on
     if(isEdit){
       const {error}=await sb.from('missions').update(row).eq('id',mission.id);
       if(error){toast('Erreur : '+error.message,'error');setSaving(false);return;}
+      // Trace si l'auteur n'est pas le responsable de la mission
+      await logEdits('mission', mission, mission, row, profile);
     } else {
       const {data:newMission,error}=await sb.from('missions').insert(row).select().single();
       if(error){toast('Erreur : '+error.message,'error');setSaving(false);return;}
@@ -3292,8 +3351,12 @@ function EditTacheModal({ task, contacts, besoins, missions, profile, allProfile
   const save=async()=>{
     if(!f.titre.trim())return;
     setSaving(true);
-    const{error}=await sb.from('taches').update({ titre:f.titre.trim(), due_date:combineDT(f.due_date,f.due_time)||null, statut:f.due_date?'en_cours':'a_faire', notes:f.notes||null, responsable:f.responsable, contact_id:f.contact_id?parseInt(f.contact_id):null, mission_id:f.mission_id||null, besoin_id:f.besoin_id||null, updated_at:new Date().toISOString() }).eq('id',task.id);
-    if(!error)onSaved();else setSaving(false);
+    const upd={ titre:f.titre.trim(), due_date:combineDT(f.due_date,f.due_time)||null, statut:f.due_date?'en_cours':'a_faire', notes:f.notes||null, responsable:f.responsable, contact_id:f.contact_id?parseInt(f.contact_id):null, mission_id:f.mission_id||null, besoin_id:f.besoin_id||null, updated_at:new Date().toISOString() };
+    const{error}=await sb.from('taches').update(upd).eq('id',task.id);
+    if(!error){
+      await logEdits('tache', task, task, upd, profile, upd.contact_id||task.contact_id);
+      onSaved();
+    } else setSaving(false);
   };
   return (
     <Modal title={<><Icon d={ICONS.edit} size={14}/> Modifier la tâche</>} onClose={onClose}
@@ -4373,6 +4436,8 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
     const {error}=await sb.from('besoins').update(upd).eq('id',besoin.id);
     if(!error){
       await logStatutChange(f.statut);
+      // Trace si l'auteur n'est pas le responsable (logStatutChange ne couvre que le statut)
+      await logEdits('besoin', besoin, besoin, upd, profile, f.contact_id||besoin.contact_id);
       // Auto-log push opportuniste
       if(f.statut==='Push opportuniste'&&f.contact_id&&f.candidat_id&&(f.candidat_id!==besoin.candidat_id||f.statut!==besoin.statut)){
         const cand=contacts.find(c=>c.id===f.candidat_id);
