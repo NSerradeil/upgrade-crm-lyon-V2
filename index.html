@@ -1796,7 +1796,11 @@ function ConfirmDeleteCompteModal({ compte, contactComptes, onClose, onConfirm, 
 function ContactDetail({ contact, historique, taches, missions, besoins, comptes, contactComptes, profile, allProfiles, onClose, onRefresh, onNavToBesoin, onNavToMission, onNavToTache, onNavToCompte, fromCompte }) {
   const [modal,setModal] = useState(null);
   const [deleting,setDeleting] = useState(false);
-  const isOwner = profile.role==='admin' || contact.responsable===profile.nom || profile.role==='partner';
+  // canEdit : ouvert a tous les commerciaux (db/09). canDelete : proprietaire ou admin.
+  // Le partner garde son perimetre, verrouille en dur par les policies *_partner_*.
+  const canEdit  = profile.role==='admin'||profile.role==='commercial'||profile.role==='partner';
+  const canDelete= profile.role==='admin' || contact.responsable===profile.nom;
+  const isOwner  = canEdit;   // conserve : ancien nom utilise ailleurs dans ce panneau
   const hist = historique.filter(h=>h.id_prospect===contact.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const tachesContact = taches.filter(t=>t.contact_id===contact.id&&t.statut!=='fait'&&t.statut!=='annule');
   const besoinsContact = (besoins||[]).filter(b=>String(b.contact_id)===String(contact.id)||String(b.candidat_id)===String(contact.id));
@@ -1820,7 +1824,7 @@ function ContactDetail({ contact, historique, taches, missions, besoins, comptes
       <BtnAction variant="task" icon={ICONS.check} label="Tâche" onClick={()=>setModal('tache')}/>
       {isOwner && <>
         <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setModal('edit')}/>
-        {profile.role!=='partner'&&(modal!=='confirmDel'
+        {canDelete&&profile.role!=='partner'&&(modal!=='confirmDel'
           ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
           : <ConfirmDelete onConfirm={handleDelete} onCancel={()=>setModal(null)} loading={deleting}/>)}
       </>}
@@ -2411,7 +2415,8 @@ function MissionDetail({ mission, histMissions, missionPeriods, contacts, taches
   const [tick,setTick]=useState(0);
   const [deleting,setDeleting]=useState(false);
   const isAdmin=profile.role==='admin';
-  const canEdit = isAdmin || mission.responsable===profile.nom || profile.role==='partner';
+  const canEdit   = isAdmin||profile.role==='commercial'||profile.role==='partner';
+  const canDelete = isAdmin || mission.responsable===profile.nom;
   const hist = (histMissions||[]).filter(h=>h.mission_id===mission.id)
     .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   // Matcher consultant et référent aux contacts
@@ -2449,7 +2454,7 @@ function MissionDetail({ mission, histMissions, missionPeriods, contacts, taches
         <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setModal('edit')}/>
         {mission.statut==='Terminée'&&<span style={{fontSize:11,fontWeight:700,background:'#E4E4E6',color:'#1C1F35',padding:'4px 10px',borderRadius:0,textTransform:'uppercase',letterSpacing:'0.05em'}}>Mission terminée</span>}
         {mission.statut!=='Terminée'&&profile.role!=='partner'&&<BtnAction variant="close" icon={ICONS.stop} label="Terminer" onClick={()=>setModal('terminer')}/>}
-        {profile.role!=='partner'&&(modal!=='confirmDel'
+        {canDelete&&profile.role!=='partner'&&(modal!=='confirmDel'
           ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
           : <ConfirmDelete onConfirm={handleDelete} onCancel={()=>setModal(null)} loading={deleting}/>)}
       </>}
@@ -2928,7 +2933,9 @@ const ACTIVITY_TYPE_COLORS = {
 // ── Sidebar Compte (Phase 1.B.2 + breadcrumb 1.B.4 + édition 1.C + KPIs 2 + consultants + feed 3) ──
 function CompteSidebar({ compte, contactComptes, contacts, missions, historique, taches, histMissions, profile, onClose, onNavToContact, fromContact, onBackToContact, onEdit, onDelete }) {
   const isAdmin = profile?.role === 'admin';
-  const isOwner = isAdmin || compte.responsable === profile?.nom;
+  // comptes : l'UPDATE etait deja ouvert en base (comptes_update_all=true), seule
+  // l'UI le restreignait. Supprimer reste admin (comptes_delete_admin).
+  const isOwner = isAdmin || profile?.role==='commercial' || compte.responsable === profile?.nom;
   const contactMap = useMemo(()=>Object.fromEntries(contacts.map(c=>[c.id,c])),[contacts]);
   const linkedContacts = useMemo(()=>(
     contactComptes
@@ -3359,7 +3366,8 @@ function CalendarTaches({ taches, contactMap, profile, isAdmin, onComplete }) {
               <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday?'bg-midnight text-white':'text-slate'}`}>{day}</div>
               <div className="space-y-0.5">
                 {dayTasks.slice(0,3).map(t=>{
-                  const canEdit=isAdmin||t.responsable===profile.nom||profile.role==='partner';
+                  const canEdit=isAdmin||profile.role==='commercial'||profile.role==='partner';
+                  const canDelete=isAdmin||t.responsable===profile.nom;
                   const isEntretien=(t.titre||'').toLowerCase().startsWith('entretien');
                   const cls=t.overdue?'bg-coral-20 text-coral-100 hover:bg-red-200':isEntretien?'bg-iris-20 text-iris-100 hover:bg-iris-20':'bg-azure-20 text-azure-100 hover:bg-azure-20';
                   return (
@@ -3421,9 +3429,9 @@ function TacheDetailPanel({ task, contact, besoinLabel, mission, besoin, histori
       {canEdit && <>
         <BtnAction variant="success" icon={ICONS.check} label="Fait" onClick={onComplete}/>
         <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={onEdit}/>
-        {modal!=='confirmDel'
+        {canDelete&&(modal!=='confirmDel'
           ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
-          : <ConfirmDelete onConfirm={onDelete} onCancel={()=>setModal(null)} loading={false}/>}
+          : <ConfirmDelete onConfirm={onDelete} onCancel={()=>setModal(null)} loading={false}/>)}
       </>}
     </div>
   );
@@ -3498,7 +3506,7 @@ function DeleteTacheModal({ task, onClose, onDeleted }) {
 }
 
 // ── Onglet Tâches ─────────────────────────────────────────────────────────────
-function TacheCard({ t, contact, besoinLabel, missionLabel, canEdit, onDetail, onComplete, onDelete, onEdit }) {
+function TacheCard({ t, contact, besoinLabel, missionLabel, canEdit, canDelete, onDetail, onComplete, onDelete, onEdit }) {
   return (
     <div onClick={()=>onDetail(t)} data-detail tabIndex="0"
       className={`border-2 p-3 cursor-pointer hover:border-midnight focus:outline-none focus:border-midnight transition-colors flex flex-col gap-2 ${t.overdue?'bg-coral-100 border-coral-100':'bg-white border-neutral-200'}`}>
@@ -3509,8 +3517,8 @@ function TacheCard({ t, contact, besoinLabel, missionLabel, canEdit, onDetail, o
           <div className="flex gap-1 shrink-0" onClick={e=>e.stopPropagation()}>
             <button onClick={()=>onComplete(t)} title="Marquer fait"
               className={`w-7 h-7 flex items-center justify-center ${t.overdue?'bg-white/20 hover:bg-white/40 text-white':'bg-jade-20 hover:bg-jade-20 text-jade-100'} text-base font-bold leading-none`}>✓</button>
-            <button onClick={()=>onDelete(t)} title="Supprimer"
-              className={`w-7 h-7 flex items-center justify-center ${t.overdue?'bg-white/20 hover:bg-white/40 text-white':'bg-neutral-100 hover:bg-neutral-200 text-coral-100'} text-base font-bold leading-none`}>✕</button>
+            {canDelete&&<button onClick={()=>onDelete(t)} title="Supprimer"
+              className={`w-7 h-7 flex items-center justify-center ${t.overdue?'bg-white/20 hover:bg-white/40 text-white':'bg-neutral-100 hover:bg-neutral-200 text-coral-100'} text-base font-bold leading-none`}>✕</button>}
           </div>
         )}
       </div>
@@ -3548,9 +3556,10 @@ function TacheSection({ label, taches, contactMap, besoinMap, missionMap, profil
           const besoinLabel = t.besoin_id ? besoinMap[t.besoin_id] : null;
           const m = t.mission_id ? (missionMap||{})[t.mission_id] : null;
           const missionLabel = m ? `${m.consultant}${m.client?' · '+m.client:''}` : null;
-          const canEdit = isAdmin || t.responsable===profile.nom || profile.role==='partner';
+          const canEdit   = isAdmin||profile.role==='commercial'||profile.role==='partner';
+          const canDelete = isAdmin || t.responsable===profile.nom;
           return <div key={t.id} draggable onDragStart={e=>reorder.onDragStart(e,t)} onDragEnd={reorder.onDragEnd} onDragEnter={e=>reorder.onCardEnter(e,t)} onDragLeave={e=>reorder.onCardLeave(e,t)} style={{borderTop:reorder.dragOverId===t.id&&reorder.dragId!==t.id?'3px solid #FFE500':'none'}}>
-            <TacheCard t={t} contact={contact} besoinLabel={besoinLabel} missionLabel={missionLabel} canEdit={canEdit}
+            <TacheCard t={t} contact={contact} besoinLabel={besoinLabel} missionLabel={missionLabel} canEdit={canEdit} canDelete={canDelete}
               onDetail={onDetail} onComplete={onComplete} onDelete={onDelete} onEdit={onEdit}/>
           </div>;
         })}
@@ -3809,7 +3818,10 @@ function TabTaches({ taches, contacts, contactMap, besoins, missions, historique
       </div>
       <div className="flex gap-3 mb-4 flex-wrap">
         <input type="text" placeholder="Rechercher une tâche..." value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-48 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:border-midnight"/>
-        {isAdmin&&responsables.length>1&&(
+        {/* Filtre responsable ouvert aux commerciaux : depuis db/09 ils LISENT les taches
+            et l'historique de tout le monde, donc leur reserver ce filtre afficherait un
+            compteur d'onglet (322) sans aucun moyen d'atteindre les lignes correspondantes. */}
+        {responsables.length>1&&(
           <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
             <option value="">Tous les responsables</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}
           </select>
@@ -4255,7 +4267,9 @@ function BesoinMicroForm({ targetStatut, besoin, onConfirm, onCancel, saving }) 
 // Panneau détail besoin (SidePanel)
 function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historique, taches, missions, besoins, profile, allProfiles, onClose, onRefresh, onDataRefresh, onNavToContact, onNavToMission, onNavToTache }) {
   const isAdmin=profile.role==='admin';
-  const isOwner=isAdmin||besoin.responsable===profile.nom;
+  const canEdit  = isAdmin||profile.role==='commercial';
+  const canDelete= isAdmin||besoin.responsable===profile.nom;
+  const isOwner  = canEdit;   // conserve : ancien nom utilise ailleurs dans ce panneau
   const [editing,setEditing]=useState(false);
   const [f,setF]=useState({...besoin});
   const [saving,setSaving]=useState(false);
@@ -4404,7 +4418,7 @@ function BesoinDetail({ besoin, contacts, contactMap, besoinCandidats, historiqu
         {editing
           ? <BtnAction variant="task" icon={ICONS.close} label="Annuler" onClick={()=>setEditing(false)}/>
           : <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setEditing(true)}/>}
-        {!editing && (modal!=='confirmDel'
+        {!editing && canDelete && (modal!=='confirmDel'
           ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
           : <ConfirmDelete onConfirm={handleDelete} onCancel={()=>setModal(null)} loading={deleting}/>)}
       </>}
@@ -4904,7 +4918,10 @@ function TabHistorique({ historique, contacts, contactMap, taches, besoins, prof
           <option value="">Tous les types</option>
           {typesAction.map(t=><option key={t} value={t}>{t}</option>)}
         </select>
-        {isAdmin&&responsables.length>1&&(
+        {/* Filtre responsable ouvert aux commerciaux : depuis db/09 ils LISENT les taches
+            et l'historique de tout le monde, donc leur reserver ce filtre afficherait un
+            compteur d'onglet (322) sans aucun moyen d'atteindre les lignes correspondantes. */}
+        {responsables.length>1&&(
           <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
             <option value="">Tous les commerciaux</option>
             {responsables.map(r=><option key={r} value={r}>{r}</option>)}
@@ -7866,8 +7883,16 @@ function App() {
   const partnerSet = new Set((partnerConsultants||[]).map(x=>x.contact_consultant_id));
   const missionInPartnerScope = m => partnerSet.has(m.contact_consultant_id);
   const vContacts   = isPartner ? contacts.filter(c=>partnerSet.has(c.id)) : contacts; // sinon tous voient tous les contacts
-  const vHistorique = isPartner ? historique.filter(h=>partnerSet.has(h.id_prospect)) : (activeIsAdmin ? historique : historique.filter(h=>h.responsable===activeProfile.nom));
-  const vTaches     = isPartner ? taches.filter(t=>partnerSet.has(t.contact_id)||(t.mission_id&&missions.some(m=>m.id===t.mission_id&&missionInPartnerScope(m)))) : (activeIsAdmin ? taches : taches.filter(t=>t.responsable===activeProfile.nom));
+  // Historique et tâches : ouverts à tous les commerciaux (arbitrage Nicolas 28/07,
+  // policies alignées dans db/09). Ces deux filtres doublonnaient les restrictions RLS ;
+  // les garder aurait rendu l'ouverture en base invisible.
+  // — Historique : la trace automatique des modifications porte le nom de son VRAI auteur,
+  //   donc `responsable === moi` la cachait au propriétaire de la fiche, seul concerné.
+  // — Tâches : on pouvait créer une tâche pour un collègue et ne plus jamais la revoir
+  //   (conséquence du commit ffe7278 du 20/07). Le filtre responsable de l'onglet reste
+  //   par défaut sur « moi », donc la liste demeure personnelle sauf déverrouillage.
+  const vHistorique = isPartner ? historique.filter(h=>partnerSet.has(h.id_prospect)) : historique;
+  const vTaches     = isPartner ? taches.filter(t=>partnerSet.has(t.contact_id)||(t.mission_id&&missions.some(m=>m.id===t.mission_id&&missionInPartnerScope(m)))) : taches;
   // Même règle que vBesoins et les contacts : un commercial voit les missions de son
   // agence, PLUS les siennes où qu'elles soient. Avant, le filtre était `responsable`
   // seul : un commercial ne voyait aucune mission de ses collègues (Louis Py affichait
