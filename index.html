@@ -7868,7 +7868,13 @@ function App() {
   const vContacts   = isPartner ? contacts.filter(c=>partnerSet.has(c.id)) : contacts; // sinon tous voient tous les contacts
   const vHistorique = isPartner ? historique.filter(h=>partnerSet.has(h.id_prospect)) : (activeIsAdmin ? historique : historique.filter(h=>h.responsable===activeProfile.nom));
   const vTaches     = isPartner ? taches.filter(t=>partnerSet.has(t.contact_id)||(t.mission_id&&missions.some(m=>m.id===t.mission_id&&missionInPartnerScope(m)))) : (activeIsAdmin ? taches : taches.filter(t=>t.responsable===activeProfile.nom));
-  const vMissions   = isPartner ? missions.filter(missionInPartnerScope) : (activeIsAdmin ? missions : missions.filter(m=>m.responsable===activeProfile.nom));
+  // Même règle que vBesoins et les contacts : un commercial voit les missions de son
+  // agence, PLUS les siennes où qu'elles soient. Avant, le filtre était `responsable`
+  // seul : un commercial ne voyait aucune mission de ses collègues (Louis Py affichait
+  // « Missions (0) »), ce qui empêchait de dépanner un suivi de mission sur sa région.
+  // ⚠️ Conséquence assumée (arbitrage Nicolas 28/07) : une fiche mission porte le TJM de
+  // vente et le CJM d'achat, donc les marges sont désormais visibles au sein d'une agence.
+  const vMissions   = isPartner ? missions.filter(missionInPartnerScope) : (activeIsAdmin ? missions : missions.filter(m=>m.responsable===activeProfile.nom||m.agence===activeProfile.agence));
   // Pré-filtre appliqué AVANT les onglets : un commercial voit les besoins de son agence,
   // PLUS ceux dont il est responsable même s'ils sont rattachés à une autre agence.
   // Sans la clause `responsable`, un besoin était retiré ici et la clause de secours du
