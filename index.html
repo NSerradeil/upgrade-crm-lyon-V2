@@ -2459,6 +2459,21 @@ async function syncMissionFromPeriods(missionId) {
   if (active) {
     if (active.tjm_vente) patch.tjm = Number(active.tjm_vente);
     if (active.cjm_consultant) patch.cjm = Number(active.cjm_consultant);
+    // Le n° de commande de la période active remonte à la racine de la mission
+    // (demande Nicolas 29/07) : c'est le champ que tout le monde lit pour facturer,
+    // il ne doit pas rester vide ou périmé quand une période le porte.
+    if (active.numero_commande) patch.num_commande = active.numero_commande;
+  }
+  // Filet : si la racine est VIDE et qu'aucune période active ne porte de n°, on prend le
+  // plus récent disponible. Sinon un renouvellement créé à l'avance (qui n'est pas encore
+  // « actif ») laisserait le champ vide jusqu'à sa date de début.
+  if (!patch.num_commande) {
+    const { data: m } = await sb.from('missions').select('num_commande').eq('id', missionId).single();
+    if (!m?.num_commande) {
+      const dernier = [...ps].sort((a,b)=>String(b.debut).localeCompare(String(a.debut)))
+                             .find(p => p.numero_commande);
+      if (dernier) patch.num_commande = dernier.numero_commande;
+    }
   }
   // On NE réécrit PLUS le statut ici : une mission explicitement passée à "Terminée"
   // par l'utilisateur ne doit jamais être ré-ouverte automatiquement par la sync des
