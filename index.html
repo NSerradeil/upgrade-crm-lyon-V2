@@ -4784,7 +4784,11 @@ function KanbanBesoins({ besoins, contacts, contactMap, besoinCandidats, onSelec
 function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique, taches, missions, profile, allProfiles, commerciauxParAgence, onRefresh, navBesoinId, navBesoinKey, onNavToContact, onNavToMission, onNavToTache, prefs }) {
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState(BESOIN_FILTER_ACTIFS);
   const [filterResp,setFilterResp]=useState('');
-  const [filterAgence,setFilterAgence]=useState(prefs?.besoins_filter_agence||(profile.role==='admin'?'':profile.agence));
+  // Un commercial responsable de besoins hors de son agence s'ouvre sur « toutes mes
+  // agences » (''), sinon il arriverait filtré sur la sienne et croirait ses autres
+  // besoins disparus. Même logique que myMultiAgence sur l'onglet Missions.
+  const _multiAgence=profile.role!=='admin'&&(besoins||[]).some(b=>b.responsable===profile.nom&&b.agence&&b.agence!==profile.agence);
+  const [filterAgence,setFilterAgence]=useState(_multiAgence?'':(prefs?.besoins_filter_agence||(profile.role==='admin'?'':profile.agence)));
   const [selected,setSelected]=useState(null);
   useEffect(()=>{ if(navBesoinId){ const b=besoins.find(x=>String(x.id)===String(navBesoinId)); if(b) setSelected(b); } },[navBesoinKey]);
   const [showAdd,setShowAdd]=useState(false);
@@ -4793,11 +4797,27 @@ function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique
   const isAdmin=profile.role==='admin';
 
   const agences=useMemo(()=>[...new Set(allProfiles.map(p=>p.agence).filter(Boolean))].sort(),[allProfiles]);
+  // Agences qu'un COMMERCIAL peut filtrer : la sienne, plus toute agence où il est
+  // responsable d'au moins un besoin. Sans ça le filtre était une pastille verrouillée sur
+  // sa seule agence : Louis Py (Paris) voyait bien ses 3 besoins lyonnais dans la liste
+  // mais ne pouvait pas filtrer dessus pour les isoler (signalé par Louis le 31/07).
+  const mesAgences=useMemo(()=>{
+    const miennes=new Set([profile.agence].filter(Boolean));
+    (besoins||[]).forEach(b=>{ if(b.responsable===profile.nom && b.agence) miennes.add(b.agence); });
+    return [...miennes].sort();
+  },[besoins,profile.nom,profile.agence]);
   const responsablesVisibles=useMemo(()=>{
     if(isAdmin&&!filterAgence) return [...new Set(allProfiles.map(p=>p.nom).filter(Boolean))].sort();
     const ag=filterAgence||profile.agence;
-    return commerciauxParAgence[ag]||[];
-  },[isAdmin,filterAgence,profile.agence,allProfiles,commerciauxParAgence]);
+    // Les commerciaux de l'agence filtrée, PLUS tout responsable d'un besoin de cette
+    // agence. Sans le second terme, un commercial responsable d'un besoin hors de son
+    // agence ne pouvait pas filtrer sur son propre nom : Louis Py (Paris) filtrant sur
+    // Lyon ne voyait proposé que « Nicolas Serradeil » et ne pouvait pas isoler ses
+    // 3 besoins lyonnais (signalé le 31/07).
+    const base=commerciauxParAgence[ag]||[];
+    const presents=(besoins||[]).filter(b=>!ag||b.agence===ag).map(b=>b.responsable).filter(Boolean);
+    return [...new Set([...base,...presents])].sort();
+  },[isAdmin,filterAgence,profile.agence,allProfiles,commerciauxParAgence,besoins]);
 
   const sorted=useMemo(()=>{
     const q=search.toLowerCase();
@@ -4805,7 +4825,12 @@ function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique
       .filter(b=>{
         if(filterStatut && filterStatut!==BESOIN_FILTER_ACTIFS && b.statut!==filterStatut) return false;
         if(filterResp&&b.responsable!==filterResp) return false;
-        if(filterAgence&&b.agence!==filterAgence&&b.responsable!==profile.nom) return false;
+        // Choix d'agence explicite : on le respecte. La clause de secours
+        // « mes besoins toujours visibles » ne s'applique plus qu'à l'admin, sinon filtrer
+        // sur Lyon ramenait aussi les besoins parisiens du commercial (7 au lieu de 3 pour
+        // Louis Py) — déroutant. Un commercial atteint tous ses besoins via « toutes mes
+        // agences » ou l'agence concernée, rien ne devient inatteignable.
+        if(filterAgence&&b.agence!==filterAgence&&!(isAdmin&&b.responsable===profile.nom)) return false;
         if(q){
           const c=contactMap[b.contact_id];
           const cand=contactMap[b.candidat_id];
@@ -4849,11 +4874,16 @@ function TabBesoins({ contacts, contactMap, besoins, besoinCandidats, historique
             <option value="">Toutes agences</option>{agences.map(a=><option key={a} value={a}>{a}</option>)}
           </select>
         )}
-        {!isAdmin&&(
+        {!isAdmin&&mesAgences.length>1&&(
+          <select value={filterAgence} onChange={e=>setFilterAgence(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
+            <option value="">Toutes mes agences</option>{mesAgences.map(a=><option key={a} value={a}>{a}</option>)}
+          </select>
+        )}
+        {!isAdmin&&mesAgences.length<=1&&(
           <span className="px-3 py-2 bg-neutral-50 border rounded-lg text-sm text-slate">{profile.agence}</span>
         )}
         <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-3 py-2 border rounded-lg text-sm focus:outline-none">
-          <option value="">Tous{!isAdmin?` (${profile.agence})`:filterAgence?` (${filterAgence})`:''}</option>
+          <option value="">Tous{filterAgence?` (${filterAgence})`:(!isAdmin&&mesAgences.length<=1?` (${profile.agence})`:'')}</option>
           {responsablesVisibles.map(r=><option key={r} value={r}>{r}{r===profile.nom?' (moi)':''}</option>)}
         </select>
         {hasFilter&&<button onClick={resetAll} className="px-3 py-2 text-sm text-slate hover:text-carbon">✕</button>}
