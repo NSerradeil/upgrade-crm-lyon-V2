@@ -13,7 +13,7 @@
 --     Amel Benzai       agence      = 'Paris'
 --
 -- Amel est DÉJÀ responsable du besoin et reste bloquée → la policy ne teste pas la
--- propriété mais très probablement l'AGENCE, via un EXISTS sur `besoins`.
+-- propriété mais l'AGENCE, via un EXISTS sur `besoins`. CONFIRMÉ le 31/07 (étape 1).
 --
 -- C'est le MÊME motif que le bug de Louis Py (db/08) : une condition d'agence sans
 -- échappatoire par le responsable, sur un besoin rattaché à une autre agence que celle
@@ -22,18 +22,26 @@
 -- ══════════════════════════════════════════════════════════════════════
 
 
--- ─── ÉTAPE 1 — CONFIRMER avant de corriger ───
--- (je n'ai pas pu lire pg_policies : non exposé via l'API REST)
+-- ─── ÉTAPE 1 — CONFIRMÉE le 31/07 ───
+-- Hypothèse validée mot pour mot. Les TROIS policies d'écriture portent la même
+-- condition, et AUCUNE ne prévoit d'échappatoire par le responsable :
+--
+--   besoin_candidats_insert  WITH CHECK : admin OR EXISTS(besoins b
+--                              WHERE b.id = besoin_id AND b.agence = get_my_agence())
+--   besoin_candidats_update  USING      : idem
+--   besoin_candidats_delete  USING      : idem
+--   besoin_candidats_select  USING      : true  ← lecture ouverte
+--
+-- Amel (agence Paris) sur un besoin en agence Lyon : le EXISTS échoue → 403.
+-- Effet pervers du SELECT à `true` : elle VOIT le besoin et ses candidats mais ne peut
+-- rien y ajouter. Le pire des cas pour comprendre ce qui se passe.
 SELECT policyname, cmd, roles,
        qual       AS condition_lecture,
        with_check AS condition_ecriture
 FROM pg_policies
 WHERE schemaname = 'public' AND tablename = 'besoin_candidats'
 ORDER BY cmd, policyname;
--- Ce qu'on cherche : une condition contenant `get_my_agence()`. Si c'est le cas,
--- l'hypothèse est confirmée et l'ÉTAPE 2 s'applique.
--- Si à la place on voit `get_my_nom()` seul, ou une condition sur le rôle, STOP :
--- me le renvoyer, le correctif ci-dessous ne serait pas le bon.
+-- (Requête conservée pour rejouer le constat. Résultat obtenu : voir l'encadré ci-dessus.)
 
 -- Contexte utile à afficher en même temps
 SELECT b.id, b.titre, b.responsable, b.agence AS agence_besoin,
@@ -45,7 +53,8 @@ WHERE b.id = '839ef93e-e6bc-48f4-a629-736bd4aff434';
 
 -- ─── ÉTAPE 2 — LE CORRECTIF ───
 -- On aligne `besoin_candidats` sur ce que db/09 a fait ailleurs : lecture et écriture
--- ouvertes aux commerciaux, suppression réservée à l'auteur du lien ou à l'admin.
+-- ouvertes aux commerciaux, suppression réservée à l'auteur du lien, au responsable du
+-- besoin, ou à l'admin.
 -- Positionner un candidat sur un besoin est une action de staffing quotidienne : la
 -- cloisonner par agence empêche justement le travail inter-agences qu'on vient d'ouvrir.
 
@@ -68,13 +77,19 @@ create policy besoin_candidats_update on public.besoin_candidats
   using      (get_my_role() = any (array['admin','commercial']))
   with check (get_my_role() = any (array['admin','commercial']));
 
--- Suppression : l'auteur du lien ou l'admin. On ne défait pas le positionnement d'un
--- collègue par mégarde.
+-- Suppression : l'auteur du lien, OU le responsable du besoin, OU l'admin. On ne défait
+-- pas le positionnement d'un collègue par mégarde, mais le responsable d'un besoin doit
+-- pouvoir nettoyer sa propre short-list.
 drop policy if exists besoin_candidats_delete on public.besoin_candidats;
 drop policy if exists besoin_candidats_commercial_delete on public.besoin_candidats;
 create policy besoin_candidats_delete on public.besoin_candidats
   for delete
-  using (get_my_role() = 'admin' or created_by = get_my_nom());
+  using (
+    get_my_role() = 'admin'
+    or created_by = get_my_nom()
+    or exists (select 1 from besoins b
+               where b.id = besoin_candidats.besoin_id and b.responsable = get_my_nom())
+  );
 
 -- ⚠️ Les policies `*_partner_*` de cette table, s'il en existe, ne sont PAS touchées :
 -- les DROP ci-dessus ne visent que des noms explicites. Vérifier à l'étape 3.
@@ -85,8 +100,8 @@ SELECT policyname, cmd, qual AS lecture, with_check AS ecriture
 FROM pg_policies
 WHERE schemaname = 'public' AND tablename = 'besoin_candidats'
 ORDER BY cmd, policyname;
--- Attendu : SELECT/INSERT/UPDATE ouverts aux commerciaux, DELETE = admin OR created_by,
--- et les éventuelles policies partner intactes.
+-- Attendu : SELECT/INSERT/UPDATE ouverts aux commerciaux ; DELETE = admin OR created_by
+-- OR responsable du besoin ; et les éventuelles policies partner intactes.
 
 -- Le vrai test, c'est AMEL : qu'elle recharge le CRM et repositionne Elena sur le besoin.
 -- ⚠️ Rappel : ces policies ne se testent PAS depuis l'éditeur SQL — auth.uid() y est NULL,
@@ -94,8 +109,23 @@ ORDER BY cmd, policyname;
 
 
 -- ══════════════════════════════════════════════════════════════════════
--- ROLLBACK — à compléter avec la sortie de l'ÉTAPE 1 avant de l'utiliser
+-- ROLLBACK — état exact du 31/07 avant correctif (relevé à l'étape 1)
 -- ══════════════════════════════════════════════════════════════════════
--- Les policies d'origine n'étant pas connues au moment d'écrire ce fichier, COPIER la
--- sortie de l'étape 1 quelque part avant de lancer l'étape 2. Sans ça, pas de retour
--- arrière fidèle possible.
+-- drop policy if exists besoin_candidats_insert on public.besoin_candidats;
+-- create policy besoin_candidats_insert on public.besoin_candidats for insert to authenticated
+--   with check ((get_my_role() = 'admin') or (exists (select 1 from besoins b
+--     where b.id = besoin_candidats.besoin_id and b.agence = get_my_agence())));
+--
+-- drop policy if exists besoin_candidats_update on public.besoin_candidats;
+-- create policy besoin_candidats_update on public.besoin_candidats for update to authenticated
+--   using ((get_my_role() = 'admin') or (exists (select 1 from besoins b
+--     where b.id = besoin_candidats.besoin_id and b.agence = get_my_agence())));
+--
+-- drop policy if exists besoin_candidats_delete on public.besoin_candidats;
+-- create policy besoin_candidats_delete on public.besoin_candidats for delete to authenticated
+--   using ((get_my_role() = 'admin') or (exists (select 1 from besoins b
+--     where b.id = besoin_candidats.besoin_id and b.agence = get_my_agence())));
+--
+-- drop policy if exists besoin_candidats_select on public.besoin_candidats;
+-- create policy besoin_candidats_select on public.besoin_candidats for select to authenticated
+--   using (true);
