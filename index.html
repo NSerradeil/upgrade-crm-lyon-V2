@@ -1312,8 +1312,11 @@ function ContactEditModal({ contact, profile, allProfiles, comptes, onClose, onS
       if ((f.ville||'') !== (contact.ville||'')) changes.push(`ville → ${f.ville||'(vide)'}`);
       if (f.responsable !== (contact.responsable||'')) changes.push(`responsable → ${f.responsable}`);
       if (f.agence && f.agence !== (contact.agence||'')) changes.push(`agence → ${f.agence}`);
-      const details = changes.length ? `Fiche modifiée : ${changes.join(', ')}` : 'Fiche contact modifiée';
-      await sb.from('historique_actions').insert({ id_prospect:contact.id, date:getToday(), type_action:'Note interne', details, responsable:profile?.nom||contact.responsable });
+      // Trace SILENCIEUSE si l'auteur est le responsable de la fiche (pas de bruit) — aligné sur logEdits().
+      // On ne loggue que de VRAIS changements faits par quelqu'un d'AUTRE que le propriétaire.
+      if (changes.length && profile?.nom !== contact.responsable) {
+        await sb.from('historique_actions').insert({ id_prospect:contact.id, date:getToday(), type_action:'Note interne', details:`${profile.nom} a modifié : ${changes.join(', ')}`, responsable:profile?.nom||contact.responsable });
+      }
       if (f.ne_pas_recontacter !== (contact.ne_pas_recontacter||false)) {
         if (f.ne_pas_recontacter) {
           await sb.from('historique_actions').insert({id_prospect:contact.id,date:getToday(),type_action:'Flag NPC',details:'Flag posé par '+profile.nom+(f.ne_pas_recontacter_note?' — '+f.ne_pas_recontacter_note:''),responsable:profile.nom});
@@ -1761,6 +1764,7 @@ function AddContactModal({ profile, allProfiles, comptes, onClose, onSaved }) {
 // ── Modal : Créer / Modifier compte (Phase 1.C) ──────────────────────────────
 function CompteFormModal({ compte, profile, allProfiles, onClose, onSaved }) {
   const isEdit = !!compte;
+  const isAdmin = profile.role==='admin';   // seul l'admin réattribue un compte (aligné modal contact + trigger db/10)
   const [f, setF] = useState({
     nom: compte?.nom || '',
     secteur: compte?.secteur || '',
@@ -1813,11 +1817,13 @@ function CompteFormModal({ compte, profile, allProfiles, onClose, onSaved }) {
             {['Prospect','Client actif','Client dormant','Ancien client'].map(x => <option key={x} value={x}>{x}</option>)}
           </select>
         </Field>
-        <Field label="Responsable">
-          <select value={f.responsable} onChange={s('responsable')} className={inputCls}>
-            {respOptions(allProfiles, f.responsable).map(p => <option key={p.nom} value={p.nom}>{p.nom}</option>)}
-          </select>
-        </Field>
+        {isAdmin
+          ? <Field label="Responsable">
+              <select value={f.responsable} onChange={s('responsable')} className={inputCls}>
+                {respOptions(allProfiles, f.responsable).map(p => <option key={p.nom} value={p.nom}>{p.nom}</option>)}
+              </select>
+            </Field>
+          : <Field label="Responsable"><div className={inputCls} style={{background:'#f5f5f5',color:'#999',borderRadius:0}}>{f.responsable||'—'}</div></Field>}
       </div>
       <Field label="Site web"><input type="url" value={f.site_web} onChange={s('site_web')} className={inputCls} placeholder="https://..."/></Field>
       <Field label="Notes"><textarea rows={3} value={f.notes} onChange={s('notes')} className={inputCls+' resize-none'}/></Field>

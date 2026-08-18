@@ -1,5 +1,20 @@
 # Droits d'écriture élargis + visibilité inter-agences — Plan d'implémentation
 
+> ## ✅ STATUT AU 18/08/2026 — CHANTIER TERMINÉ (les cases `- [ ]` ci-dessous sont historiques)
+> - **DB** : migrations `db/09`→`db/12` écrites et appliquées (UPDATE ouvert aux commerciaux /
+>   DELETE réservé responsable+admin sur contacts/comptes/besoins/missions/tâches ; trigger
+>   `guard_responsable_change` anti-réattribution ; besoin_candidats + mission_periods ouverts ;
+>   rattrapage lecture historiques). Audit des 17 tables (commit `bac11bf`, 31/07) = aucun trou restant.
+> - **UI** (index.html, en prod) : `canEdit`/`canDelete` dédoublés dans les 5 panneaux, helper `logEdits`
+>   (silencieux si l'auteur est le responsable), champ responsable verrouillé `isAdmin` dans toutes les modals.
+> - **Finitions 18/08** : (1) `CompteFormModal` — responsable gaté `isAdmin` (lecture seule sinon) ;
+>   (2) trace `ContactEditModal` rendue silencieuse si l'auteur = responsable (alignée sur `logEdits`).
+> - **Différé (décision Nicolas 28/07)** : trace des modifs de **compte** = nécessite un historique
+>   POLYMORPHE (un compte n'a pas de `contact_id`) → chantier à part, non traité ici.
+> - **Décision Nicolas 18/08** : fermer la mission/tâche d'un collègue reste en `canEdit` (« on laisse tel quel »).
+> - **À vérifier LIVE** avant de considérer 100 % clos : que db/09→12 sont bien appliquées en base
+>   (requêtes `pg_policies` fournies dans le récap du 18/08).
+
 **Goal :** tout commercial peut modifier n'importe quel objet du CRM (sans le supprimer ni
 changer son responsable), avec trace automatique ; et plus aucun objet n'est caché à son
 propre responsable quand son agence diffère.
