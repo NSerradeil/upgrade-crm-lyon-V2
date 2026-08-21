@@ -52,6 +52,18 @@ casse/espace, et du couplage `contacts.groupe → besoins.compte`.
 - `crm_create/update_contact` : Prospect/Client → pose le lien `contact_compte` ; Candidat → écrit `employeur`.
   Aligné sur l'app. Bump version + rebuild `.mcpb` (cf. mémoire crm-mcp-bump-rebuild-mcpb).
 
+## AVANCEMENT (maj 21/08)
+- ✅ **Phase 1** (db/13) — colonnes `besoins.compte_id` + `contacts.employeur` ajoutées, appliquées en base.
+- ✅ **Phase 2 backfill** (db/14 besoins · db/15 employeur · db/16 contact_compte) — appliqué + vérifié :
+  besoins **276/276** liés ; contacts **1262/1271** liés (9 « Freelance » junk laissés vides) + employeur rempli ;
+  39 comptes créés/consolidés, doublon APRIL fusionné.
+- ⏳ **Phase 3** (UI index.html) — À FAIRE : picker compte + inline create sur besoin (virer le champ texte
+  alimenté par `groupe`) ; contact → champ `employeur` + affichages « société » via `contact_compte`/`employeur`.
+- ⏳ **Phase 4** (MCP) — À FAIRE : garde résolution nom→compte_id + maintien contact_compte + rebuild .mcpb.
+- ⏳ **Phase 5** (db/17) — À FAIRE EN DERNIER : supprimer `besoins.compte` et `contacts.groupe`.
+> ⚠️ Tant que la phase 3 n'est pas déployée, l'app tourne sur le TEXTE (`compte`/`groupe`) ; les colonnes
+> `compte_id`/`contact_compte`/`employeur` sont remplies mais pas encore lues par l'UI. État stable et sûr.
+
 ## Ordre d'exécution (chaque étape : valider local + vérifier l'effet en base + GO Nicolas avant prod)
 1. **db/13** — ajouter colonnes `besoins.compte_id` + `contacts.employeur` (nullable, non-cassant). ← 1re migration
 2. **db/14** — backfill + rapport (après analyse des données réelles + fix contacts 129-134).
