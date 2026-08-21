@@ -26,6 +26,12 @@ WHERE crm_norm(w.nom) NOT IN (SELECT crm_norm(nom) FROM public.comptes);
 CREATE TEMP TABLE alias_c(raw text, cible text) ON COMMIT DROP;
 INSERT INTO alias_c(raw, cible) VALUES
   ('Crédit Agricole Anjou Maine', 'Crédit Agricole Technologies & Services (CATS)'),
+  ('CATS',                        'Crédit Agricole Technologies & Services (CATS)'),
+  ('CA-TS',                       'Crédit Agricole Technologies & Services (CATS)'),
+  ('Alpha',                       'Crédit Agricole Technologies & Services (CATS)'),
+  ('Crédit Agricole Technologies et Services', 'Crédit Agricole Technologies & Services (CATS)'),
+  ('Crédit Agricole Technology & Services',    'Crédit Agricole Technologies & Services (CATS)'),
+  ('Crédit Agricole',             'Crédit Agricole Technologies & Services (CATS)'),
   ('BNP Paribas - PACE',          'BNP Paribas'),
   ('SNCF Connect and tech',       'SNCF Connect'),
   ('ENGIE - GBU LEI',             'ENGIE'),
