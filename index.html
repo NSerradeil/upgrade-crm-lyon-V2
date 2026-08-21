@@ -3504,6 +3504,9 @@ function AddActionFromTaskModal({ task, contact, profile, onClose, onSaved }) {
 function TacheDetailPanel({ task, contact, besoinLabel, mission, besoin, historique, profile, onClose, onEdit, onComplete, onDelete, onAddAction, canEdit, onViewContact, onViewMission, onViewBesoin }) {
   const [showAddAction,setShowAddAction]=useState(false);
   const [modal,setModal]=useState(null);
+  // canDelete n'était pas passé en prop → ReferenceError au clic sur une tâche. Défini ici,
+  // même règle que partout (db/09) : suppression réservée à l'admin ou au responsable.
+  const canDelete = profile.role==='admin' || task.responsable===profile.nom;
   const statusColor = task.statut==='fait'?'bg-jade-20 text-jade-100':task.overdue?'bg-coral-20 text-coral-100':'bg-azure-20 text-azure-100';
   const statusLabel = task.statut==='fait'?'Fait':task.overdue?'En retard':task.statut==='en_cours'?'En cours':'À faire';
   const taskHist = (historique||[]).filter(h=>h.tache_id===task.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
