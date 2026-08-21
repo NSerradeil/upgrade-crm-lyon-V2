@@ -57,8 +57,19 @@ casse/espace, et du couplage `contacts.groupe → besoins.compte`.
 - ✅ **Phase 2 backfill** (db/14 besoins · db/15 employeur · db/16 contact_compte) — appliqué + vérifié :
   besoins **276/276** liés ; contacts **1262/1271** liés (9 « Freelance » junk laissés vides) + employeur rempli ;
   39 comptes créés/consolidés, doublon APRIL fusionné.
-- ⏳ **Phase 3** (UI index.html) — À FAIRE : picker compte + inline create sur besoin (virer le champ texte
-  alimenté par `groupe`) ; contact → champ `employeur` + affichages « société » via `contact_compte`/`employeur`.
+- 🔶 **Phase 3** (UI index.html) — EN COURS :
+  - **Lot 3a BESOIN — fait, en validation locale (21/08).** Nouveau `CompteCreatablePicker` (recherche
+    comptes + « + créer le compte » inline → INSERT `comptes(nom,statut='Prospect')` + dédup par nom normalisé).
+    Remplace `CompteSearchField` (qui lisait `contacts.groupe`) à la création (`AddBesoinModal`) et à l'édition
+    (`BesoinDetail`). Recopie `groupe→compte` supprimée. Props `comptes`/`compteMap` câblées dans `TabBesoins`+`TabPipe`.
+    **Décision de sync (blast radius minimal)** : source de vérité = `compte_id`, MAIS on maintient `besoins.compte`
+    (texte) synchronisé = `comptes.nom` à chaque save (le picker écrit id ET nom dans le state du form). Ainsi
+    tous les sites de lecture existants (`b.compte` : pipe, mission, badges gamif, recherche, agrégats) restent
+    corrects **sans être touchés** — leur migration vers `compteMap` + le `DROP compte` se font en phase 5.
+    Ce n'est PAS du texte libre : la valeur vient toujours d'un vrai compte.
+  - **Lot 3b CONTACT — reste : ** Candidat écrit encore dans `groupe` → basculer sur `employeur` ;
+    `societeOf()`/affichages consultants retombent sur `groupe`. (Le picker `contact_compte` Prospect/Client
+    est déjà en place depuis phase 1.D/1.E.)
 - ⏳ **Phase 4** (MCP) — À FAIRE : garde résolution nom→compte_id + maintien contact_compte + rebuild .mcpb.
 - ⏳ **Phase 5** (db/17) — À FAIRE EN DERNIER : supprimer `besoins.compte` et `contacts.groupe`.
 > ⚠️ Tant que la phase 3 n'est pas déployée, l'app tourne sur le TEXTE (`compte`/`groupe`) ; les colonnes
