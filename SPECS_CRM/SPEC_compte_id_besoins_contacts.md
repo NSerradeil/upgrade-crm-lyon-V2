@@ -67,9 +67,11 @@ casse/espace, et du couplage `contacts.groupe → besoins.compte`.
     tous les sites de lecture existants (`b.compte` : pipe, mission, badges gamif, recherche, agrégats) restent
     corrects **sans être touchés** — leur migration vers `compteMap` + le `DROP compte` se font en phase 5.
     Ce n'est PAS du texte libre : la valeur vient toujours d'un vrai compte.
-  - **Lot 3b CONTACT — reste : ** Candidat écrit encore dans `groupe` → basculer sur `employeur` ;
-    `societeOf()`/affichages consultants retombent sur `groupe`. (Le picker `contact_compte` Prospect/Client
-    est déjà en place depuis phase 1.D/1.E.)
+  - **Lot 3b CONTACT — fait, validé local (21/08).** `CompteAssocField` Candidat écrit désormais `employeur`
+    (mirroir `groupe=employeur` maintenu tant que `groupe` existe → les ~25 affichages qui lisent encore
+    `groupe` restent cohérents jusqu'au DROP phase 5). `ContactEditModal`+`AddContactModal` persistent `employeur`.
+    `societeOf()` : Candidat → `employeur||groupe` ; Prospect/Client → junction `contact_compte` ; consultants →
+    `groupe` (trigger missions, inchangé). Vérifié : champ « Employeur actuel » lit bien `employeur` (Cerbulean=Fiducial).
 - ⏳ **Phase 4** (MCP) — À FAIRE : garde résolution nom→compte_id + maintien contact_compte + rebuild .mcpb.
 - ⏳ **Phase 5** (db/17) — À FAIRE EN DERNIER : supprimer `besoins.compte` et `contacts.groupe`.
 > ⚠️ Tant que la phase 3 n'est pas déployée, l'app tourne sur le TEXTE (`compte`/`groupe`) ; les colonnes

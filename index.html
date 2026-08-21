@@ -1256,11 +1256,11 @@ function CompteCreatablePicker({ comptes, compteId, onPick, onRefresh }) {
   );
 }
 
-function CompteAssocField({ statut, groupe, compteId, comptes, onPickCompte, onChangeText }) {
+function CompteAssocField({ statut, groupe, employeur, compteId, comptes, onPickCompte, onChangeText }) {
   if (CONSULTANT_STATUTS.includes(statut))
     return <Field label="Compte (auto · depuis missions)"><div className={inputCls} style={{background:'#f5f5f5',color:'#999',borderRadius:0}}>{groupe||'—'}</div></Field>;
   if (statut==='Candidat')
-    return <Field label="Employeur actuel"><input type="text" value={groupe||''} onChange={e=>onChangeText(e.target.value)} className={inputCls} placeholder="Saisie manuelle"/></Field>;
+    return <Field label="Employeur actuel"><input type="text" value={employeur||''} onChange={e=>onChangeText(e.target.value)} className={inputCls} placeholder="Saisie manuelle"/></Field>;
   return <Field label="Compte associé"><CompteAssocPicker comptes={comptes} compteId={compteId} onPickCompte={onPickCompte}/></Field>;
 }
 async function syncContactComptePrimary(contactId, compteId){
@@ -1349,13 +1349,13 @@ function IntercoEditor({ contact, profile }) {
 function ContactEditModal({ contact, profile, allProfiles, comptes, onClose, onSaved }) {
   const isAdmin=profile.role==='admin';
   const initCompteId=(()=>{const c=(comptes||[]).find(x=>x.nom&&x.nom===contact.groupe);return c?c.id:'';})();
-  const [f,setF] = useState({ prenom:contact.prenom||'', nom:contact.nom||'', telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', compte_id:initCompteId, responsable:contact.responsable||'', linkedin:contact.linkedin||'', ats:contact.ats||'', cjm:contact.cjm??'', agence:contact.agence||'', ne_pas_recontacter:contact.ne_pas_recontacter||false, ne_pas_recontacter_note:contact.ne_pas_recontacter_note||'' });
+  const [f,setF] = useState({ prenom:contact.prenom||'', nom:contact.nom||'', telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', employeur:contact.employeur||'', compte_id:initCompteId, responsable:contact.responsable||'', linkedin:contact.linkedin||'', ats:contact.ats||'', cjm:contact.cjm??'', agence:contact.agence||'', ne_pas_recontacter:contact.ne_pas_recontacter||false, ne_pas_recontacter_note:contact.ne_pas_recontacter_note||'' });
   const canEditAgence = isAdmin || (contact.responsable === profile.nom);
   const [saving,setSaving]=useState(false); const [err,setErr]=useState('');
   const s = k => e => setF(v=>({...v,[k]:e.target.value}));
   const save = async () => {
     setSaving(true);
-    const upd={ prenom:normPrenom(f.prenom)||contact.prenom, nom:(f.nom||'').toUpperCase()||contact.nom, telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, groupe:f.groupe||null, responsable:f.responsable||contact.responsable, linkedin:normalizeLinkedinUrl(f.linkedin), cjm:(f.cjm===''||f.cjm==null)?null:parseFloat(f.cjm), agence:f.agence||contact.agence, updated_at:new Date().toISOString(), ne_pas_recontacter:f.ne_pas_recontacter||false, ne_pas_recontacter_note:f.ne_pas_recontacter_note||null, ne_pas_recontacter_date:f.ne_pas_recontacter?contact.ne_pas_recontacter_date||(f.ne_pas_recontacter!==contact.ne_pas_recontacter?getToday():null):null };
+    const upd={ prenom:normPrenom(f.prenom)||contact.prenom, nom:(f.nom||'').toUpperCase()||contact.nom, telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, groupe:f.groupe||null, employeur:f.employeur||null, responsable:f.responsable||contact.responsable, linkedin:normalizeLinkedinUrl(f.linkedin), cjm:(f.cjm===''||f.cjm==null)?null:parseFloat(f.cjm), agence:f.agence||contact.agence, updated_at:new Date().toISOString(), ne_pas_recontacter:f.ne_pas_recontacter||false, ne_pas_recontacter_note:f.ne_pas_recontacter_note||null, ne_pas_recontacter_date:f.ne_pas_recontacter?contact.ne_pas_recontacter_date||(f.ne_pas_recontacter!==contact.ne_pas_recontacter?getToday():null):null };
     if(['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)) upd.ats=f.ats||null;
     const { error } = await sb.from('contacts').update(upd).eq('id',contact.id);
     if (error) { setErr(error.message); setSaving(false); }
@@ -1393,7 +1393,7 @@ function ContactEditModal({ contact, profile, allProfiles, comptes, onClose, onS
         <Field label="Prénom"><input type="text" value={f.prenom} onChange={e=>setF(v=>({...v,prenom:normPrenom(e.target.value)}))} className={inputCls}/></Field>
         <Field label="Nom"><input type="text" value={f.nom} onChange={e=>setF(v=>({...v,nom:e.target.value.toUpperCase()}))} className={inputCls}/></Field>
       </div>
-      <CompteAssocField statut={f.statut} groupe={f.groupe} compteId={f.compte_id} comptes={comptes} onPickCompte={(id,nom)=>setF(v=>({...v,compte_id:id,groupe:nom}))} onChangeText={val=>setF(v=>({...v,groupe:val}))}/>
+      <CompteAssocField statut={f.statut} groupe={f.groupe} employeur={f.employeur} compteId={f.compte_id} comptes={comptes} onPickCompte={(id,nom)=>setF(v=>({...v,compte_id:id,groupe:nom}))} onChangeText={val=>setF(v=>({...v,employeur:val,groupe:val}))}/>
       <Field label="Rôle / Poste"><input type="text" value={f.role} onChange={s('role')} className={inputCls}/></Field>
       <Field label="Ville"><input type="text" value={f.ville} onChange={e=>setF(v=>({...v,ville:normVille(e.target.value)}))} className={inputCls}/></Field>
       <Field label="Téléphone"><input type="tel" value={f.telephone} onChange={s('telephone')} className={inputCls}/></Field>
@@ -1769,14 +1769,14 @@ function AddTacheModal({ contacts, besoins, missions, profile, allProfiles, onCl
   );
 }
 function AddContactModal({ profile, allProfiles, comptes, onClose, onSaved }) {
-  const [f,setF] = useState({ prenom:'', nom:'', groupe:'', compte_id:'', ville:'', role:'', telephone:'', email:'', linkedin:'', ats:'', cjm:'', statut:'Prospect', responsable:profile.nom, commentaires:'' });
+  const [f,setF] = useState({ prenom:'', nom:'', groupe:'', employeur:'', compte_id:'', ville:'', role:'', telephone:'', email:'', linkedin:'', ats:'', cjm:'', statut:'Prospect', responsable:profile.nom, commentaires:'' });
   const [saving,setSaving]=useState(false); const [err,setErr]=useState('');
   const s = k => e => setF(v=>({...v,[k]:e.target.value}));
   const sNorm = (k,fn) => e => setF(v=>({...v,[k]:fn(e.target.value)}));
   const save = async () => {
     if (!f.nom.trim()) { setErr('Le nom est obligatoire.'); return; }
     setSaving(true);
-    const ins={ prenom:f.prenom||null, nom:f.nom.trim(), groupe:f.groupe||null, ville:f.ville||null, role:f.role||null, telephone:f.telephone||null, email:f.email||null, linkedin:normalizeLinkedinUrl(f.linkedin), cjm:(f.cjm===''||f.cjm==null)?null:parseFloat(f.cjm), statut:f.statut, responsable:f.responsable, commentaires:f.commentaires||null, nb_relance:0, updated_at:new Date().toISOString(), agence:profile.agence||'Lyon' };
+    const ins={ prenom:f.prenom||null, nom:f.nom.trim(), groupe:f.groupe||null, employeur:f.employeur||null, ville:f.ville||null, role:f.role||null, telephone:f.telephone||null, email:f.email||null, linkedin:normalizeLinkedinUrl(f.linkedin), cjm:(f.cjm===''||f.cjm==null)?null:parseFloat(f.cjm), statut:f.statut, responsable:f.responsable, commentaires:f.commentaires||null, nb_relance:0, updated_at:new Date().toISOString(), agence:profile.agence||'Lyon' };
     if(['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)) ins.ats=f.ats||null;
     const { data:inserted, error } = await sb.from('contacts').insert(ins).select('id').single();
     if (error) { setErr(error.message); setSaving(false); }
@@ -1795,7 +1795,7 @@ function AddContactModal({ profile, allProfiles, comptes, onClose, onSaved }) {
         <Field label="Prénom"><input type="text" value={f.prenom} autoFocus onChange={sNorm('prenom',normPrenom)} className={inputCls} placeholder="ex: Jean-Pierre"/></Field>
         <Field label="Nom *"><input type="text" value={f.nom} onChange={sNorm('nom',normNom)} className={inputCls} placeholder="ex: DUPONT"/></Field>
       </div>
-      <CompteAssocField statut={f.statut} groupe={f.groupe} compteId={f.compte_id} comptes={comptes} onPickCompte={(id,nom)=>setF(v=>({...v,compte_id:id,groupe:nom}))} onChangeText={val=>setF(v=>({...v,groupe:val}))}/>
+      <CompteAssocField statut={f.statut} groupe={f.groupe} employeur={f.employeur} compteId={f.compte_id} comptes={comptes} onPickCompte={(id,nom)=>setF(v=>({...v,compte_id:id,groupe:nom}))} onChangeText={val=>setF(v=>({...v,employeur:val,groupe:val}))}/>
       <Field label="Rôle / Poste"><input type="text" value={f.role} onChange={s('role')} className={inputCls}/></Field>
       <Field label="Ville"><input type="text" value={f.ville} onChange={sNorm('ville',normVille)} className={inputCls}/></Field>
       <Field label="Téléphone"><input type="tel" value={f.telephone} onChange={s('telephone')} className={inputCls}/></Field>
@@ -2745,6 +2745,7 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
       const cpt=cid!=null?compteMap[cid]:null;
       if(cpt&&cpt.nom) return cpt.nom;
     }
+    if(c&&c.statut==='Candidat') return c.employeur||c.groupe||'';
     return c?.groupe||'';
   };
 
