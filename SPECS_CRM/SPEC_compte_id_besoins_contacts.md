@@ -72,7 +72,13 @@ casse/espace, et du couplage `contacts.groupe → besoins.compte`.
     `groupe` restent cohérents jusqu'au DROP phase 5). `ContactEditModal`+`AddContactModal` persistent `employeur`.
     `societeOf()` : Candidat → `employeur||groupe` ; Prospect/Client → junction `contact_compte` ; consultants →
     `groupe` (trigger missions, inchangé). Vérifié : champ « Employeur actuel » lit bien `employeur` (Cerbulean=Fiducial).
-- ⏳ **Phase 4** (MCP) — À FAIRE : garde résolution nom→compte_id + maintien contact_compte + rebuild .mcpb.
+- ✅ **Phase 4** (MCP) — FAIT (21/08, v8.12.0) : `index.mjs` — helpers `resolveCompteId` (match normalisé
+  crm_norm, création auto statut Prospect si absent) + `syncContactCompte`. `crm_create/update_besoin`
+  résolvent `compte`→`compte_id` (+ dénormalisation `compte`=nom). `crm_create/update_contact` : Prospect/Client
+  → lien `contact_compte` (+ `groupe` dénormalisé) ; Candidat → `employeur` (+ miroir `groupe`). Champ `employeur`
+  ajouté à CONTACT_ALLOWED_FIELDS. Bump 8.11→8.12, `.mcpb` reconstruit. `node --check` OK.
+  ⚠️ Actif au prochain **redémarrage de session MCP** (Claude Code recharge `index.mjs`) ; pour Claude Desktop
+  = réinstaller `upgrade-crm-v8.12.0.mcpb`.
 - ⏳ **Phase 5** (db/17) — À FAIRE EN DERNIER : supprimer `besoins.compte` et `contacts.groupe`.
 > ⚠️ Tant que la phase 3 n'est pas déployée, l'app tourne sur le TEXTE (`compte`/`groupe`) ; les colonnes
 > `compte_id`/`contact_compte`/`employeur` sont remplies mais pas encore lues par l'UI. État stable et sûr.
