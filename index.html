@@ -2077,7 +2077,7 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, on
   const isEdit=!!mission&&!!mission.id;
   const isAdmin=profile.role==='admin';
   const init=mission||{consultant:'',client:'',compte_id:null,projet:'',tjm:'',cjm:'',statut:'En cours',type_contrat:'CDI',responsable:profile.nom,agence:profile.agence||'Lyon',num_commande:'',date_debut_mission:'',date_fin_mission:'',referent:'',contact_consultant_id:null,contact_referent_id:null,date_demarrage_initiale:'',date_dernier_suivi_mission:''};
-  const [f,setF]=useState({...init, besoin_id:prefillBesoinId||init.besoin_id||'', date_debut_mission:extractDate(init.date_debut_mission), date_fin_mission:extractDate(init.date_fin_mission), debut_time:extractTime(init.date_debut_mission)||DEFAULT_MISSION_START_TIME, fin_time:extractTime(init.date_fin_mission)||DEFAULT_MISSION_END_TIME});
+  const [f,setF]=useState({...init, besoin_id:prefillBesoinId||init.besoin_id||'', date_debut_mission:extractDate(init.date_debut_mission), date_fin_mission:extractDate(init.date_fin_mission), date_demarrage_initiale:extractDate(init.date_demarrage_initiale)||extractDate(init.date_debut_mission)||'', debut_time:extractTime(init.date_debut_mission)||DEFAULT_MISSION_START_TIME, fin_time:extractTime(init.date_fin_mission)||DEFAULT_MISSION_END_TIME});
   const availableBesoins=useMemo(()=>(besoins||[]).filter(b=>b.statut&&b.statut!=='Besoin Perdu'),[besoins]);
   const [jours,setJours]=useState(()=>{
     const j={};MOIS_KEYS.forEach(k=>{j[k]=mission?mission[`jours_${k}`]||'':'';});return j;
@@ -4737,8 +4737,8 @@ function BesoinDetail({ besoin, contacts, contactMap, comptes, compteMap, besoin
             responsable:besoin.responsable,
             agence:allProfiles.find(p=>p.nom===besoin.responsable)?.agence||profile.agence||'Lyon',
             num_commande:'',
-            date_debut_mission:besoin.date_demarrage||'',
-            date_fin_mission:besoin.date_fin||'',
+            date_debut_mission:besoin.date_demarrage||besoin.budget_date_debut||'',
+            date_fin_mission:besoin.date_fin||besoin.budget_date_fin||'',
             referent:contact?`${contact.prenom} ${contact.nom}`:'',
             contact_referent_id:besoin.contact_id||null,
             besoin_id:besoin.id
