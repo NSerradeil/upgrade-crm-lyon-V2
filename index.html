@@ -1355,7 +1355,7 @@ function ContactEditModal({ contact, profile, allProfiles, comptes, onClose, onS
   const s = k => e => setF(v=>({...v,[k]:e.target.value}));
   const save = async () => {
     setSaving(true);
-    const upd={ prenom:normPrenom(f.prenom)||contact.prenom, nom:(f.nom||'').toUpperCase()||contact.nom, telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, groupe:f.groupe||null, employeur:f.employeur||null, responsable:f.responsable||contact.responsable, linkedin:normalizeLinkedinUrl(f.linkedin), cjm:(f.cjm===''||f.cjm==null)?null:parseFloat(f.cjm), agence:f.agence||contact.agence, updated_at:new Date().toISOString(), ne_pas_recontacter:f.ne_pas_recontacter||false, ne_pas_recontacter_note:f.ne_pas_recontacter_note||null, ne_pas_recontacter_date:f.ne_pas_recontacter?contact.ne_pas_recontacter_date||(f.ne_pas_recontacter!==contact.ne_pas_recontacter?getToday():null):null };
+    const upd={ prenom:normPrenom(f.prenom)||contact.prenom, nom:(f.nom||'').toUpperCase()||contact.nom, telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, employeur:f.employeur||null, responsable:f.responsable||contact.responsable, linkedin:normalizeLinkedinUrl(f.linkedin), cjm:(f.cjm===''||f.cjm==null)?null:parseFloat(f.cjm), agence:f.agence||contact.agence, updated_at:new Date().toISOString(), ne_pas_recontacter:f.ne_pas_recontacter||false, ne_pas_recontacter_note:f.ne_pas_recontacter_note||null, ne_pas_recontacter_date:f.ne_pas_recontacter?contact.ne_pas_recontacter_date||(f.ne_pas_recontacter!==contact.ne_pas_recontacter?getToday():null):null };
     if(['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)) upd.ats=f.ats||null;
     const { error } = await sb.from('contacts').update(upd).eq('id',contact.id);
     if (error) { setErr(error.message); setSaving(false); }
@@ -1776,7 +1776,7 @@ function AddContactModal({ profile, allProfiles, comptes, onClose, onSaved }) {
   const save = async () => {
     if (!f.nom.trim()) { setErr('Le nom est obligatoire.'); return; }
     setSaving(true);
-    const ins={ prenom:f.prenom||null, nom:f.nom.trim(), groupe:f.groupe||null, employeur:f.employeur||null, ville:f.ville||null, role:f.role||null, telephone:f.telephone||null, email:f.email||null, linkedin:normalizeLinkedinUrl(f.linkedin), cjm:(f.cjm===''||f.cjm==null)?null:parseFloat(f.cjm), statut:f.statut, responsable:f.responsable, commentaires:f.commentaires||null, nb_relance:0, updated_at:new Date().toISOString(), agence:profile.agence||'Lyon' };
+    const ins={ prenom:f.prenom||null, nom:f.nom.trim(), employeur:f.employeur||null, ville:f.ville||null, role:f.role||null, telephone:f.telephone||null, email:f.email||null, linkedin:normalizeLinkedinUrl(f.linkedin), cjm:(f.cjm===''||f.cjm==null)?null:parseFloat(f.cjm), statut:f.statut, responsable:f.responsable, commentaires:f.commentaires||null, nb_relance:0, updated_at:new Date().toISOString(), agence:profile.agence||'Lyon' };
     if(['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)) ins.ats=f.ats||null;
     const { data:inserted, error } = await sb.from('contacts').insert(ins).select('id').single();
     if (error) { setErr(error.message); setSaving(false); }
@@ -3772,15 +3772,15 @@ function BadgeDetailPanel({ category, score, profile, prefs, onSavePrefs, onClos
     else if(cat==='connaisseur') p=sb.from('missions').select('id,consultant,client').eq('responsable',nom).not('client','is',null).not('date_demarrage_initiale','is',null).gte('date_demarrage_initiale',Y26).lt('date_demarrage_initiale',Y27).then(function(r){var byC={};(r.data||[]).forEach(function(m){var cl=(m.client||'').trim().toUpperCase();if(!cl)return;if(!byC[cl])byC[cl]=[];byC[cl].push(m);});var best=null;var bestN=0;Object.keys(byC).forEach(function(k){if(byC[k].length>bestN){bestN=byC[k].length;best=k;}});return{type:'table',label:'Meilleur compte (2026)',items:best?(byC[best]||[]).map(function(m){return m.consultant+' chez '+m.client;}):[],note:bestN+' missions sur '+best};});
     else if(cat==='recruteur') p=sb.from('missions').select('id,consultant,client,besoin_id').eq('responsable',nom).not('besoin_id','is',null).not('date_demarrage_initiale','is',null).gte('date_demarrage_initiale',Y26).lt('date_demarrage_initiale',Y27).then(function(r){return{type:'table',label:'Missions issues d\'un besoin (2026)',items:(r.data||[]).map(function(m){return m.consultant+' chez '+m.client;}),note:(r.data||[]).length+' placements'};});
     else if(cat==='gestionnaire') p=sb.from('historique_missions').select('id,date,type_action,details').eq('responsable',nom).gte('date',Y26).lt('date',Y27).order('date',{ascending:false}).limit(20).then(function(r){return{type:'table',label:'Suivis loggés en 2026 (20 derniers)',items:(r.data||[]).map(function(h){return(h.date||'').slice(0,10)+' — '+(h.type_action||'')+(h.details?' : '+h.details.slice(0,40):'');}),note:score+' suivis en 2026'};});
-    else if(cat==='productif') p=sb.from('besoins').select('id,titre,compte,statut,created_at').eq('statut','Besoin Gagné').eq('responsable',nom).gte('created_at',Y26).lt('created_at',Y27).then(function(r){return{type:'table',label:'Besoins gagnés en 2026',items:(r.data||[]).map(function(b){return(b.created_at||'').slice(0,10)+' — '+(b.titre||b.compte||'?');}),note:(r.data||[]).length+' besoins transformés en 2026'};});
-    else if(cat==='networker') p=sb.from('contacts').select('id,prenom,nom,groupe,created_at').eq('responsable',nom).gte('created_at',Y26).lt('created_at',Y27).order('created_at',{ascending:false}).limit(20).then(function(r){return{type:'table',label:'Contacts créés en 2026 (20 derniers)',items:(r.data||[]).map(function(c){return(c.created_at||'').slice(0,10)+' — '+(c.prenom||'')+' '+(c.nom||'')+' '+(c.groupe?'('+c.groupe+')':'');}),note:score+' contacts créés en 2026'};});
+    else if(cat==='productif') p=sb.from('besoins').select('id,titre,statut,created_at').eq('statut','Besoin Gagné').eq('responsable',nom).gte('created_at',Y26).lt('created_at',Y27).then(function(r){return{type:'table',label:'Besoins gagnés en 2026',items:(r.data||[]).map(function(b){return(b.created_at||'').slice(0,10)+' — '+(b.titre||'?');}),note:(r.data||[]).length+' besoins transformés en 2026'};});
+    else if(cat==='networker') p=sb.from('contacts').select('id,prenom,nom,created_at').eq('responsable',nom).gte('created_at',Y26).lt('created_at',Y27).order('created_at',{ascending:false}).limit(20).then(function(r){return{type:'table',label:'Contacts créés en 2026 (20 derniers)',items:(r.data||[]).map(function(c){return(c.created_at||'').slice(0,10)+' — '+(c.prenom||'')+' '+(c.nom||'');}),note:score+' contacts créés en 2026'};});
     else if(cat==='relanceur') p=sb.from('taches').select('id,titre,due_date').eq('statut','fait').eq('responsable',nom).not('session_prospection_id','is',null).gte('created_at',Y26).lt('created_at',Y27).order('due_date',{ascending:false}).limit(20).then(function(r){return{type:'table',label:'Relances effectuées en 2026 (20 dernières)',items:(r.data||[]).map(function(t2){return(t2.due_date||'').slice(0,10)+' — '+(t2.titre||'Relance');}),note:score+' relances en 2026'};});
     else if(cat==='tribun') p=sb.from('sessions_prospection').select('id,date_session,objectif').eq('statut','done').eq('responsable',nom).gte('date_session',Y26).lt('date_session',Y27).order('date_session',{ascending:false}).then(function(r){return{type:'table',label:'Sessions terminées en 2026',items:(r.data||[]).map(function(s2){return(s2.date_session||'?')+' — objectif '+s2.objectif+' contacts';}),note:(r.data||[]).length+' sessions en 2026'};});
     else if(cat==='goldmaker') p=sb.from('missions').select('consultant,client,tjm,jours_jan,jours_fev,jours_mar,jours_avr,jours_mai,jours_jun,jours_jul,jours_aou,jours_sep,jours_oct,jours_nov,jours_dec').eq('responsable',nom).not('tjm','is',null).then(function(r){var mk=['jours_jan','jours_fev','jours_mar','jours_avr','jours_mai','jours_jun','jours_jul','jours_aou','jours_sep','jours_oct','jours_nov','jours_dec'];var cm=new Date().getMonth();var items=[];(r.data||[]).forEach(function(m){var j=0;for(var i=0;i<=cm;i++)j+=parseFloat(m[mk[i]])||0;if(j>0){var ca=m.tjm*j;items.push(m.consultant+' chez '+m.client+' — '+j+'j × '+m.tjm+'€ = '+Math.round(ca).toLocaleString('fr-FR')+'€');}});return{type:'table',label:'CA YTD par mission (embarqué inclus)',items:items,note:'CA YTD total : '+score.toLocaleString('fr-FR')+' €'};});
     else if(cat==='rentier') p=sb.from('missions').select('consultant,client,tjm,cjm').eq('responsable',nom).not('tjm','is',null).not('cjm','is',null).then(function(r){return{type:'table',label:'Missions avec marge (embarqué inclus)',items:(r.data||[]).filter(function(m){return m.tjm>0;}).map(function(m){var tx=((m.tjm-m.cjm)/m.tjm*100).toFixed(1);var pts=tx>40?2:tx>30?1:tx>20?0.5:0;return m.consultant+' chez '+m.client+' — marge '+tx+'% → '+pts+' pt'+(pts>1?'s':'');}),note:score.toFixed(1)+' pts de marge'};});
-    else if(cat==='architecte') p=sb.from('besoins').select('id,titre,compte,statut,created_at').eq('responsable',nom).gte('created_at',Y26).lt('created_at',Y27).order('created_at',{ascending:false}).limit(20).then(function(r){return{type:'table',label:'Besoins créés en 2026 (20 derniers)',items:(r.data||[]).map(function(b){return(b.created_at||'').slice(0,10)+' — '+(b.titre||b.compte||'?')+' ['+b.statut+']';}),note:score+' besoins créés en 2026'};});
+    else if(cat==='architecte') p=sb.from('besoins').select('id,titre,statut,created_at').eq('responsable',nom).gte('created_at',Y26).lt('created_at',Y27).order('created_at',{ascending:false}).limit(20).then(function(r){return{type:'table',label:'Besoins créés en 2026 (20 derniers)',items:(r.data||[]).map(function(b){return(b.created_at||'').slice(0,10)+' — '+(b.titre||'?')+' ['+b.statut+']';}),note:score+' besoins créés en 2026'};});
     else if(cat==='diplomate') p=Promise.all([sb.from('taches').select('id,titre,due_date').eq('responsable',nom).ilike('titre','%RDV%').gte('created_at',Y26).lt('created_at',Y27).order('due_date',{ascending:false}).limit(15),sb.from('historique_actions').select('id,date,details').eq('responsable',nom).ilike('type_action','%RDV%').gte('date',Y26).lt('date',Y27).order('date',{ascending:false}).limit(15)]).then(function(res){var items=[];(res[0].data||[]).forEach(function(t2){items.push('Tâche — '+(t2.due_date||'').slice(0,10)+' — '+(t2.titre||'RDV'));});(res[1].data||[]).forEach(function(h){items.push('Action — '+(h.date||'').slice(0,10)+' — '+(h.details||'RDV').slice(0,50));});return{type:'table',label:'RDV loggés en 2026 (30 derniers)',items:items.slice(0,30),note:score+' RDV en 2026'};});
-    else if(cat==='speedcloser') p=sb.from('besoins').select('id,titre,compte,created_at,updated_at').eq('responsable',nom).eq('statut','Besoin Gagné').gte('created_at',Y26).lt('created_at',Y27).then(function(r){return{type:'table',label:'Besoins closés en 2026',items:(r.data||[]).map(function(b){var days=Math.round((new Date(b.updated_at)-new Date(b.created_at))/(1000*60*60*24));return(b.titre||b.compte||'?')+' — '+days+'j'+(days<30?' ✓':' (> 30j)');}),note:score+' deals rapides en 2026'};});
+    else if(cat==='speedcloser') p=sb.from('besoins').select('id,titre,created_at,updated_at').eq('responsable',nom).eq('statut','Besoin Gagné').gte('created_at',Y26).lt('created_at',Y27).then(function(r){return{type:'table',label:'Besoins closés en 2026',items:(r.data||[]).map(function(b){var days=Math.round((new Date(b.updated_at)-new Date(b.created_at))/(1000*60*60*24));return(b.titre||'?')+' — '+days+'j'+(days<30?' ✓':' (> 30j)');}),note:score+' deals rapides en 2026'};});
     else p=Promise.resolve({type:'list',label:'Score',items:score,note:''});
     p.then(function(d){setDetailData(d);setDetailLoading(false);});
   }
@@ -4285,7 +4285,7 @@ function AddBesoinModal({ contacts, comptes, profile, allProfiles, onClose, onSa
     setSaving(true);
     const _cNom=f.compte_id?((comptes||[]).find(c=>String(c.id)===String(f.compte_id))?.nom||null):null;
     const {data:inserted,error}=await sb.from('besoins').insert({
-      titre:f.titre.trim(),statut:f.statut,type:f.type,lien:f.lien||null,compte:_cNom,compte_id:f.compte_id||null,
+      titre:f.titre.trim(),statut:f.statut,type:f.type,lien:f.lien||null,compte_id:f.compte_id||null,
       contact_id:f.contact_id||null,description:f.description||null,budget:f.budget||10000,
       budget_tjm:f.budget_tjm,budget_jours:f.budget_jours,budget_date_debut:f.budget_date_debut,budget_date_fin:f.budget_date_fin,
       candidat_id:f.candidat_id||null,responsable:f.responsable,agence:(allProfiles.find(function(p){return p.nom===f.responsable;})||{}).agence||profile.agence||'Lyon'
@@ -4511,7 +4511,7 @@ function BesoinDetail({ besoin, contacts, contactMap, comptes, compteMap, besoin
     setGagneErrors({});
     setSaving(true);
     const _cNom=f.compte_id?((comptes||[]).find(c=>String(c.id)===String(f.compte_id))?.nom||null):null;
-    const upd={statut:f.statut,titre:f.titre,lien:f.lien||null,compte_id:f.compte_id||null,compte:_cNom,contact_id:f.contact_id||null,
+    const upd={statut:f.statut,titre:f.titre,lien:f.lien||null,compte_id:f.compte_id||null,contact_id:f.contact_id||null,
       description:f.description||null,budget:f.budget||0,budget_tjm:f.budget_tjm,budget_jours:f.budget_jours,
       budget_date_debut:f.budget_date_debut,budget_date_fin:f.budget_date_fin,candidat_id:f.candidat_id||null,
       consultant_id:f.consultant_id||null,
@@ -8094,6 +8094,26 @@ function App() {
   const vComptes        = isPartner ? (comptes||[]).filter(c=>_partnerClients.has(c.nom)) : (comptes||[]);        // partner : comptes de ses missions ; sinon tous
   const vContactComptes = contactComptes||[]; // junction M2M contact↔compte
   const compteMap        = Object.fromEntries(vComptes.map(c=>[c.id,c]));
+
+  // ── Phase 5 : société dérivée injectée sur chaque contact/besoin ──
+  // On CALCULE la « société » depuis la source de vérité (compte_id / contact_compte / employeur /
+  // mission) et on l'écrase sur c.groupe / b.compte. Les ~50 affichages qui lisent c.groupe / b.compte
+  // continuent de marcher sans être touchés, mais ne dépendent plus de la colonne texte (condamnée au DROP).
+  // Idempotent : recalculé à chaque render depuis compteMap/junction (fallback texte tant que la colonne existe).
+  (function(){
+    const primaryCompteOf={}; vContactComptes.forEach(l=>{ if(l.is_primary && primaryCompteOf[l.contact_id]==null) primaryCompteOf[l.contact_id]=l.compte_id; });
+    const missionClientOf={}; (missions||[]).forEach(m=>{ if(m.contact_consultant_id!=null && missionClientOf[m.contact_consultant_id]==null) missionClientOf[m.contact_consultant_id]=(m.compte_id!=null&&compteMap[m.compte_id]?.nom)||m.client||''; });
+    const CONS=new Set(['Consultant CDI','Freelance','Prestataire']);
+    (vContacts||[]).forEach(c=>{
+      let soc;
+      if(c.statut==='Prospect'||c.statut==='Client'){ const cid=primaryCompteOf[c.id]; soc=(cid!=null&&compteMap[cid]?.nom)||c.groupe||''; }
+      else if(c.statut==='Candidat'){ soc=c.employeur||c.groupe||''; }
+      else if(CONS.has(c.statut)){ soc=missionClientOf[c.id]||c.groupe||''; }
+      else { soc=c.employeur||c.groupe||''; }
+      c.groupe=soc;
+    });
+    (vBesoins||[]).forEach(b=>{ b.compte=(b.compte_id!=null&&compteMap[b.compte_id]?.nom)||b.compte||''; });
+  })();
 
   const tachesActives=vTaches.filter(t=>t.statut!=='fait'&&t.statut!=='annule');
   const tachesRetard=taches.filter(t=>t.statut!=='fait'&&t.statut!=='annule'&&t.due_date&&extractDate(t.due_date)<TODAY&&t.responsable===activeProfile.nom);
