@@ -87,9 +87,15 @@ casse/espace, et du couplage `contacts.groupe → besoins.compte`.
   - ✅ **Lot B — MCP v8.14.0 (fait, à déployer partout)** : ne lit ni n'écrit plus `compte`/`groupe` ; société
     résolue via `compte_id`/`contact_compte`/`employeur` (helpers `compteNomById`, `societeByContact`) ; filtre
     `crm_list_besoins.compte` résolu en `compte_id`. `.mcpb` v8.14.0 reconstruit.
-  - ⏳ **Lot C — db/17 `DROP` (prêt, NON exécuté)** : `db/17_drop_compte_groupe.sql`. **Irréversible** → à lancer
-    UNIQUEMENT quand Lot A est en prod ET le MCP v8.14.0 est actif **partout** (un ancien MCP ≤ 8.13 planterait
-    en écrivant compte/groupe après le DROP). GO explicite dédié.
+  - ✅ **Lot C — db/17 `DROP` (exécuté 25/08)** : colonnes `besoins.compte` + `contacts.groupe` supprimées.
+    Pré-flight OK (0 besoin orphelin) ; remédiation de 5 contacts (vraies sociétés reliées via contact_compte :
+    Waresito, Folkyn, Hool, La Boulangère & Co, Groupe Jean Hénaff) ; 9 Prospects « Freelance » (junk) laissés.
+  - ✅ **HOTFIX db/18 (25/08)** : un trigger sur `missions` écrivait `contacts.groupe` (maintenance société
+    consultant) → cassait TOUTE écriture de mission après le DROP (SQLSTATE 42703). Trigger + fonction supprimés
+    (société consultant désormais dérivée). Vérifié en prod : écritures missions OK, app charge sans erreur.
+
+**✅ CHANTIER compte_id TERMINÉ (25/08).** Source de vérité unique : `besoins.compte_id` · `contacts.contact_compte`
+(Prospect/Client) + `contacts.employeur` (candidats). App + MCP (v8.14.0) alignés. Colonnes texte supprimées.
 > ⚠️ Tant que la phase 3 n'est pas déployée, l'app tourne sur le TEXTE (`compte`/`groupe`) ; les colonnes
 > `compte_id`/`contact_compte`/`employeur` sont remplies mais pas encore lues par l'UI. État stable et sûr.
 
