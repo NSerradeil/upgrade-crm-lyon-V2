@@ -8108,7 +8108,7 @@ function App() {
       let soc;
       if(c.statut==='Prospect'||c.statut==='Client'){ const cid=primaryCompteOf[c.id]; soc=(cid!=null&&compteMap[cid]?.nom)||c.groupe||''; }
       else if(c.statut==='Candidat'){ soc=c.employeur||c.groupe||''; }
-      else if(CONS.has(c.statut)){ soc=missionClientOf[c.id]||c.groupe||''; }
+      else if(CONS.has(c.statut)){ soc=missionClientOf[c.id]||c.employeur||c.groupe||''; }
       else { soc=c.employeur||c.groupe||''; }
       c.groupe=soc;
     });
