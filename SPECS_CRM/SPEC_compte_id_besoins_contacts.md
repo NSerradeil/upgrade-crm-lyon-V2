@@ -79,7 +79,17 @@ casse/espace, et du couplage `contacts.groupe → besoins.compte`.
   ajouté à CONTACT_ALLOWED_FIELDS. Bump 8.11→8.12, `.mcpb` reconstruit. `node --check` OK.
   ⚠️ Actif au prochain **redémarrage de session MCP** (Claude Code recharge `index.mjs`) ; pour Claude Desktop
   = réinstaller `upgrade-crm-v8.12.0.mcpb`.
-- ⏳ **Phase 5** (db/17) — À FAIRE EN DERNIER : supprimer `besoins.compte` et `contacts.groupe`.
+- 🔶 **Phase 5** — EN COURS (bascule des lectures/écritures avant le DROP) :
+  - ✅ **Lot A — App (déployé 25/08)** : société dérivée **injectée au chargement** (contact_compte / compte_id /
+    employeur / mission client → écrasée sur `c.groupe` / `b.compte`) → les ~50 affichages marchent sans être
+    touchés, sans lire la colonne. 4 requêtes SQL badges nettoyées. Écritures `compte`/`groupe` retirées (besoin
+    insert/update, contact insert/update).
+  - ✅ **Lot B — MCP v8.14.0 (fait, à déployer partout)** : ne lit ni n'écrit plus `compte`/`groupe` ; société
+    résolue via `compte_id`/`contact_compte`/`employeur` (helpers `compteNomById`, `societeByContact`) ; filtre
+    `crm_list_besoins.compte` résolu en `compte_id`. `.mcpb` v8.14.0 reconstruit.
+  - ⏳ **Lot C — db/17 `DROP` (prêt, NON exécuté)** : `db/17_drop_compte_groupe.sql`. **Irréversible** → à lancer
+    UNIQUEMENT quand Lot A est en prod ET le MCP v8.14.0 est actif **partout** (un ancien MCP ≤ 8.13 planterait
+    en écrivant compte/groupe après le DROP). GO explicite dédié.
 > ⚠️ Tant que la phase 3 n'est pas déployée, l'app tourne sur le TEXTE (`compte`/`groupe`) ; les colonnes
 > `compte_id`/`contact_compte`/`employeur` sont remplies mais pas encore lues par l'UI. État stable et sûr.
 
