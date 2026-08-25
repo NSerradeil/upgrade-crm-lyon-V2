@@ -2547,7 +2547,7 @@ async function syncMissionFromPeriods(missionId) {
 }
 
 // ── Panel : Détail mission ────────────────────────────────────────────────────
-function MissionDetail({ mission, histMissions, missionPeriods, contacts, taches, missions, besoins, profile, allProfiles, onClose, onRefresh, onNavToContact, onNavToBesoin, onNavToTache }) {
+function MissionDetail({ mission, histMissions, missionPeriods, contacts, taches, missions, besoins, comptes, profile, allProfiles, onClose, onRefresh, onNavToContact, onNavToBesoin, onNavToTache, onNavToCompte }) {
   const [showAdd,setShowAdd] = useState(false);
   const [modal,setModal]=useState(null);
   const [viewContact,setViewContact]=useState(null);
@@ -2570,6 +2570,8 @@ function MissionDetail({ mission, histMissions, missionPeriods, contacts, taches
   };
   const consultantContact=mission.contact_consultant_id?allContacts.find(c=>c.id===mission.contact_consultant_id):matchContact(mission.consultant);
   const referentContact=mission.contact_referent_id?allContacts.find(c=>c.id===mission.contact_referent_id):matchContact(mission.referent);
+  // Compte lié : compte_id d'abord, sinon résolution par nom de client (missions legacy sans compte_id)
+  const compteLie=mission.compte_id?(comptes||[]).find(c=>c.id===mission.compte_id):(mission.client?(comptes||[]).find(c=>(c.nom||'').trim().toLowerCase()===mission.client.trim().toLowerCase()):null);
 
   const joursTotal = MOIS_KEYS.reduce((s,k)=>s+(parseFloat(mission[`jours_${k}`])||0),0);
   const caTotal    = joursTotal*(parseFloat(mission.tjm)||0);
@@ -2630,7 +2632,7 @@ function MissionDetail({ mission, histMissions, missionPeriods, contacts, taches
         {/* Infos mission */}
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div><span className="text-[11px] text-slate uppercase tracking-wide">Consultant</span><br/>{consultantContact?<span className="text-midnight font-medium underline decoration-2 decoration-lemon-100 underline-offset-2 hover:decoration-lemon-100 hover:bg-lemon-20 cursor-pointer transition-colors" onClick={()=>{if(onNavToContact){onClose();onNavToContact(consultantContact.id);}else setViewContact(consultantContact);}}>{mission.consultant} ↗</span>:<span className="text-carbon font-medium">{mission.consultant||'—'}</span>}</div>
-          <div><span className="text-[11px] text-slate uppercase tracking-wide">Client</span><br/><span className="text-carbon font-medium">{mission.client||'—'}</span></div>
+          <div><span className="text-[11px] text-slate uppercase tracking-wide">Client</span><br/>{compteLie&&onNavToCompte?<span className="text-midnight font-medium underline decoration-2 decoration-lemon-100 underline-offset-2 hover:decoration-lemon-100 hover:bg-lemon-20 cursor-pointer transition-colors" onClick={()=>{onClose();onNavToCompte(compteLie.id);}}>{mission.client||compteLie.nom||'—'} ↗</span>:<span className="text-carbon font-medium">{mission.client||'—'}</span>}</div>
           <div><span className="text-[11px] text-slate uppercase tracking-wide">TJM vente</span><br/><span className="font-mono font-semibold text-carbon">{mission.tjm>0?`${mission.tjm}€`:'—'}</span></div>
           <div><span className="text-[11px] text-slate uppercase tracking-wide">TJM achat</span><br/><span className="font-mono text-carbon font-medium">{mission.cjm>0?`${mission.cjm}€`:'—'}</span></div>
           <div><span className="text-[11px] text-slate uppercase tracking-wide">Responsable</span><br/><span className="text-carbon font-medium">{mission.responsable||'—'}</span></div>
@@ -5701,7 +5703,7 @@ function EditableJoursGridCell({ mission, moisKey, moisIdx, onUpdate }) {
 }
 
 // ── Onglet TDB Missions ───────────────────────────────────────────────────────
-function TabTDB({ missions, histMissions, missionPeriods, contacts, taches, besoins, profile, allProfiles, commerciauxParAgence, onRefresh, navMissionId, navMissionKey, onNavToContact, onNavToBesoin, onNavToTache, prefs }) {
+function TabTDB({ missions, histMissions, missionPeriods, contacts, taches, besoins, comptes, profile, allProfiles, commerciauxParAgence, onRefresh, navMissionId, navMissionKey, onNavToContact, onNavToBesoin, onNavToTache, onNavToCompte, prefs }) {
   const [selected,setSelected] = useState(null); const [showAdd,setShowAdd]=useState(false);
   useEffect(()=>{ if(navMissionId){ const m=missions.find(x=>String(x.id)===String(navMissionId)); if(m) setSelected(m); } },[navMissionKey]);
   const [search,setSearch] = useState(''); const [filterStatut,setFilterStatut] = useState(prefs?.missions_filter_statut||'');
@@ -6041,7 +6043,7 @@ function TabTDB({ missions, histMissions, missionPeriods, contacts, taches, beso
         </div>
       </div>
 
-      {selected&&<MissionDetail mission={selected} histMissions={histMissions} missionPeriods={(missionPeriods||[]).filter(p=>p.mission_id===selected.id)} contacts={contacts||[]} taches={taches||[]} missions={missions||[]} besoins={besoins||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}} onNavToContact={onNavToContact} onNavToBesoin={onNavToBesoin} onNavToTache={onNavToTache}/>}
+      {selected&&<MissionDetail mission={selected} histMissions={histMissions} missionPeriods={(missionPeriods||[]).filter(p=>p.mission_id===selected.id)} contacts={contacts||[]} taches={taches||[]} missions={missions||[]} besoins={besoins||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}} comptes={comptes} onNavToContact={onNavToContact} onNavToBesoin={onNavToBesoin} onNavToTache={onNavToTache} onNavToCompte={onNavToCompte}/>}
       {showAdd&&<MissionFormModal profile={profile} allProfiles={allProfiles} contacts={contacts||[]} besoins={besoins||[]} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
     </div>
   );
@@ -8220,7 +8222,7 @@ function App() {
         {tab==='besoins'  &&<TabBesoins  contacts={vContacts} contactMap={contactMap} comptes={vComptes} compteMap={compteMap} besoins={vBesoins} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navBesoinId={navBesoinId} navBesoinKey={navBesoinKey} onNavToContact={navToContact} onNavToMission={navToMission} onNavToTache={navToTache} onNavToCompte={navToCompte} prefs={prefs}/>}
         {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} comptes={vComptes} compteMap={compteMap} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToCompte={navToCompte} prefs={prefs}/>}
         {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} contactMap={contactMap} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache}/>}
-        {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} missionPeriods={missionPeriods} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navMissionId={navMissionId} navMissionKey={navMissionKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache} prefs={prefs}/>}
+        {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} missionPeriods={missionPeriods} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navMissionId={navMissionId} navMissionKey={navMissionKey} comptes={vComptes} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache} onNavToCompte={navToCompte} prefs={prefs}/>}
         {tab==='settings' &&<TabSettings user={user} profile={activeProfile} taches={vTaches} subTab={settingsSubTab} onSubTabChange={setSettingsSubTab} prefs={prefs} onSavePrefs={viewAs?null:savePrefs} achievements={activeAchievements} viewAs={!!viewAs}/>}
       </div>
       {/* Shortcuts modal */}
