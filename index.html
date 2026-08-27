@@ -1829,6 +1829,15 @@ function CompteFormModal({ compte, profile, allProfiles, onClose, onSaved }) {
     responsable: compte?.responsable || profile.nom,
     site_web: compte?.site_web || '',
     notes: compte?.notes || '',
+    adresse: compte?.adresse || '',
+    description: compte?.description || '',
+    siren: compte?.siren || '',
+    effectifs: compte?.effectifs ?? '',
+    effectifs_annee: compte?.effectifs_annee ?? '',
+    ca: compte?.ca ?? '',
+    ca_annee: compte?.ca_annee ?? '',
+    resultat_net: compte?.resultat_net ?? '',
+    resultat_annee: compte?.resultat_annee ?? '',
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
@@ -1845,6 +1854,15 @@ function CompteFormModal({ compte, profile, allProfiles, onClose, onSaved }) {
       responsable: f.responsable || null,
       site_web: (f.site_web||'').trim() || null,
       notes: (f.notes||'').trim() || null,
+      adresse: (f.adresse||'').trim() || null,
+      description: (f.description||'').trim() || null,
+      siren: (f.siren||'').trim() || null,
+      effectifs: f.effectifs===''||f.effectifs==null ? null : Number(f.effectifs),
+      effectifs_annee: f.effectifs_annee===''||f.effectifs_annee==null ? null : Number(f.effectifs_annee),
+      ca: f.ca===''||f.ca==null ? null : Number(f.ca),
+      ca_annee: f.ca_annee===''||f.ca_annee==null ? null : Number(f.ca_annee),
+      resultat_net: f.resultat_net===''||f.resultat_net==null ? null : Number(f.resultat_net),
+      resultat_annee: f.resultat_annee===''||f.resultat_annee==null ? null : Number(f.resultat_annee),
       updated_at: new Date().toISOString(),
     };
     const { error } = isEdit
@@ -1883,6 +1901,24 @@ function CompteFormModal({ compte, profile, allProfiles, onClose, onSaved }) {
       </div>
       <Field label="Site web"><input type="url" value={f.site_web} onChange={s('site_web')} className={inputCls} placeholder="https://..."/></Field>
       <Field label="Notes"><textarea rows={3} value={f.notes} onChange={s('notes')} className={inputCls+' resize-none'}/></Field>
+      <div className="border-t pt-3 mt-1">
+        <div className="text-[10px] text-neutral-300 uppercase tracking-wider mb-2">Infos publiques (auto-remplies, correction manuelle)</div>
+        <Field label="Adresse (siège)"><input type="text" value={f.adresse} onChange={s('adresse')} className={inputCls}/></Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Effectifs"><input type="number" value={f.effectifs} onChange={s('effectifs')} className={inputCls}/></Field>
+          <Field label="Année effectifs"><input type="number" value={f.effectifs_annee} onChange={s('effectifs_annee')} className={inputCls} placeholder="ex: 2024"/></Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="CA (€)"><input type="number" value={f.ca} onChange={s('ca')} className={inputCls}/></Field>
+          <Field label="Année CA"><input type="number" value={f.ca_annee} onChange={s('ca_annee')} className={inputCls} placeholder="ex: 2024"/></Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Résultat net (€)"><input type="number" value={f.resultat_net} onChange={s('resultat_net')} className={inputCls}/></Field>
+          <Field label="Année résultat"><input type="number" value={f.resultat_annee} onChange={s('resultat_annee')} className={inputCls} placeholder="ex: 2024"/></Field>
+        </div>
+        <Field label="Description"><textarea rows={2} value={f.description} onChange={s('description')} className={inputCls+' resize-none'}/></Field>
+        <Field label="SIREN"><input type="text" value={f.siren} onChange={s('siren')} className={inputCls} placeholder="9 chiffres"/></Field>
+      </div>
       {err && <div className="text-xs text-coral-100 bg-coral-20 rounded px-3 py-2">{err}</div>}
     </Modal>
   );
@@ -3331,15 +3367,57 @@ function CompteSidebar({ compte, contactComptes, contacts, missions, historique,
           )
         )}
 
-        {activeTab==='infos' && (
+        {activeTab==='infos' && (()=>{
+          const yr = a => a ? ` (${a})` : '';
+          const chiffres = [
+            compte.effectifs!=null && {label:'Effectifs', val:`${Number(compte.effectifs).toLocaleString('fr-FR')}${yr(compte.effectifs_annee)}`},
+            compte.ca!=null && {label:'Chiffre d’affaires', val:`${fmtCurrency(compte.ca)}${yr(compte.ca_annee)}`},
+            compte.resultat_net!=null && {label:'Résultat net', val:`${fmtCurrency(compte.resultat_net)}${yr(compte.resultat_annee)}`},
+          ].filter(Boolean);
+          const news = Array.isArray(compte.news) ? compte.news : [];
+          const vide = !compte.secteur&&!compte.ville&&!compte.site_web&&!compte.notes
+            &&!compte.adresse&&!compte.description&&!chiffres.length&&!news.length;
+          return (
           <div className="space-y-3">
             {compte.secteur&&<div><div className="text-[10px] text-neutral-300 uppercase tracking-wider">Secteur</div><div className="text-carbon">{compte.secteur}</div></div>}
             {compte.ville&&<div><div className="text-[10px] text-neutral-300 uppercase tracking-wider">Ville</div><div className="text-carbon">{compte.ville}</div></div>}
+            {compte.adresse&&<div><div className="text-[10px] text-neutral-300 uppercase tracking-wider">Adresse</div><div className="text-carbon text-xs">{compte.adresse}</div></div>}
             {compte.site_web&&<div><div className="text-[10px] text-neutral-300 uppercase tracking-wider">Site web</div><a href={compte.site_web} target="_blank" rel="noopener noreferrer" className="text-azure-100 hover:underline break-all">{compte.site_web}</a></div>}
+            {chiffres.length>0&&(
+              <div className="grid grid-cols-3 gap-2">
+                {chiffres.map((c,i)=>(
+                  <div key={i} className="bg-neutral-50 px-2 py-1.5">
+                    <div className="text-[10px] text-neutral-300 uppercase tracking-wider">{c.label}</div>
+                    <div className="text-carbon font-semibold tabular-nums">{c.val}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {compte.description&&<div><div className="text-[10px] text-neutral-300 uppercase tracking-wider">Description</div><div className="whitespace-pre-wrap text-slate text-xs">{compte.description}</div></div>}
+            {news.length>0&&(
+              <div>
+                <div className="text-[10px] text-neutral-300 uppercase tracking-wider mb-1">Actualités</div>
+                <div className="space-y-2">
+                  {news.slice(0,3).map((n,i)=>(
+                    <div key={i} className="border-l-2 border-neutral-100 pl-3">
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        {n.url
+                          ? <a href={n.url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-midnight hover:underline">{n.titre}</a>
+                          : <span className="text-xs font-medium text-midnight">{n.titre}</span>}
+                        {n.date&&<span className="text-[10px] text-neutral-300 tabular-nums whitespace-nowrap">{n.date}</span>}
+                      </div>
+                      {n.resume&&<div className="text-xs text-slate mt-0.5">{n.resume}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {compte.notes&&<div><div className="text-[10px] text-neutral-300 uppercase tracking-wider">Notes</div><div className="whitespace-pre-wrap text-slate text-xs">{compte.notes}</div></div>}
-            {!compte.secteur&&!compte.ville&&!compte.site_web&&!compte.notes&&<div className="text-xs text-neutral-200 italic">Aucune info renseignée</div>}
+            {(compte.osint_maj||compte.news_maj)&&<div className="text-[10px] text-neutral-200 italic pt-1">Infos publiques maj {compte.osint_maj||'—'}{compte.news_maj?` · news ${compte.news_maj}`:''}</div>}
+            {vide&&<div className="text-xs text-neutral-200 italic">Aucune info renseignée</div>}
           </div>
-        )}
+          );
+        })()}
 
       </div>
     </div>
