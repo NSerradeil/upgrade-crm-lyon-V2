@@ -4655,7 +4655,17 @@ function BesoinDetail({ besoin, contacts, contactMap, comptes, compteMap, besoin
     }
     setSaving(false);
   };
-  const handleDelete=async()=>{setDeleting(true);await sb.from('besoins').delete().eq('id',besoin.id);toast('Besoin supprimé');onRefresh();onClose();};
+  const handleDelete=async()=>{
+    setDeleting(true);
+    // Nettoyer d'abord les references FK (sinon Postgres refuse le DELETE, cf. suppression contact)
+    await sb.from('historique_actions').delete().eq('besoin_id',besoin.id);
+    await sb.from('besoin_candidats').delete().eq('besoin_id',besoin.id);
+    await sb.from('taches').update({besoin_id:null}).eq('besoin_id',besoin.id);
+    await sb.from('missions').update({besoin_id:null}).eq('besoin_id',besoin.id);
+    const res=await sb.from('besoins').delete().eq('id',besoin.id);
+    if(res.error){toast('Erreur : '+res.error.message);setDeleting(false);return;}
+    toast('Besoin supprimé');onRefresh();onClose();
+  };
   const logAction=async(action)=>{
     await sb.from('historique_actions').insert({id_prospect:besoin.contact_id,date:action.date,type_action:action.type_action,details:action.details||null,responsable:action.responsable,besoin_id:besoin.id});
     onRefresh();setModal(null);
