@@ -8028,8 +8028,16 @@ function App() {
     setLoading(true); setError(null);
     try {
       // Mobile : limites réduites pour éviter OOM Safari iOS (~300-500MB max)
-      const L = isMobile ? 1000 : 10000;
-      const histLimit = isMobile ? 300 : 10000;
+      // Limites et colonnes resserrées le 2026-09-10 (chantier egress Supabase) :
+      // select('*') remplacé par la liste exacte des colonnes utilisées par le front
+      // (méthode : grep exhaustif de tous les accès `.champ` sur chaque objet dans
+      // index.html, cf. journal du 2026-09-10), et limits ramenées à une taille
+      // réaliste au vu du volume réel (~1850 contacts). En cas de doute sur une
+      // colonne, elle a été conservée.
+      const L = isMobile ? 1000 : 5000;
+      const histLimit = isMobile ? 300 : 8000;
+      const MISSIONS_COLS = 'id,consultant,client,compte_id,projet,tjm,cjm,statut,type_contrat,responsable,agence,num_commande,date_debut_mission,date_fin_mission,referent,contact_consultant_id,contact_referent_id,besoin_id,date_demarrage_initiale,date_dernier_suivi_mission,'
+        +MOIS_KEYS.map(k=>`jours_${k}`).join(',')+','+MOIS_KEYS.map(k=>`statut_${k}`).join(',');
       const [
         {data:contacts,  error:e1},{data:historique,error:e2},
         {data:taches,    error:e3},{data:besoins,   error:e4},
@@ -8039,16 +8047,16 @@ function App() {
         {data:comptes,   error:e9},{data:contactComptes,error:e10},
         {data:partnerConsultants,error:e11},
       ] = await Promise.all([
-        sb.from('contacts').select('*').order('id').limit(L),
-        sb.from('historique_actions').select('*').order('date',{ascending:false}).limit(histLimit),
-        sb.from('taches').select('*').order('due_date',{ascending:true,nullsFirst:false}).limit(L),
-        sb.from('besoins').select('*').order('created_at',{ascending:false}).limit(L),
-        sb.from('missions').select('*').order('consultant').limit(isMobile?500:5000),
-        sb.from('historique_missions').select('*').order('date',{ascending:false}).limit(histLimit),
-        sb.from('besoin_candidats').select('*').order('created_at',{ascending:true}).limit(5000),
-        sb.from('mission_periods').select('*').order('debut',{ascending:true}).limit(10000),
-        sb.from('comptes').select('*').order('nom').limit(10000),
-        sb.from('contact_compte').select('*').limit(20000),
+        sb.from('contacts').select('id,statut,prenom,nom,ville,role,telephone,email,linkedin,besoins,responsable,date_dernier,commentaires,ats,updated_at,agence,created_at,date_dernier_suivi_client,ne_pas_recontacter,ne_pas_recontacter_note,ne_pas_recontacter_date,cjm,employeur').order('id').limit(L),
+        sb.from('historique_actions').select('id,id_prospect,date,type_action,details,responsable,tache_id,besoin_id').order('date',{ascending:false}).limit(histLimit),
+        sb.from('taches').select('id,titre,statut,due_date,contact_id,mission_id,besoin_id,notes,responsable,date_completion,session_prospection_id,updated_at').order('due_date',{ascending:true,nullsFirst:false}).limit(L),
+        sb.from('besoins').select('id,titre,statut,lien,compte_id,contact_id,description,budget,budget_tjm,budget_jours,budget_date_debut,budget_date_fin,candidat_id,consultant_id,date_entretien,compte_rendu,date_demarrage,date_fin,tjm_vente,cjm_achat,motif_perte,motif_perte_precision,responsable,agence,created_at,updated_at').order('created_at',{ascending:false}).limit(L),
+        sb.from('missions').select(MISSIONS_COLS).order('consultant').limit(isMobile?500:3000),
+        sb.from('historique_missions').select('id,mission_id,date,type_action,details,responsable').order('date',{ascending:false}).limit(histLimit),
+        sb.from('besoin_candidats').select('id,besoin_id,contact_id,statut,tjm_propose,created_by,date_entretien').order('created_at',{ascending:true}).limit(3000),
+        sb.from('mission_periods').select('id,mission_id,label,debut,fin,numero_commande,tjm_vente,cjm_consultant,commentaire,created_by').order('debut',{ascending:true}).limit(3000),
+        sb.from('comptes').select('id,nom,secteur,ville,statut,responsable,site_web,notes,adresse,description,siren,effectifs,effectifs_annee,ca,ca_annee,resultat_net,resultat_annee,updated_at,news,news_maj,osint_maj').order('nom').limit(3000),
+        sb.from('contact_compte').select('id,contact_id,compte_id,role,is_primary').limit(5000),
         sb.from('partner_consultants').select('contact_consultant_id').limit(10000),
       ]);
       const err=e1||e2||e3||e4;
