@@ -3436,7 +3436,7 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
         {!isPartner&&<select value={filterAgence} onChange={e=>{setFilterAgence(e.target.value);setFilterResp('');}} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none"><option value="">Toutes agences</option>{agences.map(a=><option key={a} value={a}>{a}</option>)}</select>}
         <select value={filterMetier} onChange={e=>setFilterMetier(e.target.value)} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none"><option value="">Tous métiers</option>{metiers.map(m=><option key={m} value={m}>{m}</option>)}</select>
         <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none hidden sm:block"><option value="">{mode==='cdi'?'Tous partners':(mode==='st'?'Tous commerciaux':'Tous responsables')}</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}</select>
-        {chip('en_mission','En mission')}{chip('dispo60',mode==='st'?'Fin ≤ 60 j':'Dispo ≤ 60 j')}{chip('intercontrat',mode==='cdi'?'Intercontrat':`Interco / sans mission (${horsEffectif.length})`,mode!=='cdi')}{chip('rh','Arrêt & congés')}
+        {chip('en_mission','En mission')}{chip('dispo60',mode==='st'?'Fin ≤ 60 j':'Dispo ≤ 60 j')}{chip('intercontrat',mode==='cdi'?'Intercontrat':(mode==='st'?`Sans mission (${horsEffectif.length})`:`Interco / sans mission (${horsEffectif.length})`))}{chip('rh','Arrêt & congés')}
         <span className="w-px h-5 bg-neutral-200 mx-0.5 hidden sm:block"/>
         {chip('sortis',`Sorti·es (${nbSortis})`,true)}
       </div>
