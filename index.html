@@ -2851,7 +2851,10 @@ function RepartitionPartners({ contacts, allProfiles, missions, profile, onClose
     const tri=triDe(c);
     return <div onClick={()=>busy!==c.id&&affecter(c,coche?'':sel)} className="flex items-center gap-2 px-2 py-2 border-b border-neutral-50 hover:bg-lemon-20 cursor-pointer text-sm">
       <span style={{width:16,height:16,flexShrink:0,border:'2px solid '+(coche?'#1C1F35':'#D2D2D5'),background:coche?'#1C1F35':'#fff',color:'#fff',fontSize:11,fontWeight:900,lineHeight:'12px',textAlign:'center'}}>{busy===c.id?'…':(coche?'✓':'')}</span>
-      <span className="font-medium text-midnight flex-1 truncate">{c.prenom} {c.nom}<RespBadge r={c.responsabilite}/></span>
+      <span className="flex-1 min-w-0 flex items-center gap-2">
+        <span className="font-medium text-midnight truncate">{c.prenom} {c.nom}</span>
+        <RespBadge r={c.responsabilite}/>
+      </span>
       <span className="text-xs text-slate w-16 truncate">{c.agence||'—'}</span>
       <span className="text-xs w-32 truncate" style={{color:tri&&tri!==sel?'#A4A6AB':'transparent'}}>{tri&&tri!==sel?nomDe(tri):'·'}</span>
     </div>;
