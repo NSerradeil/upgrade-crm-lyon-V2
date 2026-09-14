@@ -51,7 +51,7 @@ Règles :
 - **Partner responsable** = `partner_consultants` (partner_id → `profiles`) fait foi, comme pour Majo.
   Si le consultant n'y est pas → afficher `manager_trigramme`. La liste des trigrammes ↔ noms vit dans
   une constante app `MANAGER_TRIGRAMMES` (NSE Nicolas Serradeil, ACD Anne-Claire Decker, CSA Camille
-  Salinson, ABE Amel Benzai, PSO Pierre Sotiropoulos*, MJP Majo Paquelier, LBL Louis Blandin,
+  Salinson, ABE Amel Benzai, PSO Pierre Solle, MJP Majo Paquelier, LBL Louis Blandin,
   **CAJ Cassandre Jacquemin** (« partner des partners » : elle manage tous les partners de France), APL Anthony
   Plancoulaine, WSA Weronika Sawicki, FEL Fabrice Elmoznino, HSI Hervé Sinpaseuth, SLE Stanislas Le Moy,
   JSE Julian Sendra, COS Constance Salem). Mapping validé par Nicolas le 14/09 (`*` nom de famille à confirmer).
@@ -216,7 +216,7 @@ feuille `TACE`. Blocs : « Régies » (CDI), « Forfait » (CDI), « (Freelance�
      `agence`. Mission : si aucune mission `En cours` au CRM pour ce contact et que TJM + date de fin sont
      présents → proposition de création `missions` (client parsé depuis « Démarrage chez X le … », statut
      `En cours`, `tjm`, `cjm`, `date_fin_mission`, `date_debut_mission` parsée si présente, `responsable`
-     = commercial du trigramme ou `Pierre Sotiropoulos`) — listée à part pour validation.
+     = commercial du trigramme ou `Pierre Solle`) — listée à part pour validation.
 2. Nicolas valide (corrections éventuelles des ambigus dans un petit fichier `overrides.json`).
 3. **Apply** (`--apply`) via l'API Supabase (clé service dans l'env Jules), journalisé dans
    `journal/import-collab-apply.md`. Aucun DELETE. Re-jouable (idempotent sur les mêmes valeurs).

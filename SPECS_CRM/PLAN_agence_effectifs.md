@@ -367,7 +367,7 @@ Expected: erreur `Cannot find module '../agence-calc.js'`.
 (function (root) {
   const MANAGER_TRIGRAMMES = {
     NSE: 'Nicolas Serradeil', ACD: 'Anne-Claire Decker', CSA: 'Camille Salinson', ABE: 'Amel Benzai',
-    PSO: 'Pierre Sotiropoulos', MJP: 'Majo Paquelier', LBL: 'Louis Blandin', CAJ: 'Cassandre Jacquemin',
+    PSO: 'Pierre Solle', MJP: 'Majo Paquelier', LBL: 'Louis Blandin', CAJ: 'Cassandre Jacquemin',
     APL: 'Anthony Plancoulaine', WSA: 'Weronika Sawicki', FEL: 'Fabrice Elmoznino', HSI: 'Hervé Sinpaseuth',
     SLE: 'Stanislas Le Moy', JSE: 'Julian Sendra', COS: 'Constance Salem',
   };
@@ -1398,7 +1398,7 @@ SUPABASE_URL = "https://ehfseahxoivfhmpiyoqa.supabase.co"
 ANON_KEY = "sb_publishable_BaNIdlZ09xavRRhG0G-ScQ_mW4hVueJ"
 XLSX_DEFAULT = os.path.expanduser('~/Library/CloudStorage/OneDrive-NeuronesIT/Upgrade CODIR - TACE - TACE/Point_COLLAB-UPGRADE.xlsx')
 JOURNAL = os.path.expanduser('~/Pro/Jules/journal')
-COMMERCIAL_BY_TRI = {'NSE':'Nicolas Serradeil','ACD':'Anne-Claire Decker','CSA':'Camille Salinson','ABE':'Amel Benzai','PSO':'Pierre Sotiropoulos'}
+COMMERCIAL_BY_TRI = {'NSE':'Nicolas Serradeil','ACD':'Anne-Claire Decker','CSA':'Camille Salinson','ABE':'Amel Benzai','PSO':'Pierre Solle'}
 KNOWN_TRI = set(COMMERCIAL_BY_TRI) | {'MJP','LBL','CAJ','APL','WSA','FEL','HSI','SLE','JSE','COS'}
 CDI_STATUT, ST_STATUTS = 'Consultant CDI', ('Freelance', 'Prestataire')
 
@@ -1492,7 +1492,7 @@ def build_plan(sheet_rows, contacts, missions, overrides):
             has_mission = any(m.get('contact_consultant_id') == c['id'] and m.get('statut') == 'En cours' for m in missions)
         elif len(cands) == 0:
             entry['insert'] = dict(entry['patch'], nom=nom, prenom=prenom, statut=CDI_STATUT if is_cdi else ('Prestataire' if patch.get('type_presta') == 'sous_traitant' else 'Freelance'),
-                                   responsable=COMMERCIAL_BY_TRI.get(tri, 'Pierre Sotiropoulos'), nb_relance=0)
+                                   responsable=COMMERCIAL_BY_TRI.get(tri, 'Pierre Solle'), nb_relance=0)
             plan['create'].append(entry); has_mission = False
         else:
             entry['candidats'] = [{'id': c['id'], 'statut': c.get('statut'), 'agence': c.get('agence')} for c in cands]; plan['ambigu'].append(entry); continue
@@ -1501,7 +1501,7 @@ def build_plan(sheet_rows, contacts, missions, overrides):
         if not has_mission and tjm not in (None, '', '/') and fin_iso and client:
             plan['missions'].append({'pour': raw, 'contact_key': key, 'contact_id': entry.get('id'), 'mission': {
                 'consultant': f"{prenom} {nom}", 'client': client, 'tjm': float(tjm), 'cjm': entry['patch'].get('cjm'), 'statut': 'En cours',
-                'date_debut_mission': debut, 'date_fin_mission': fin_iso, 'agence': agence, 'responsable': COMMERCIAL_BY_TRI.get(tri, 'Pierre Sotiropoulos'),
+                'date_debut_mission': debut, 'date_fin_mission': fin_iso, 'agence': agence, 'responsable': COMMERCIAL_BY_TRI.get(tri, 'Pierre Solle'),
                 'type_contrat': 'CDI' if is_cdi else 'Freelance'}})
     return plan
 
