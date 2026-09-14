@@ -1366,7 +1366,7 @@ function CollabFields({ f, setF }) {
       <div className="flex gap-2"><input type="number" value={f.cjm||''} onChange={onCjm} className={inputCls} placeholder="ex: 450"/>{isCdi&&f.cjm_manuel&&f.salaire_annuel&&<button type="button" onClick={recalc} className="px-2 text-xs border-2 border-neutral-200 hover:border-midnight whitespace-nowrap">Recalculer</button>}</div>
     </Field>
     <div className="grid grid-cols-2 gap-3">
-      <Field label="Statut RH"><select value={f.statut_rh||''} onChange={s('statut_rh')} className={inputCls}><option value="">— (en mission / dispo)</option><option value="arret_maladie">Arrêt maladie</option><option value="conge">Congé</option></select></Field>
+      <Field label="Statut RH"><select value={f.statut_rh||''} onChange={s('statut_rh')} className={inputCls}><option value="">— (en mission / dispo)</option><option value="arret_maladie">Arrêt maladie</option><option value="conge">Congé long (mat., sabbatique…)</option></select></Field>
       <Field label="Depuis le"><input type="date" value={f.statut_rh_depuis||''} onChange={s('statut_rh_depuis')} className={inputCls} disabled={!f.statut_rh}/></Field>
     </div>
     <div className="grid grid-cols-2 gap-3">
