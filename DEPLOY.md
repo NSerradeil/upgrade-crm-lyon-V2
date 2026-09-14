@@ -10,6 +10,9 @@ constaté qu'aucune doc n'existait).
 | **Données** | Supabase (PostgreSQL + PostgREST + RLS) | **Immédiat.** Toute écriture (app, MCP, SQL Editor) est live tout de suite. Aucun commit/déploiement. |
 | **Schéma DB** (tables, RLS, migrations) | Supabase, géré **à la main** | Coller le SQL de `db/*.sql` dans **Supabase → SQL Editor → Run**. Les fichiers `db/` sont versionnés pour la traçabilité, mais ne s'appliquent PAS tout seuls. |
 | **App web** (`index.html`, PWA mono-fichier) | GitHub Pages | **Push sur `main`** → workflow `pages-build-deployment` rebuild auto. URL : https://nserradeil.github.io/upgrade-crm-lyon-V2/ |
+
+### Migrations à appliquer (en ordre)
+- `db/20_agence.sql` — onglet Agence : colonnes collaborateur sur `contacts` (date_entree, date_sortie, salaire_annuel, cjm_manuel, statut_rh, statut_rh_depuis, type_presta, manager_trigramme), `profiles.partner_lead`, `is_my_consultant()` élargi. **À appliquer AVANT de pousser l'app** (le `select` de `fetchAll` référence les nouvelles colonnes → 400 sinon).
 | **Serveur MCP** (`../upgrade-crm-mcp-src/server/index.mjs`) | Local, **PAS un dépôt git** | Sauver le fichier ; le process MCP le charge au (re)démarrage de la session Claude. Rien à pousser. |
 
 ## Déployer l'app (le seul vrai « déploiement »)
