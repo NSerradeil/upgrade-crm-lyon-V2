@@ -1347,10 +1347,38 @@ function IntercoEditor({ contact, profile }) {
   );
 }
 
+// Section « Collaborateur » des formulaires contact (statuts CDI / Freelance / Prestataire) — SPEC_agence_effectifs §5.6
+function CollabFields({ f, setF }) {
+  const isCdi=f.statut==='Consultant CDI', isSt=['Freelance','Prestataire'].includes(f.statut);
+  if(!isCdi&&!isSt) return null;
+  const s=k=>e=>setF(v=>({...v,[k]:e.target.value}));
+  const onSalaire=e=>{const sal=e.target.value; setF(v=>({...v,salaire_annuel:sal,cjm:(!v.cjm_manuel&&sal!=='')?String(AgenceCalc.cjmFromSalaire(parseFloat(sal))):v.cjm}));};
+  const onCjm=e=>setF(v=>({...v,cjm:e.target.value,cjm_manuel:true}));
+  const recalc=()=>setF(v=>({...v,cjm_manuel:false,cjm:v.salaire_annuel?String(AgenceCalc.cjmFromSalaire(parseFloat(v.salaire_annuel))):v.cjm}));
+  return <div style={{borderTop:'2px solid #E4E4E6',paddingTop:12,marginTop:12}} className="space-y-3">
+    <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-midnight">Collaborateur</div>
+    <div className="grid grid-cols-2 gap-3">
+      <Field label="Date d'entrée"><input type="date" value={f.date_entree||''} onChange={s('date_entree')} className={inputCls}/></Field>
+      <Field label="Date de sortie"><input type="date" value={f.date_sortie||''} onChange={s('date_sortie')} className={inputCls}/></Field>
+    </div>
+    {isCdi&&<Field label="Salaire brut annuel (€)"><input type="number" value={f.salaire_annuel||''} onChange={onSalaire} className={inputCls} placeholder="ex: 52000"/></Field>}
+    <Field label={<>CJM (€ / jour) <span className="text-slate font-normal normal-case">{f.cjm_manuel?'· saisi à la main':'· calculé = salaire / 215 × 1,7'}</span></>}>
+      <div className="flex gap-2"><input type="number" value={f.cjm||''} onChange={onCjm} className={inputCls} placeholder="ex: 450"/>{isCdi&&f.cjm_manuel&&f.salaire_annuel&&<button type="button" onClick={recalc} className="px-2 text-xs border-2 border-neutral-200 hover:border-midnight whitespace-nowrap">Recalculer</button>}</div>
+    </Field>
+    <div className="grid grid-cols-2 gap-3">
+      <Field label="Statut RH"><select value={f.statut_rh||''} onChange={s('statut_rh')} className={inputCls}><option value="">— (en mission / dispo)</option><option value="arret_maladie">Arrêt maladie</option><option value="conge">Congé</option></select></Field>
+      <Field label="Depuis le"><input type="date" value={f.statut_rh_depuis||''} onChange={s('statut_rh_depuis')} className={inputCls} disabled={!f.statut_rh}/></Field>
+    </div>
+    <div className="grid grid-cols-2 gap-3">
+      {isSt&&<Field label="Type"><select value={f.type_presta||(f.statut==='Prestataire'?'sous_traitant':'freelance')} onChange={s('type_presta')} className={inputCls}><option value="freelance">Freelance</option><option value="sous_traitant">Sous-traitant (portage, ESN)</option></select></Field>}
+      <Field label={isCdi?'Partner responsable':'Manager (trigramme)'}><select value={f.manager_trigramme||''} onChange={s('manager_trigramme')} className={inputCls}><option value="">—</option>{Object.entries(AgenceCalc.MANAGER_TRIGRAMMES).sort((a,b)=>a[1].localeCompare(b[1])).map(([t,n])=><option key={t} value={t}>{n} ({t})</option>)}</select></Field>
+    </div>
+  </div>;
+}
 function ContactEditModal({ contact, profile, allProfiles, comptes, onClose, onSaved }) {
   const isAdmin=profile.role==='admin';
   const initCompteId=(()=>{const c=(comptes||[]).find(x=>x.nom&&x.nom===contact.groupe);return c?c.id:'';})();
-  const [f,setF] = useState({ prenom:contact.prenom||'', nom:contact.nom||'', telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', employeur:contact.employeur||'', compte_id:initCompteId, responsable:contact.responsable||'', linkedin:contact.linkedin||'', ats:contact.ats||'', cjm:contact.cjm??'', agence:contact.agence||'', ne_pas_recontacter:contact.ne_pas_recontacter||false, ne_pas_recontacter_note:contact.ne_pas_recontacter_note||'' });
+  const [f,setF] = useState({ prenom:contact.prenom||'', nom:contact.nom||'', telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', employeur:contact.employeur||'', compte_id:initCompteId, responsable:contact.responsable||'', linkedin:contact.linkedin||'', ats:contact.ats||'', cjm:contact.cjm??'', agence:contact.agence||'', ne_pas_recontacter:contact.ne_pas_recontacter||false, ne_pas_recontacter_note:contact.ne_pas_recontacter_note||'', date_entree:contact.date_entree||'', date_sortie:contact.date_sortie||'', salaire_annuel:contact.salaire_annuel??'', cjm_manuel:!!contact.cjm_manuel, statut_rh:contact.statut_rh||'', statut_rh_depuis:contact.statut_rh_depuis||'', type_presta:contact.type_presta||'', manager_trigramme:contact.manager_trigramme||'' });
   const canEditAgence = isAdmin || (contact.responsable === profile.nom);
   const [saving,setSaving]=useState(false); const [err,setErr]=useState('');
   const s = k => e => setF(v=>({...v,[k]:e.target.value}));
@@ -1358,6 +1386,10 @@ function ContactEditModal({ contact, profile, allProfiles, comptes, onClose, onS
     setSaving(true);
     const upd={ prenom:normPrenom(f.prenom)||contact.prenom, nom:(f.nom||'').toUpperCase()||contact.nom, telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, employeur:f.employeur||null, responsable:f.responsable||contact.responsable, linkedin:normalizeLinkedinUrl(f.linkedin), cjm:(f.cjm===''||f.cjm==null)?null:parseFloat(f.cjm), agence:f.agence||contact.agence, updated_at:new Date().toISOString(), ne_pas_recontacter:f.ne_pas_recontacter||false, ne_pas_recontacter_note:f.ne_pas_recontacter_note||null, ne_pas_recontacter_date:f.ne_pas_recontacter?contact.ne_pas_recontacter_date||(f.ne_pas_recontacter!==contact.ne_pas_recontacter?getToday():null):null };
     if(['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)) upd.ats=f.ats||null;
+    if(['Consultant CDI','Freelance','Prestataire'].includes(f.statut)){
+      Object.assign(upd,{ date_entree:f.date_entree||null, date_sortie:f.date_sortie||null, salaire_annuel:(f.salaire_annuel===''||f.salaire_annuel==null)?null:parseFloat(f.salaire_annuel), cjm_manuel:!!f.cjm_manuel, statut_rh:f.statut_rh||null, statut_rh_depuis:f.statut_rh?(f.statut_rh_depuis||getToday()):null, type_presta:f.statut==='Consultant CDI'?null:(f.type_presta||(f.statut==='Prestataire'?'sous_traitant':'freelance')), manager_trigramme:f.manager_trigramme||null });
+      if(f.statut==='Consultant CDI'&&!f.cjm_manuel&&upd.salaire_annuel!=null) upd.cjm=AgenceCalc.cjmFromSalaire(upd.salaire_annuel);
+    }
     const { error } = await sb.from('contacts').update(upd).eq('id',contact.id);
     if (error) { setErr(error.message); setSaving(false); }
     else {
@@ -1369,6 +1401,8 @@ function ContactEditModal({ contact, profile, allProfiles, comptes, onClose, onS
       if ((f.ville||'') !== (contact.ville||'')) changes.push(`ville → ${f.ville||'(vide)'}`);
       if (f.responsable !== (contact.responsable||'')) changes.push(`responsable → ${f.responsable}`);
       if (f.agence && f.agence !== (contact.agence||'')) changes.push(`agence → ${f.agence}`);
+      if ((f.salaire_annuel||'')!==String(contact.salaire_annuel??'')) changes.push('salaire modifié');
+      if ((f.statut_rh||'')!==(contact.statut_rh||'')) changes.push(`statut RH → ${f.statut_rh||'aucun'}`);
       // Trace SILENCIEUSE si l'auteur est le responsable de la fiche (pas de bruit) — aligné sur logEdits().
       // On ne loggue que de VRAIS changements faits par quelqu'un d'AUTRE que le propriétaire.
       if (changes.length && profile?.nom !== contact.responsable) {
@@ -1406,7 +1440,7 @@ function ContactEditModal({ contact, profile, allProfiles, comptes, onClose, onS
         <Field label="Agence">{canEditAgence?<select value={f.agence||''} onChange={s('agence')} className={inputCls}><option value="Lyon">Lyon</option><option value="Paris">Paris</option><option value="Bordeaux">Bordeaux</option><option value="Nantes">Nantes</option></select>:<div className={inputCls} style={{background:'#f5f5f5',color:'#999',borderRadius:0}}>{contact.agence||'\u2014'}</div>}</Field>
       </div>
       {['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)&&<Field label="ATS (lien candidat)"><input type="url" value={f.ats} onChange={s('ats')} className={inputCls} placeholder="Lien Recruitee"/></Field>}
-      {['Consultant CDI','Freelance','Prestataire'].includes(f.statut)&&<Field label="CJM (coût journalier moyen, €)"><input type="number" value={f.cjm||''} onChange={s('cjm')} className={inputCls} placeholder="ex: 450"/></Field>}
+      <CollabFields f={f} setF={setF}/>
       {f.statut==='Consultant CDI' && <IntercoEditor contact={contact} profile={profile} />}
       <Field label="Commentaires"><textarea rows={3} value={f.commentaires} onChange={s('commentaires')} className={inputCls+' resize-none'}/></Field>
       <div style={{borderTop:'2px solid #E4E4E6',paddingTop:12,marginTop:12}}>
@@ -1769,16 +1803,20 @@ function AddTacheModal({ contacts, besoins, missions, profile, allProfiles, onCl
     </Modal>
   );
 }
-function AddContactModal({ profile, allProfiles, comptes, onClose, onSaved }) {
-  const [f,setF] = useState({ prenom:'', nom:'', groupe:'', employeur:'', compte_id:'', ville:'', role:'', telephone:'', email:'', linkedin:'', ats:'', cjm:'', statut:'Prospect', responsable:profile.nom, commentaires:'' });
+function AddContactModal({ profile, allProfiles, comptes, onClose, onSaved, defaults }) {
+  const [f,setF] = useState({ prenom:'', nom:'', groupe:'', employeur:'', compte_id:'', ville:'', role:'', telephone:'', email:'', linkedin:'', ats:'', cjm:'', statut:(defaults&&defaults.statut)||'Prospect', responsable:profile.nom, commentaires:'', agence:(defaults&&defaults.agence)||profile.agence||'', date_entree:'', date_sortie:'', salaire_annuel:'', cjm_manuel:false, statut_rh:'', statut_rh_depuis:'', type_presta:'', manager_trigramme:'' });
   const [saving,setSaving]=useState(false); const [err,setErr]=useState('');
   const s = k => e => setF(v=>({...v,[k]:e.target.value}));
   const sNorm = (k,fn) => e => setF(v=>({...v,[k]:fn(e.target.value)}));
   const save = async () => {
     if (!f.nom.trim()) { setErr('Le nom est obligatoire.'); return; }
     setSaving(true);
-    const ins={ prenom:f.prenom||null, nom:f.nom.trim(), employeur:f.employeur||null, ville:f.ville||null, role:f.role||null, telephone:f.telephone||null, email:f.email||null, linkedin:normalizeLinkedinUrl(f.linkedin), cjm:(f.cjm===''||f.cjm==null)?null:parseFloat(f.cjm), statut:f.statut, responsable:f.responsable, commentaires:f.commentaires||null, nb_relance:0, updated_at:new Date().toISOString(), agence:profile.agence||'Lyon' };
+    const ins={ prenom:f.prenom||null, nom:f.nom.trim(), employeur:f.employeur||null, ville:f.ville||null, role:f.role||null, telephone:f.telephone||null, email:f.email||null, linkedin:normalizeLinkedinUrl(f.linkedin), cjm:(f.cjm===''||f.cjm==null)?null:parseFloat(f.cjm), statut:f.statut, responsable:f.responsable, commentaires:f.commentaires||null, nb_relance:0, updated_at:new Date().toISOString(), agence:f.agence||profile.agence||'Lyon' };
     if(['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)) ins.ats=f.ats||null;
+    if(['Consultant CDI','Freelance','Prestataire'].includes(f.statut)){
+      Object.assign(ins,{ date_entree:f.date_entree||null, date_sortie:f.date_sortie||null, salaire_annuel:(f.salaire_annuel===''||f.salaire_annuel==null)?null:parseFloat(f.salaire_annuel), cjm_manuel:!!f.cjm_manuel, statut_rh:f.statut_rh||null, statut_rh_depuis:f.statut_rh?(f.statut_rh_depuis||getToday()):null, type_presta:f.statut==='Consultant CDI'?null:(f.type_presta||(f.statut==='Prestataire'?'sous_traitant':'freelance')), manager_trigramme:f.manager_trigramme||null });
+      if(f.statut==='Consultant CDI'&&!f.cjm_manuel&&ins.salaire_annuel!=null) ins.cjm=AgenceCalc.cjmFromSalaire(ins.salaire_annuel);
+    }
     const { data:inserted, error } = await sb.from('contacts').insert(ins).select('id').single();
     if (error) { setErr(error.message); setSaving(false); }
     else {
@@ -1811,7 +1849,8 @@ function AddContactModal({ profile, allProfiles, comptes, onClose, onSaved }) {
         </Field>
       </div>
       {['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)&&<Field label="ATS (lien candidat)"><input type="url" value={f.ats} onChange={s('ats')} className={inputCls} placeholder="Lien Recruitee"/></Field>}
-      {['Consultant CDI','Freelance','Prestataire'].includes(f.statut)&&<Field label="CJM (coût journalier moyen, €)"><input type="number" value={f.cjm||''} onChange={s('cjm')} className={inputCls} placeholder="ex: 450"/></Field>}
+      <Field label="Agence"><select value={f.agence||''} onChange={s('agence')} className={inputCls}><option value="">—</option><option value="Lyon">Lyon</option><option value="Paris">Paris</option><option value="Bordeaux">Bordeaux</option><option value="Nantes">Nantes</option></select></Field>
+      <CollabFields f={f} setF={setF}/>
       <Field label="Commentaires"><textarea rows={2} value={f.commentaires} onChange={s('commentaires')} className={inputCls+' resize-none'}/></Field>
       {err && <div className="text-xs text-coral-100 bg-coral-20 rounded px-3 py-2">{err}</div>}
     </Modal>
