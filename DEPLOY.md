@@ -14,6 +14,7 @@ constaté qu'aucune doc n'existait).
 
 ### Migrations à appliquer (en ordre)
 - `db/20_agence.sql` — onglet Agence : colonnes collaborateur sur `contacts` (date_entree, date_sortie, salaire_annuel, cjm_manuel, statut_rh, statut_rh_depuis, type_presta, manager_trigramme), `profiles.partner_lead`, `is_my_consultant()` élargi. **À appliquer AVANT de pousser l'app** (le `select` de `fetchAll` référence les nouvelles colonnes → 400 sinon).
+- ⚠️ `agence-calc.js` doit être poussé AVEC `index.html` (dépendance dure du shell : 404 = écran blanc).
 
 ## Déployer l'app (le seul vrai « déploiement »)
 
