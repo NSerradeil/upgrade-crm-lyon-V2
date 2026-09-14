@@ -1,5 +1,5 @@
 // Service Worker — Upgrade CRM Lyon
-const CACHE_NAME = 'upgrade-crm-v3';
+const CACHE_NAME = 'upgrade-crm-v4';
 const SHELL_ASSETS = ['/upgrade-crm-lyon-V2/'];
 
 // Installation : mise en cache du shell
