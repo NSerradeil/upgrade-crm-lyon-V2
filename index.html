@@ -3007,8 +3007,8 @@ function AgenceKpiDalles({ collabs, mode, missions, intercos, contactMap, horsEf
   const ic=mode==='cdi'?AgenceCalc.intercoStats(cdisInterco,intercos||[],annee,cur,joursOuvresMois):null;
   const nomsInter=ic?ic.parMois(ic.idxAff).map(r=>{const c=contactMap[r.contact_consultant_id];return c?(c.prenom||c.nom||'').split(' ')[0]:'';}).filter(Boolean):[];
   const cards=[
-    {id:'effectif',color:'#00C218',value:k.effectif,label:mode==='cdi'?'CONSULTANTS':'SOUS-TRAITANTS',sub:mode==='cdi'?`${enMission} en mission · ${dispo} en interco`:`${enMission} en mission · ${(horsEffectif||[]).length} hors effectif`},
-    mode==='cdi'
+    {id:'effectif',color:'#00C218',value:k.effectif,label:mode==='cdi'?'CONSULTANTS':(mode==='st'?'SOUS-TRAITANTS':'COLLABORATEURS'),sub:mode==='cdi'?`${enMission} en mission · ${dispo} en interco`:`${enMission} en mission · ${(horsEffectif||[]).length} hors effectif`},
+    mode!=='st'
       ?{id:'inter',color:ic.nbCourant>0?'#FFE500':'#ccc',value:ic.nbCourant,label:'INTERCONTRAT',sub:ic.nbCourant>0?`${ic.fallbackM1?`${MOIS_LBL_AG[ic.idxAff].toLowerCase()} (M-1) · `:''}${AgenceCalc.fmtJ(ic.joursYTD)}j YTD · ${fmtK(ic.coutYTD)} · ${nomsInter.join(', ')}`:'Aucun',badge:ic.tauxAnn>=5?'Au-dessus de l\u2019objectif':null,badgeColor:'#92400e'}
       :{id:'inter',color:'#A4A6AB',value:(horsEffectif||[]).length,label:'HORS EFFECTIF',sub:(horsEffectif||[]).length>0?'free / ST sans mission — non comptés':'Aucun'},
     {id:'tjm',color:'#4A7FE5',value:k.tjmMoyen==null?'—':Math.round(k.tjmMoyen)+' €',label:'TJM MOYEN',sub:`CJM moyen ${k.cjmMoyen==null?'—':Math.round(k.cjmMoyen)+' €'} · ${enMission} mission${enMission>1?'s':''}`},
@@ -3027,7 +3027,7 @@ function AgenceKpiDalles({ collabs, mode, missions, intercos, contactMap, horsEf
         <ChartEffectif as={as} annee={annee} curMonth={cur} selMonth={moisSel} onMonthClick={i=>setMoisSel(m=>m===i?null:i)}/>
         {moisSel!=null&&<ListeCollabs titre={`Arrivées ${MOIS_LBL_AG[moisSel]} ${annee}`} items={as.listeArrivees[moisSel]} color="#5090FE" onPick={pick} cols={[{v:k=>k.agence||'—'},{v:k=>fmtDateFR(k.date_entree),w:100},{v:k=>(mode==='cdi'?k.partnerNom:k.responsable)||'—',w:150}]} vide="Aucune arrivée ce mois-là."/>}
       </>}
-      {active==='inter'&&mode==='cdi'&&<>
+      {active==='inter'&&mode!=='st'&&<>
         <ChartInter tauxM={ic.tauxM} tauxAnn={ic.tauxAnn} curMonth={cur} selMonth={moisSel!=null?moisSel:ic.idxAff} onMonthClick={i=>setMoisSel(m=>m===i?null:i)}/>
         {(()=>{const idx=moisSel!=null?moisSel:ic.idxAff; const rows=ic.parMois(idx).map(r=>Object.assign({},contactMap[r.contact_consultant_id]||{id:r.contact_consultant_id,nom:'(inconnu)'},{jours:r.jours,cout:r.cout})); const tj=rows.reduce((s,x)=>s+x.jours,0), tc=rows.reduce((s,x)=>s+x.cout,0);
           return <ListeCollabs titre={`En intercontrat — ${MOIS_LBL_AG[idx]} ${annee}${moisSel==null&&ic.fallbackM1?' (M-1)':''} · ${AgenceCalc.fmtJ(tj)}j · ${fmtK(tc)}`} items={rows} color="#FFE500" onPick={k=>onNavToContact&&onNavToContact(k.id)} cols={[{v:k=>k.agence||'—'},{v:k=>AgenceCalc.fmtJ(k.jours)+'j',w:48,right:true},{v:k=>fmtK(k.cout),w:64,right:true,color:()=>'#FF3D2E'}]} vide="Aucun consultant en intercontrat ce mois-ci."/>;})()}
@@ -3259,7 +3259,7 @@ async function exportEffectifs(rows,mode,agence,setBusy){
       :[`${k.nom||''} ${k.prenom||''}`.trim(),k.typeLabel,k.agence||'',k.responsable||'',d(k.date_entree),d(k.date_sortie),m.client||'',d(m.date_fin_mission),k.cjm,k.tjm,k.marge,k.joursAvantDispo,st];};
     const kp=AgenceCalc.computeKpis(rows,mode);
     const total=cdi?[`COLLAB CDI actifs (${kp.effectif})`,'','','','','',kp.cjmMoyen,'','',kp.tjmMoyen,kp.margeMoyenne,'',kp.intercoAnnee,'']
-                   :[`SOUS-TRAITANTS actifs (${kp.effectif})`,'','','','','','','',kp.cjmMoyen,kp.tjmMoyen,kp.margeMoyenne,'',''];
+                   :[`${tous?'EFFECTIF TOTAL':'SOUS-TRAITANTS'} actifs (${kp.effectif})`,'','','','','','','',kp.cjmMoyen,kp.tjmMoyen,kp.margeMoyenne,'',''];
     const aoa=[head,...rows.map(line),[],total];
     const ws=XLSX.utils.aoa_to_sheet(aoa,{cellDates:true});
     const R=aoa.length, iMcv=head.indexOf('MCV'), dateCols=head.map((h,i)=>/Entrée|Sortie|Fin mission/.test(h)?i:-1).filter(i=>i>=0), eurCols=head.map((h,i)=>/Salaire|CJM|TJM/.test(h)?i:-1).filter(i=>i>=0);
@@ -3267,8 +3267,8 @@ async function exportEffectifs(rows,mode,agence,setBusy){
       dateCols.forEach(ci=>{const a=XLSX.utils.encode_cell({r,c:ci}); if(ws[a]&&ws[a].v instanceof Date) ws[a].z='dd/mm/yyyy';});
       eurCols.forEach(ci=>{const a=XLSX.utils.encode_cell({r,c:ci}); if(ws[a]&&typeof ws[a].v==='number') ws[a].z='#,##0 €';}); }
     ws['!cols']=head.map(h=>({wch:h.length>10?h.length+2:12}));
-    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,cdi?'CDI':'Sous-traitants');
-    XLSX.writeFile(wb,`Effectifs_${cdi?'CDI':'ST'}_${agence||'France'}_${TODAY}.xlsx`);
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,cdi?'CDI':(tous?'Effectifs':'Sous-traitants'));
+    XLSX.writeFile(wb,`Effectifs_${cdi?'CDI':(tous?'Tous':'ST')}_${agence||'France'}_${TODAY}.xlsx`);
     toast(`Export ${rows.length} ligne${rows.length>1?'s':''}`);
   }catch(e){ toast('Export impossible : '+e.message,'error'); }
   finally{ setBusy(false); }
@@ -3294,12 +3294,12 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
   const partnerNomByTri=useMemo(()=>Object.fromEntries(partners.map(p=>[p.trigramme,p.nom])),[partners]);
   const peutGererPartners=profile.role==='admin'||!!profile.dir_agence||!!profile.partner_lead;
   const collabs=useMemo(()=>{
-    const statuts=mode==='cdi'?AgenceCalc.CDI_STATUTS:AgenceCalc.ST_STATUTS;
+    const statuts=mode==='cdi'?AgenceCalc.CDI_STATUTS:(mode==='st'?AgenceCalc.ST_STATUTS:AgenceCalc.CONSULTANT_STATUTS_AGENCE);
     const ctx={missions,intercos,partnerNomById,partnerIdByContact,partnerNomByTri,todayISO:TODAY,annee:new Date().getFullYear()};
     return contacts.filter(c=>statuts.includes(c.statut)).map(c=>AgenceCalc.computeCollab(c,ctx));
   },[contacts,missions,intercos,partnerNomById,partnerIdByContact,partnerNomByTri,mode]);
   const agences=useMemo(()=>[...new Set(collabs.map(k=>k.agence).filter(Boolean))].sort(),[collabs]);
-  const responsables=useMemo(()=>[...new Set(collabs.map(k=>mode==='cdi'?k.partnerNom:k.responsable).filter(Boolean))].sort(),[collabs,mode]);
+  const responsables=useMemo(()=>[...new Set(collabs.map(k=>k.isCdi?k.partnerNom:k.responsable).filter(Boolean))].sort(),[collabs,mode]);
 
   const filteredSorted=useMemo(()=>{
     const q=norm(search);
@@ -3308,9 +3308,9 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
       // ou sous-traitant sans mission en cours n'est pas dans l'effectif (règle Nicolas 14/09, iso fichier
       // Pierre). Les CDI, eux, restent comptés même en intercontrat.
       if(!etats.has('sortis')&&k.sorti) return false;
-      if(mode==='st'&&!etats.has('intercontrat')&&k.etat==='sans_mission') return false;
+      if(mode!=='cdi'&&!etats.has('intercontrat')&&k.etat==='sans_mission') return false;
       if(filterAgence&&k.agence!==filterAgence) return false;
-      if(filterResp&&(mode==='cdi'?k.partnerNom:k.responsable)!==filterResp) return false;
+      if(filterResp&&(k.isCdi?k.partnerNom:k.responsable)!==filterResp) return false;
       const filtres=[...etats].filter(e=>e!=='sortis');   // « sorti·es » dévoile, ne restreint pas
       if(filtres.length){
         const isDispo60=k.etat==='en_mission'&&k.joursAvantDispo!=null&&k.joursAvantDispo<=60;
@@ -3325,7 +3325,7 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
       switch(sortCol){
         case 'nom': return (k.nom||'').toLowerCase()+' '+(k.prenom||'').toLowerCase();
         case 'agence': return k.agence||'';
-        case 'resp': return (mode==='cdi'?k.partnerNom:k.responsable)||'';
+        case 'resp': return (k.isCdi?k.partnerNom:k.responsable)||'';
         case 'entree': return k.date_entree||'0000';
         case 'salaire': return k.salaire_annuel==null?-1:Number(k.salaire_annuel);
         case 'cjm': return k.cjm==null?-1:k.cjm;
@@ -3345,9 +3345,9 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
     rows.sort((a,b)=>{const va=key(a),vb=key(b); if(va<vb) return sortDir==='asc'?-1:1; if(va>vb) return sortDir==='asc'?1:-1; return 0;});
     return rows;
   },[collabs,search,filterAgence,filterResp,etats,sortCol,sortDir,mode]);
-  const horsEffectif=useMemo(()=>mode!=='st'?[]:collabs.filter(k=>!k.sorti&&k.etat==='sans_mission'&&(!filterAgence||k.agence===filterAgence)&&(!filterResp||k.responsable===filterResp)),[collabs,mode,filterAgence,filterResp]);
+  const horsEffectif=useMemo(()=>mode==='cdi'?[]:collabs.filter(k=>!k.sorti&&k.etat==='sans_mission'&&(!filterAgence||k.agence===filterAgence)&&(!filterResp||(k.isCdi?k.partnerNom:k.responsable)===filterResp)),[collabs,mode,filterAgence,filterResp]);
   // Taux d'interco = calcul historique : tous les CDI du périmètre, SORTIS COMPRIS (leurs jours passés comptent).
-  const cdisPourInterco=useMemo(()=>mode!=='cdi'?[]:collabs.filter(k=>(!filterAgence||k.agence===filterAgence)&&(!filterResp||k.partnerNom===filterResp)),[collabs,mode,filterAgence,filterResp]);
+  const cdisPourInterco=useMemo(()=>mode==='st'?[]:collabs.filter(k=>k.isCdi&&(!filterAgence||k.agence===filterAgence)&&(!filterResp||k.partnerNom===filterResp)),[collabs,mode,filterAgence,filterResp]);
   const PAGE_SIZE=(typeof window!=='undefined'&&window.innerWidth<768)?50:200;
   const [visibleCount,setVisibleCount]=useState(PAGE_SIZE);
   useEffect(()=>{setVisibleCount(PAGE_SIZE);},[search,filterAgence,filterResp,etats,sortCol,sortDir,mode]);
@@ -3357,7 +3357,7 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
   // pour la distinguer d'un simple filtre, même langage brutaliste que « Mes contacts » dans Comptes & Contacts.
   const chip=(id,label,reveal)=><button key={id} onClick={()=>toggleEtat(id)} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:etats.has(id)?'0':(reveal?'2px dashed #A4A6AB':'2px solid #E4E4E6'),background:etats.has(id)?'#1C1F35':'#fff',color:etats.has(id)?'#fff':(reveal?'#565861':'#1C1F35'),cursor:'pointer',borderRadius:0,textTransform:'uppercase',boxShadow:etats.has(id)?'3px 3px 0 #FFE500':'none',transition:'all 120ms'}}>{label}</button>;
   const idsMissionActive=useMemo(()=>new Set((missions||[]).filter(m=>m.statut==='En cours'||m.statut==='New').map(m=>m.contact_consultant_id)),[missions]);
-  const nbSortis=useMemo(()=>collabs.filter(k=>k.sorti&&(!filterAgence||k.agence===filterAgence)&&(!filterResp||(mode==='cdi'?k.partnerNom:k.responsable)===filterResp)).length,[collabs,filterAgence,filterResp,mode]);
+  const nbSortis=useMemo(()=>collabs.filter(k=>k.sorti&&(!filterAgence||k.agence===filterAgence)&&(!filterResp||(k.isCdi?k.partnerNom:k.responsable)===filterResp)).length,[collabs,filterAgence,filterResp,mode]);
   const nbCdi=contacts.filter(c=>AgenceCalc.CDI_STATUTS.includes(c.statut)&&!(c.date_sortie&&c.date_sortie<=TODAY)).length;
   const nbSt=contacts.filter(c=>AgenceCalc.ST_STATUTS.includes(c.statut)&&!(c.date_sortie&&c.date_sortie<=TODAY)&&idsMissionActive.has(c.id)).length;
   const missionLabel=k=>k.missionEnCours?<><div className="font-medium text-midnight">{k.missionEnCours.client||'—'}</div>{k.missionEnCours.date_fin_mission&&<div className="text-xs text-neutral-300">fin {AgenceCalc.fmtJJMM(k.missionEnCours.date_fin_mission)}</div>}</>:<span className="text-neutral-300">—</span>;
@@ -3367,7 +3367,8 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
     <div className="tab-content">
       <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
         <div className="flex border rounded-lg overflow-hidden text-sm">
-          <button onClick={()=>setMode('cdi')} className={`px-3 py-2 font-medium ${mode==='cdi'?'bg-midnight text-white':'bg-white text-slate hover:bg-neutral-50'}`}>CDI ({nbCdi})</button>
+          <button onClick={()=>setMode('tous')} className={`px-3 py-2 font-medium ${mode==='tous'?'bg-midnight text-white':'bg-white text-slate hover:bg-neutral-50'}`}>Tous ({nbCdi+nbSt})</button>
+          <button onClick={()=>setMode('cdi')} className={`px-3 py-2 font-medium border-l ${mode==='cdi'?'bg-midnight text-white':'bg-white text-slate hover:bg-neutral-50'}`}>CDI ({nbCdi})</button>
           <button onClick={()=>setMode('st')} className={`px-3 py-2 font-medium border-l ${mode==='st'?'bg-midnight text-white':'bg-white text-slate hover:bg-neutral-50'}`}>Sous-traitants ({nbSt})</button>
         </div>
         <div className="flex gap-2">
@@ -3379,8 +3380,8 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
       <div className="flex gap-2 sm:gap-3 mb-3 flex-wrap items-center">
         <input type="text" placeholder="Rechercher (nom, client, agence…)" value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-[140px] sm:min-w-64 px-3 sm:px-4 py-2 border rounded-lg text-sm focus:outline-none focus:border-midnight"/>
         {!isPartner&&<select value={filterAgence} onChange={e=>{setFilterAgence(e.target.value);setFilterResp('');}} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none"><option value="">Toutes agences</option>{agences.map(a=><option key={a} value={a}>{a}</option>)}</select>}
-        <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none hidden sm:block"><option value="">{mode==='cdi'?'Tous partners':'Tous commerciaux'}</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}</select>
-        {chip('en_mission','En mission')}{chip('dispo60',mode==='cdi'?'Dispo ≤ 60 j':'Fin ≤ 60 j')}{chip('intercontrat',mode==='cdi'?'Intercontrat':`Sans mission (${horsEffectif.length})`,mode==='st')}{chip('rh','Arrêt & congés')}
+        <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none hidden sm:block"><option value="">{mode==='cdi'?'Tous partners':(mode==='st'?'Tous commerciaux':'Tous responsables')}</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}</select>
+        {chip('en_mission','En mission')}{chip('dispo60',mode==='st'?'Fin ≤ 60 j':'Dispo ≤ 60 j')}{chip('intercontrat',mode==='cdi'?'Intercontrat':`Interco / sans mission (${horsEffectif.length})`,mode!=='cdi')}{chip('rh','Arrêt & congés')}
         <span className="w-px h-5 bg-neutral-200 mx-0.5 hidden sm:block"/>
         {chip('sortis',`Sorti·es (${nbSortis})`,true)}
       </div>
@@ -3391,7 +3392,7 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
         {visible.map(k=>(
           <div key={k.id} onClick={()=>setSelected(k)} data-detail tabIndex="0" className="bg-white border-2 border-neutral-200 hover:border-midnight p-3 cursor-pointer active:bg-azure-20 focus:outline-none focus:border-midnight transition-colors">
             <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0"><div className="font-bold text-midnight text-sm flex items-center gap-1.5 flex-wrap">{k.prenom} {k.nom}<RespBadge r={k.responsabilite}/></div><div className="text-xs text-slate mt-0.5">{k.agence} · {mode==='cdi'?k.partnerNom:k.responsable}</div></div>
+              <div className="min-w-0"><div className="font-bold text-midnight text-sm flex items-center gap-1.5 flex-wrap">{k.prenom} {k.nom}<RespBadge r={k.responsabilite}/></div><div className="text-xs text-slate mt-0.5">{k.agence} · {(k.isCdi?k.partnerNom:k.responsable)||'—'}</div></div>
               <DispoBadge k={k}/>
             </div>
             <div className="flex items-center gap-3 mt-2 text-xs text-slate">{k.missionEnCours&&<span>{k.missionEnCours.client}</span>}{k.tjm!=null&&<span>TJM {fmtEur0(k.tjm)}</span>}<MargeCell m={k.marge}/></div>
@@ -3403,9 +3404,9 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
         <table className="w-full text-sm">
           <thead><tr className="bg-neutral-50 text-[11px] font-bold uppercase tracking-[0.1em] text-slate">
             <th className={thCls} onClick={()=>toggleSort('nom')}>Collaborateur<SortIcon col="nom"/></th>
-            {mode==='st'&&<th className={thCls} onClick={()=>toggleSort('type')}>Type<SortIcon col="type"/></th>}
+            {mode!=='cdi'&&<th className={thCls} onClick={()=>toggleSort('type')}>Type<SortIcon col="type"/></th>}
             <th className={thCls} onClick={()=>toggleSort('agence')}>Agence<SortIcon col="agence"/></th>
-            <th className={thCls} onClick={()=>toggleSort('resp')}>{mode==='cdi'?'Partner':'Commercial'}<SortIcon col="resp"/></th>
+            <th className={thCls} onClick={()=>toggleSort('resp')}>{mode==='cdi'?'Partner':(mode==='st'?'Commercial':'Responsable')}<SortIcon col="resp"/></th>
             <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('entree')}>Entrée<SortIcon col="entree"/></th>
             {mode==='cdi'&&<th className={thCls+" hidden xl:table-cell"} onClick={()=>toggleSort('salaire')}>Salaire<SortIcon col="salaire"/></th>}
             <th className={thCls} onClick={()=>toggleSort('cjm')}>CJM<SortIcon col="cjm"/></th>
@@ -3417,9 +3418,9 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
           <tbody>{visible.map(k=>(
             <tr key={k.id} onClick={()=>setSelected(k)} data-detail tabIndex="0" className={`border-t border-neutral-50 hover:bg-lemon-20 focus:bg-azure-20 focus:outline-none cursor-pointer transition-colors${selected&&selected.id===k.id?' bg-azure-20':''}${k.sorti?' opacity-50':''}`}>
               <td className="px-4 py-3"><div className="font-medium text-midnight flex items-center gap-1.5 flex-wrap">{k.prenom} {k.nom}<RespBadge r={k.responsabilite}/></div>{k.sorti&&<div className="text-xs text-coral-100">sorti le {fmtDateFR(k.date_sortie)}</div>}</td>
-              {mode==='st'&&<td className="px-4 py-3"><ColorBadge label={k.typeLabel} bg={k.typeLabel==='Freelance'?'#FF66FF':'#F97316'} color={k.typeLabel==='Freelance'?'#1C1F35':'#FFFFFF'}/></td>}
+              {mode!=='cdi'&&<td className="px-4 py-3"><ColorBadge label={k.typeLabel} bg={k.typeLabel==='CDI'?'#1C1F35':(k.typeLabel==='Freelance'?'#FF66FF':'#F97316')} color={k.typeLabel==='Freelance'?'#1C1F35':'#FFFFFF'}/></td>}
               <td className="px-4 py-3 text-slate">{k.agence||'—'}</td>
-              <td className="px-4 py-3 text-slate text-xs">{(mode==='cdi'?k.partnerNom:k.responsable)||'—'}</td>
+              <td className="px-4 py-3 text-slate text-xs">{(k.isCdi?k.partnerNom:k.responsable)||'—'}</td>
               <td className="px-4 py-3 text-slate text-xs hidden lg:table-cell">{fmtDateFR(k.date_entree)}</td>
               {mode==='cdi'&&<td className="px-4 py-3 text-slate hidden xl:table-cell">{fmtEur0(k.salaire_annuel)}</td>}
               <td className="px-4 py-3 text-slate">{fmtEur0(k.cjm)}</td>

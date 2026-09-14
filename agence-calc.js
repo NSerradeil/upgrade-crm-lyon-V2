@@ -106,7 +106,7 @@
     return {
       effectif: act.length, cjmMoyen: avg(cjms), tjmMoyen: avg(tjms), margeMoyenne: avg(marges),
       dispo60: fins60, fins60,
-      intercoAnnee: mode === 'cdi' ? act.reduce((s, k) => s + (k.intercoAnnee || 0), 0) : 0,
+      intercoAnnee: act.filter((k) => k.isCdi).reduce((s, k) => s + (k.intercoAnnee || 0), 0),
     };
   }
 
