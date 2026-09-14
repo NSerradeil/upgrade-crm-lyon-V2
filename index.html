@@ -6813,7 +6813,7 @@ function AdminPanel({ orgDefaults, allProfiles, profile, onSave }) {
   var [tdbChart, setTdbChart] = useState('ca');
 
   var AGENCES = ['Lyon', 'Paris', 'Bordeaux', 'Nantes'];
-  var TAB_OPTIONS = [{v:'taches',l:'Tâches'},{v:'prospects',l:'Contacts'},{v:'prospection',l:'Prospection'},{v:'besoins',l:'Besoins'},{v:'pipe',l:'Pipe'},{v:'tdb',l:'Missions'},{v:'historique',l:'Historique'}];
+  var TAB_OPTIONS = [{v:'taches',l:'Tâches'},{v:'agence',l:'Agence'},{v:'prospects',l:'Contacts'},{v:'prospection',l:'Prospection'},{v:'besoins',l:'Besoins'},{v:'pipe',l:'Pipe'},{v:'tdb',l:'Missions'},{v:'historique',l:'Historique'}];
 
   function loadFromOrgDefaults(s, sv) {
     var row = null;
@@ -7178,7 +7178,7 @@ function TabSettings({ user, profile, taches, subTab, onSubTabChange, prefs, onS
 }
 
 function PreferencesPanel({ prefs, onSave, profileNom, isPartner }) {
-  const PARTNER_TABS=['taches','prospects','tdb','historique'];
+  const PARTNER_TABS=['taches','agence','prospects','tdb','historique'];
   const [defaultTab,setDefaultTab]=useState(prefs.default_tab||'taches');
   const [tachesView,setTachesView]=useState(prefs.taches_view||'list');
   const [besoinsView,setBesoinsView]=useState(prefs.besoins_view||'list');
@@ -7222,7 +7222,7 @@ function PreferencesPanel({ prefs, onSave, profileNom, isPartner }) {
     setFiltContactsStatut(o.contacts_filter_statut);setFiltContactsResp(o.contacts_filter_responsable);setFiltTachesEcheance(o.taches_filter_echeance);setFiltPipeResp(o.pipe_filter_responsable);setProspectionFocus(o.prospection_focus_mode);
   };
 
-  const TAB_OPTIONS=[{v:'taches',l:'Tâches'},{v:'prospects',l:'Contacts'},{v:'prospection',l:'Prospection'},{v:'besoins',l:'Besoins'},{v:'pipe',l:'Pipe'},{v:'tdb',l:'Missions'},{v:'historique',l:'Historique'}];
+  const TAB_OPTIONS=[{v:'taches',l:'Tâches'},{v:'agence',l:'Agence'},{v:'prospects',l:'Contacts'},{v:'prospection',l:'Prospection'},{v:'besoins',l:'Besoins'},{v:'pipe',l:'Pipe'},{v:'tdb',l:'Missions'},{v:'historique',l:'Historique'}];
   const AGENCES=['Lyon','Paris','Bordeaux','Nantes'];
 
   const selectStyle={appearance:'none',padding:'9px 36px 9px 12px',border:'1px solid #e2e8f0',borderRadius:9,fontSize:'13.5px',fontWeight:500,color:'#1e293b',background:'white url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath d=\'M3 4.5L6 7.5L9 4.5\' fill=\'none\' stroke=\'%2394a3b8\' stroke-width=\'1.5\' stroke-linecap=\'round\'/%3E%3C/svg%3E") no-repeat right 12px center',boxShadow:'0 1px 2px rgba(0,0,0,.04)',width:'100%',outline:'none'};
