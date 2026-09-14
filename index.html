@@ -3252,14 +3252,14 @@ async function exportEffectifs(rows,mode,agence,setBusy){
     const XLSX=await loadXlsx();
     const d=iso=>iso?new Date(iso.slice(0,10)+'T00:00:00'):null;
     const cdi=mode==='cdi', tous=mode==='tous';
-    const head=cdi?['Nom Prénom','Agence','Partner','Entrée','Sortie','Salaire brut','CJM','Client','Fin mission','TJM','MCV','Dispo (j)','Interco cumulé (j)','Statut']
-                  :['Nom Prénom','Type','Agence',tous?'Responsable':'Commercial','Entrée','Sortie','Client','Fin mission','CJM','TJM','MCV','Fin (j)','Statut'];
+    const head=cdi?['Nom Prénom','Métier','Agence','Partner','Entrée','Sortie','Salaire brut','CJM','Client','Fin mission','TJM','MCV','Dispo (j)','Interco cumulé (j)','Statut']
+                  :['Nom Prénom','Type','Métier','Agence',tous?'Responsable':'Commercial','Entrée','Sortie','Client','Fin mission','CJM','TJM','MCV','Fin (j)','Statut'];
     const line=k=>{const m=k.missionEnCours||{};const st=AgenceCalc.etatDispo(k).label;return cdi
-      ?[`${k.nom||''} ${k.prenom||''}`.trim(),k.agence||'',k.partnerNom||'',d(k.date_entree),d(k.date_sortie),k.salaire_annuel!=null?Number(k.salaire_annuel):null,k.cjm,m.client||'',d(m.date_fin_mission),k.tjm,k.marge,k.joursAvantDispo,k.intercoAnnee,st]
-      :[`${k.nom||''} ${k.prenom||''}`.trim(),k.typeLabel,k.agence||'',(tous?(k.isCdi?k.partnerNom:k.responsable):k.responsable)||'',d(k.date_entree),d(k.date_sortie),m.client||'',d(m.date_fin_mission),k.cjm,k.tjm,k.marge,k.joursAvantDispo,st];};
+      ?[`${k.nom||''} ${k.prenom||''}`.trim(),(k.role||'').trim(),k.agence||'',k.partnerNom||'',d(k.date_entree),d(k.date_sortie),k.salaire_annuel!=null?Number(k.salaire_annuel):null,k.cjm,m.client||'',d(m.date_fin_mission),k.tjm,k.marge,k.joursAvantDispo,k.intercoAnnee,st]
+      :[`${k.nom||''} ${k.prenom||''}`.trim(),k.typeLabel,(k.role||'').trim(),k.agence||'',(tous?(k.isCdi?k.partnerNom:k.responsable):k.responsable)||'',d(k.date_entree),d(k.date_sortie),m.client||'',d(m.date_fin_mission),k.cjm,k.tjm,k.marge,k.joursAvantDispo,st];};
     const kp=AgenceCalc.computeKpis(rows,mode);
-    const total=cdi?[`COLLAB CDI actifs (${kp.effectif})`,'','','','','',kp.cjmMoyen,'','',kp.tjmMoyen,kp.margeMoyenne,'',kp.intercoAnnee,'']
-                   :[`${tous?'EFFECTIF TOTAL':'SOUS-TRAITANTS'} actifs (${kp.effectif})`,'','','','','','','',kp.cjmMoyen,kp.tjmMoyen,kp.margeMoyenne,'',''];
+    const total=cdi?[`COLLAB CDI actifs (${kp.effectif})`,'','','','','','',kp.cjmMoyen,'','',kp.tjmMoyen,kp.margeMoyenne,'',kp.intercoAnnee,'']
+                   :[`${tous?'EFFECTIF TOTAL':'SOUS-TRAITANTS'} actifs (${kp.effectif})`,'','','','','','','','',kp.cjmMoyen,kp.tjmMoyen,kp.margeMoyenne,'',''];
     const aoa=[head,...rows.map(line),[],total];
     const ws=XLSX.utils.aoa_to_sheet(aoa,{cellDates:true});
     const R=aoa.length, iMcv=head.indexOf('MCV'), dateCols=head.map((h,i)=>/Entrée|Sortie|Fin mission/.test(h)?i:-1).filter(i=>i>=0), eurCols=head.map((h,i)=>/Salaire|CJM|TJM/.test(h)?i:-1).filter(i=>i>=0);
@@ -3318,12 +3318,13 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
         const ok=(etats.has('en_mission')&&k.etat==='en_mission')||(etats.has('dispo60')&&isDispo60)||(etats.has('intercontrat')&&(k.etat==='intercontrat'||k.etat==='sans_mission'))||(etats.has('rh')&&isRh);
         if(!ok) return false;
       }
-      if(q&&![k.prenom,k.nom,k.agence,k.partnerNom,k.responsable,k.missionEnCours&&k.missionEnCours.client].some(v=>norm(v||'').includes(q))) return false;
+      if(q&&![k.prenom,k.nom,k.agence,k.role,k.partnerNom,k.responsable,k.missionEnCours&&k.missionEnCours.client].some(v=>norm(v||'').includes(q))) return false;
       return true;
     });
     const key=k=>{
       switch(sortCol){
         case 'nom': return (k.nom||'').toLowerCase()+' '+(k.prenom||'').toLowerCase();
+        case 'metier': return (k.role||'').toLowerCase();
         case 'agence': return k.agence||'';
         case 'resp': return (k.isCdi?k.partnerNom:k.responsable)||'';
         case 'entree': return k.date_entree||'0000';
@@ -3380,6 +3381,7 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
       <div className="flex gap-2 sm:gap-3 mb-3 flex-wrap items-center">
         <input type="text" placeholder="Rechercher (nom, client, agence…)" value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-[140px] sm:min-w-64 px-3 sm:px-4 py-2 border rounded-lg text-sm focus:outline-none focus:border-midnight"/>
         {!isPartner&&<select value={filterAgence} onChange={e=>{setFilterAgence(e.target.value);setFilterResp('');}} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none"><option value="">Toutes agences</option>{agences.map(a=><option key={a} value={a}>{a}</option>)}</select>}
+        <select value={filterMetier} onChange={e=>setFilterMetier(e.target.value)} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none"><option value="">Tous métiers</option>{metiers.map(m=><option key={m} value={m}>{m}</option>)}</select>
         <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none hidden sm:block"><option value="">{mode==='cdi'?'Tous partners':(mode==='st'?'Tous commerciaux':'Tous responsables')}</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}</select>
         {chip('en_mission','En mission')}{chip('dispo60',mode==='st'?'Fin ≤ 60 j':'Dispo ≤ 60 j')}{chip('intercontrat',mode==='cdi'?'Intercontrat':`Interco / sans mission (${horsEffectif.length})`,mode!=='cdi')}{chip('rh','Arrêt & congés')}
         <span className="w-px h-5 bg-neutral-200 mx-0.5 hidden sm:block"/>
@@ -3392,7 +3394,7 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
         {visible.map(k=>(
           <div key={k.id} onClick={()=>setSelected(k)} data-detail tabIndex="0" className="bg-white border-2 border-neutral-200 hover:border-midnight p-3 cursor-pointer active:bg-azure-20 focus:outline-none focus:border-midnight transition-colors">
             <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0"><div className="font-bold text-midnight text-sm flex items-center gap-1.5 flex-wrap">{k.prenom} {k.nom}<RespBadge r={k.responsabilite}/></div><div className="text-xs text-slate mt-0.5">{k.agence} · {(k.isCdi?k.partnerNom:k.responsable)||'—'}</div></div>
+              <div className="min-w-0"><div className="font-bold text-midnight text-sm flex items-center gap-1.5 flex-wrap">{k.prenom} {k.nom}<RespBadge r={k.responsabilite}/></div><div className="text-xs text-slate mt-0.5">{(k.role||'').trim()||'—'} · {k.agence} · {(k.isCdi?k.partnerNom:k.responsable)||'—'}</div></div>
               <DispoBadge k={k}/>
             </div>
             <div className="flex items-center gap-3 mt-2 text-xs text-slate">{k.missionEnCours&&<span>{k.missionEnCours.client}</span>}{k.tjm!=null&&<span>TJM {fmtEur0(k.tjm)}</span>}<MargeCell m={k.marge}/></div>
@@ -3405,6 +3407,7 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
           <thead><tr className="bg-neutral-50 text-[11px] font-bold uppercase tracking-[0.1em] text-slate">
             <th className={thCls} onClick={()=>toggleSort('nom')}>Collaborateur<SortIcon col="nom"/></th>
             {mode!=='cdi'&&<th className={thCls} onClick={()=>toggleSort('type')}>Type<SortIcon col="type"/></th>}
+            <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('metier')}>Métier<SortIcon col="metier"/></th>
             <th className={thCls} onClick={()=>toggleSort('agence')}>Agence<SortIcon col="agence"/></th>
             <th className={thCls} onClick={()=>toggleSort('resp')}>{mode==='cdi'?'Partner':(mode==='st'?'Commercial':'Responsable')}<SortIcon col="resp"/></th>
             <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('entree')}>Entrée<SortIcon col="entree"/></th>
@@ -3419,6 +3422,7 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
             <tr key={k.id} onClick={()=>setSelected(k)} data-detail tabIndex="0" className={`border-t border-neutral-50 hover:bg-lemon-20 focus:bg-azure-20 focus:outline-none cursor-pointer transition-colors${selected&&selected.id===k.id?' bg-azure-20':''}${k.sorti?' opacity-50':''}`}>
               <td className="px-4 py-3"><div className="font-medium text-midnight flex items-center gap-1.5 flex-wrap">{k.prenom} {k.nom}<RespBadge r={k.responsabilite}/></div>{k.sorti&&<div className="text-xs text-coral-100">sorti le {fmtDateFR(k.date_sortie)}</div>}</td>
               {mode!=='cdi'&&<td className="px-4 py-3"><ColorBadge label={k.typeLabel} bg={k.typeLabel==='CDI'?'#1C1F35':(k.typeLabel==='Freelance'?'#FF66FF':'#F97316')} color={k.typeLabel==='Freelance'?'#1C1F35':'#FFFFFF'}/></td>}
+              <td className="px-4 py-3 text-slate text-xs hidden lg:table-cell">{(k.role||'').trim()||'—'}</td>
               <td className="px-4 py-3 text-slate">{k.agence||'—'}</td>
               <td className="px-4 py-3 text-slate text-xs">{(k.isCdi?k.partnerNom:k.responsable)||'—'}</td>
               <td className="px-4 py-3 text-slate text-xs hidden lg:table-cell">{fmtDateFR(k.date_entree)}</td>
