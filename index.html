@@ -55,6 +55,10 @@ tailwind.config = {
   .rp-partner[data-cible="1"] { transform: translateX(4px); box-shadow: inset 5px 0 0 #FFE500, 3px 3px 0 #1C1F35; }
   .rp-partner[data-cible="1"] .rp-n { transform: scale(1.35); }
   .rp-n { display: inline-block; transition: transform 120ms ease; }
+  .rp-grip { width: 16px; flex-shrink: 0; color: #C7C8CC; font-size: 14px; line-height: 16px;
+    text-align: center; cursor: grab; user-select: none; transition: color 120ms ease; }
+  .rp-grip:active { cursor: grabbing; }
+  .rp-row:hover .rp-grip { color: #1C1F35; }
   .rp-ghost { position: fixed; top: -1000px; left: -1000px; padding: 6px 10px; background: #1C1F35;
     color: #fff; font: 700 13px 'Outfit', sans-serif; box-shadow: 3px 3px 0 #FFE500; white-space: nowrap; }
 
@@ -2866,6 +2870,11 @@ function RepartitionPartners({ contacts, allProfiles, missions, profile, onClose
   const [local,setLocal]=useState({});      // id → trigramme, pour un affichage immédiat
   const [drag,setDrag]=useState(null);      // consultant en cours de déplacement
   const [survol,setSurvol]=useState(null);  // partner survolé pendant le glisser
+  // Filet : un lâcher hors de la fenêtre n'émet pas toujours `dragend` sur la poignée —
+  // sans ça la liste resterait grisée jusqu'au prochain glisser.
+  useEffect(()=>{const fin=()=>{setDrag(null);setSurvol(null);};
+    window.addEventListener('dragend',fin);window.addEventListener('drop',fin);
+    return()=>{window.removeEventListener('dragend',fin);window.removeEventListener('drop',fin);};},[]);
   useEffect(()=>{const h=e=>{if(e.key==='Escape')onClose();};window.addEventListener('keydown',h);return()=>window.removeEventListener('keydown',h);},[onClose]);
   const triDe=c=>local[c.id]!==undefined?local[c.id]:(c.manager_trigramme||'');
   const compte=tri=>cdis.filter(c=>triDe(c)===tri).length;
@@ -2887,14 +2896,18 @@ function RepartitionPartners({ contacts, allProfiles, missions, profile, onClose
   const Ligne=({c,coche})=>{
     const tri=triDe(c);
     const sansCible=sel===''; // vue « sans partner » : rien à cocher, on propose un menu
-    return <div draggable={busy!==c.id} data-pris={drag===c.id?'1':'0'}
-      onDragStart={e=>{e.dataTransfer.setData('text/plain',String(c.id));e.dataTransfer.effectAllowed='move';ghostDrag(e,`${c.prenom} ${c.nom}`);setDrag(c.id);}}
-      onDragEnd={()=>{setDrag(null);setSurvol(null);}}
+    // Le glisser part de la poignée SEULE : `draggable` sur la ligne entière faisait passer
+    // le moindre appui pour un début de glisser, et le clic n'atteignait plus la case à cocher.
+    return <div data-pris={drag===c.id?'1':'0'}
       onClick={()=>{if(busy===c.id||sansCible)return;affecter(c,coche?'':sel);}}
-      className={`rp-row flex items-center gap-2 px-2 py-2 border-b border-neutral-50 hover:bg-lemon-20 text-sm ${sansCible?'cursor-grab active:cursor-grabbing':'cursor-pointer'}`}>
-      {sansCible
-        ? <span style={{width:16,flexShrink:0,color:'#A4A6AB',fontSize:14,lineHeight:'16px',textAlign:'center',cursor:'grab'}} aria-hidden="true">{busy===c.id?'…':'⠿'}</span>
-        : <span style={{width:16,height:16,flexShrink:0,border:'2px solid '+(coche?'#1C1F35':'#D2D2D5'),background:coche?'#1C1F35':'#fff',color:'#fff',fontSize:11,fontWeight:900,lineHeight:'12px',textAlign:'center'}}>{busy===c.id?'…':(coche?'✓':'')}</span>}
+      className={`rp-row flex items-center gap-2 px-2 py-2 border-b border-neutral-50 hover:bg-lemon-20 text-sm ${sansCible?'':'cursor-pointer'}`}>
+      <span draggable={busy!==c.id} role="button" tabIndex={-1}
+        aria-label={`Glisser ${c.prenom} ${c.nom} vers un partner`}
+        onDragStart={e=>{e.dataTransfer.setData('text/plain',String(c.id));e.dataTransfer.effectAllowed='move';ghostDrag(e,`${c.prenom} ${c.nom}`);setDrag(c.id);}}
+        onDragEnd={()=>{setDrag(null);setSurvol(null);}}
+        onClick={e=>e.stopPropagation()}
+        className="rp-grip" aria-hidden={false}>{busy===c.id?'…':'⠿'}</span>
+      {!sansCible&&<span style={{width:16,height:16,flexShrink:0,border:'2px solid '+(coche?'#1C1F35':'#D2D2D5'),background:coche?'#1C1F35':'#fff',color:'#fff',fontSize:11,fontWeight:900,lineHeight:'12px',textAlign:'center'}}>{coche?'✓':''}</span>}
       <span className="flex-1 min-w-0 flex items-center gap-2">
         <span className="font-medium text-midnight truncate">{c.prenom} {c.nom}</span>
         <RespBadge r={c.responsabilite}/>

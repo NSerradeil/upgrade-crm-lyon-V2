@@ -50,10 +50,27 @@ update public.contacts set role = 'Product Designer'
 
 commit;
 
+-- 2e passe (arbitrage Nicolas 14/09) : les rôles hors nomenclature ------------
+-- « UX Writer » rejoint la nomenclature (13 valeurs) ; les autres sont rattachés au métier
+-- le plus proche. « Responsable commercial / delivery V35 EDF » reste en l'état : c'est une
+-- casquette de pilotage, pas un métier de la nomenclature.
+begin;
+update public.contacts set role = 'UX Writer'
+ where statut in ('Consultant CDI','Freelance','Prestataire')
+   and lower(btrim(coalesce(role,''))) in ('ux writer','ux writer / content designer');
+update public.contacts set role = 'Product Designer'
+ where statut in ('Consultant CDI','Freelance','Prestataire')
+   and lower(btrim(coalesce(role,''))) = 'expert accessibilité numérique rgaa — sous-traitant';
+update public.contacts set role = 'Product Owner'
+ where statut in ('Consultant CDI','Freelance','Prestataire')
+   and lower(btrim(coalesce(role,''))) in ('oms & omnichannel transformation lead',
+                                           'arm sanofi (account relation manager)');
+commit;
+
 -- Vérifications -------------------------------------------------------------
--- Attendu : ~9 lignes de nomenclature + les 7 hors nomenclature laissés en l'état
--- (UX Writer ×3, Expert Accessibilité RGAA, OMS & Omnichannel Transformation Lead,
---  ARM Sanofi, Responsable commercial / delivery V35 EDF) — à trancher avec Nicolas.
+-- Attendu : 10 valeurs de la nomenclature + « Responsable commercial / delivery V35 EDF »,
+-- seul rôle laissé hors nomenclature (casquette de pilotage, pas un métier).
 select role, count(*) from public.contacts
  where statut in ('Consultant CDI','Freelance','Prestataire')
  group by 1 order by 2 desc, 1;
+

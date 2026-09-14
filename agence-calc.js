@@ -18,7 +18,7 @@
   // prospects (« DSI », « Head of Product »), d'où une liste de suggestions et non une contrainte.
   const METIERS = ['Product Designer', 'Product Owner', 'Product Manager', 'Business Analyst',
     'Motion Designer', 'UX Research', 'Chef·fe de projet', 'Scrum master', 'Coach Agile',
-    'UI Designer', 'UX Designer', 'Lead Designer'];
+    'UI Designer', 'UX Designer', 'Lead Designer', 'UX Writer'];
 
   const RESPONSABILITES = {
     lead_partner:        { label: 'Lead partner',           court: 'Lead partner', bg: '#823DE8', color: '#FFFFFF' },
