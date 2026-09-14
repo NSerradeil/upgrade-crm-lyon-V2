@@ -52,9 +52,11 @@ Règles :
   Si le consultant n'y est pas → afficher `manager_trigramme`. La liste des trigrammes ↔ noms vit dans
   une constante app `MANAGER_TRIGRAMMES` (NSE Nicolas Serradeil, ACD Anne-Claire Decker, CSA Camille
   Salinson, ABE Amel Benzai, PSO Pierre Sotiropoulos*, MJP Majo Paquelier, LBL Louis Blandin,
-  CAJ Charlène Jacquetton, APL Anthony Plancoulaine, WSA Weronika Sawicki, FEL Fabrice Elmoznino,
-  HSI Hervé Sinpaseuth, SLE Stanislas Le Moy, JSE Julian Sendra, COS Constance Salem*).
-  `*` = à confirmer par Nicolas lors du dry-run d'import.
+  **CAJ Cassandre Jacquemin** (« partner des partners » : elle manage aussi Majo et Louis), APL Anthony
+  Plancoulaine, WSA Weronika Sawicki, FEL Fabrice Elmoznino, HSI Hervé Sinpaseuth, SLE Stanislas Le Moy,
+  JSE Julian Sendra, COS Constance Salem). Mapping validé par Nicolas le 14/09 (`*` nom de famille à confirmer).
+- **Partner des partners** (Cassandre) : périmètre = ses consultants ∪ les consultants des partners
+  qu'elle manage (résolu via `partner_consultants` en 2 niveaux). V1 : simple règle app, pas de colonne.
 - RLS : aucune nouvelle policy. Les colonnes héritent des policies `contacts` (lecture ouverte,
   UPDATE tout commercial, DELETE responsable/admin, partner scopé `is_my_consultant`). Salaire
   visible par tous ceux qui voient l'onglet (décision Nicolas 14/09).

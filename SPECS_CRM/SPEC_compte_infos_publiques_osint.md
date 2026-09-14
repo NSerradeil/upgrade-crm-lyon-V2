@@ -52,36 +52,43 @@ ca_annee, resultat_net, resultat_annee, adresse, description, siren) pour correc
 `news` reste géré par les workers (pas d'édition manuelle en V1). Les nouveaux champs
 numériques → `null` si vide dans le payload.
 
-## 3. Worker infos de base — annuel · `~/Pro/Jules/bin/jules-compte-osint.py`
-- Script **pur API** (pas de LLM) : pour chaque compte sans `osint_maj` récent, requête
-  `recherche-entreprises.api.gouv.fr/search?q=<nom>` → meilleur match → SIREN, adresse,
-  effectifs (tranche+année), activité (→ description), et `finances` (CA + résultat net par
-  année si l'entité dépose ses comptes) → on prend l'année la plus récente.
-- Écrit dans `comptes` via `psql "$CRM_PG_URL"` (source `~/.config/jules/crm-backup.env`),
-  set `osint_maj = today`.
-- **Trous** (pas de match fiable, ou groupe sans finances : EDF, SNCF…) → log dans un
-  fichier `comptes-osint-trous.txt` ; une passe web légère Jules (session LLM) les complète
-  ensuite. Le script ne devine jamais.
-- launchd : 1×/an (mi-janvier). Lançable à la demande.
-- Garde-fous : rapprochement par nom risqué (homonymes) → n'écrit que si le match est net
-  (nom normalisé proche + une seule entité dominante) ; sinon → trou. Ne jamais écraser une
-  valeur saisie manuellement plus récente que le dernier run automatique (comparer `osint_maj`).
+## 3. Alimentation — ancrée sur la fiche VAULT (pivot 27/08, décision Nicolas)
+Un script API aveugle par NOM s'est révélé **trop peu fiable** sur les grands comptes
+(homonymes : Accor→PME belge/Nouméa, AFD→Roure ; holdings de groupe = peu de salariés
+directs + comptes consolidés absents → un homonyme opérationnel gagne). Le champ `ville`
+du CRM est majoritairement vide → inutilisable comme garde-fou. **Décision : l'identité
+est confirmée EN AMONT par la fiche compte du VAULT** (source de vérité), puis on fetch
+de façon fiable.
 
-## 4. News — skill Jules hebdo (top 10)
-- **Top 10** = comptes par volume d'affaires Upgrade = somme du CA missions (périodes ×
-  TJM/CJM) par compte. Métrique à confirmer ; fallback = nb missions actives.
-- Skill de veille (déjà hebdo chez Jules) : pour chacun des 10 comptes, recherche web
-  2-3 actualités récentes et pertinentes (levée, réorg, nouveau produit, recrutement, résultats),
-  résumé court + URL source, écrit `news` (JSONB) + `news_maj` via `CRM_PG_URL`.
-- Chaque news porte une **URL source vérifiée** (règle veille Jules) ; résumé neutre.
+- **Outil** `~/Pro/Jules/bin/jules-compte-osint.py` :
+  - `--id <compte> --siren <siren>` → **mode fiable** : fetch par SIREN (zéro matching),
+    écrit siren/adresse/CA/résultat/(description) + `osint_maj`.
+  - `--id <compte> --fields-file <json>` → écrit des champs vérifiés au web (effectifs
+    exacts, description, CA de groupe…) que l'API ne donne pas.
+  - (le mode batch par NOM subsiste mais est PEU FIABLE → diagnostic seulement, jamais à l'aveugle.)
+- **Passe raisonnée (LLM)** portée par la **veille** (`routines/veille-signaux.md`, section
+  « Enrichir la fiche compte ») : à chaque compte scanné, confirme identité+SIREN depuis le
+  vault (le capitalise si absent), fetch infos de base par SIREN, complète effectifs/CA de
+  groupe au web, écrit CRM + reporte dans la fiche vault. Progressif, à la midday-cleanup —
+  les plus gros comptes d'abord, le reste au fil des passes.
+
+## 4. News — dans la même passe de veille
+- 2-3 actualités récentes/pertinentes par compte, **URL vérifiée** (jules-check-url + WebFetch),
+  résumé neutre → `bin/jules-compte-news.py --id <compte> --file news.json` (écrit `news` + `news_maj`).
+- **Priorité top 10** = comptes par CA projeté (`crm_list_comptes order=ca_projete`), puis le reste
+  au fil de la veille.
+
+## 5. Init « costaud » du top 10 (fait le 27/08)
+Pour ne pas partir de zéro : identité confirmée + infos de base (SIREN) + effectifs/description/news
+(5 sous-agents web Sonnet, gate URL) écrits sur les 10 comptes au plus gros CA projeté
+(EDF, Enedis, Axa France, SNCF Connect & Tech, Bouygues Telecom, Funecap, BNP Paribas ITG,
+Accor, Société Générale, Louboutin).
 
 ## Déploiement
-1. `db/19_compte_osint.sql` collé en SQL Editor (effet immédiat).
-2. UI testée en local (`python3 -m http.server`) + preview + OK Nicolas AVANT push `main`
-   (Nicolas pousse : `git push` deny-ruled pour Jules).
-3. Worker + skill : livrés côté `~/Pro/Jules/`, branchés en launchd / veille.
+1. `db/19_compte_osint.sql` collé en SQL Editor (effet immédiat). ✅ fait 27/08.
+2. UI testée en local + OK Nicolas AVANT push `main` (Nicolas pousse : `git push` deny-ruled).
+3. Scripts + veille : côté `~/Pro/Jules/`. Pas de launchd annuel (l'aveugle est abandonné).
 
-## Hors périmètre V1
-- News hors top 10 (pas de déclenchement au clic).
-- Historique financier multi-années.
-- Édition manuelle des news.
+## Hors périmètre
+- News hors top 10 à la demande / au clic (page statique — arbitrage 27/08).
+- Historique financier multi-années · édition manuelle des news.
