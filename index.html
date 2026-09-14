@@ -8418,19 +8418,24 @@ function App() {
   // ── Alertes fin de mission (SPEC_agence_effectifs §7) : 1 tâche par mission à ≤60 j, idempotent, clôture si prolongée.
   // Lancée par admin/commercial uniquement (un partner ne crée pas de tâche pour les commerciaux), une fois par chargement.
   const alertesRunRef=React.useRef('');
+  const alertesInFlightRef=React.useRef(false);
   useEffect(()=>{
     if(!data||!profile||profile.role==='partner'||viewAs) return;
     const key=TODAY+':'+(data.missions||[]).length+':'+(data.taches||[]).length;
     if(alertesRunRef.current===key) return; alertesRunRef.current=key;
     (async()=>{
-      const ctx={missions:data.missions||[],intercos:data.intercos||[],partnerNomById:{},partnerIdByContact:{},todayISO:TODAY,annee:new Date().getFullYear()};
-      const collabs=(data.contacts||[]).filter(c=>AgenceCalc.CONSULTANT_STATUTS_AGENCE.includes(c.statut)).map(c=>AgenceCalc.computeCollab(c,ctx));
-      const {aCreer,aClore}=AgenceCalc.planAlertes(collabs,data.taches||[],{todayISO:TODAY,feries:FERIES_FR,profilNom:profile.nom});
-      if(!aCreer.length&&!aClore.length) return;
-      let n=0;
-      for(const t of aCreer){ const {error}=await sb.from('taches').insert(t); if(!error) n++; }
-      for(const c of aClore){ const t=(data.taches||[]).find(x=>x.id===c.id); await sb.from('taches').update({statut:'fait',date_completion:new Date().toISOString(),notes:((t&&t.notes)||'')+'\n'+c.note}).eq('id',c.id); }
-      if(n||aClore.length){ toast(`${n} alerte${n>1?'s':''} fin de mission créée${n>1?'s':''}${aClore.length?`, ${aClore.length} clôturée${aClore.length>1?'s':''}`:''}`); fetchAll(); }
+      if(alertesInFlightRef.current) return; alertesInFlightRef.current=true;
+      try{
+        const ctx={missions:data.missions||[],intercos:data.intercos||[],partnerNomById:{},partnerIdByContact:{},todayISO:TODAY,annee:new Date().getFullYear()};
+        const collabs=(data.contacts||[]).filter(c=>AgenceCalc.CONSULTANT_STATUTS_AGENCE.includes(c.statut)).map(c=>AgenceCalc.computeCollab(c,ctx));
+        const {aCreer,aClore}=AgenceCalc.planAlertes(collabs,data.taches||[],{todayISO:TODAY,feries:FERIES_FR,profilNom:profile.nom});
+        if(!aCreer.length&&!aClore.length) return;
+        let n=0,errs=0;
+        for(const t of aCreer){ const {error}=await sb.from('taches').insert(t); if(error){ console.error('alerte fin de mission',t.mission_id,error.message); errs++; } else n++; }
+        for(const c of aClore){ const t=(data.taches||[]).find(x=>x.id===c.id); const {error}=await sb.from('taches').update({statut:'fait',date_completion:new Date().toISOString(),notes:((t&&t.notes)||'')+'\n'+c.note}).eq('id',c.id); if(error){ console.error('alerte fin de mission',c.id,error.message); errs++; } }
+        if(n||aClore.length){ toast(`${n} alerte${n>1?'s':''} fin de mission créée${n>1?'s':''}${aClore.length?`, ${aClore.length} clôturée${aClore.length>1?'s':''}`:''}`); fetchAll(); }
+        if(errs>0){ toast(`${errs} alerte${errs>1?'s':''} fin de mission en échec (voir console)`,'error'); }
+      } finally { alertesInFlightRef.current=false; }
     })();
   },[data,profile,viewAs]);
 
