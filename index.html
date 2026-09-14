@@ -2865,7 +2865,52 @@ function AgenceKpiDalles({ collabs, mode, missions, intercos, contactMap, onPick
     <div style={{marginTop:6,fontSize:11,color:'#bbb',textAlign:'right',fontFamily:'Outfit,sans-serif'}}>{active?'Cliquer un mois / une tranche pour le détail · re-cliquer la dalle pour fermer':'Cliquer sur une dalle pour voir le détail'}</div>
   </div>;
 }
-function CollabDetail({ collab, onClose }){ return <SidePanel title={`${collab.prenom} ${collab.nom}`} onClose={onClose}><div className="text-sm text-slate italic">Volet en construction</div></SidePanel>; }
+function CollabDetail({ collab: k, missions, missionPeriods, histMissions, contacts, taches, besoins, comptes, profile, allProfiles, onClose, onRefresh, onNavToContact }) {
+  const [sub,setSub]=useState('mission');
+  const [edit,setEdit]=useState(false);
+  const [openMission,setOpenMission]=useState(null);
+  const m=k.missionEnCours;
+  const periods=m?(missionPeriods||[]).filter(p=>p.mission_id===m.id):[];
+  const tabBtn=id=>`px-3 py-1.5 text-xs font-bold uppercase tracking-wider border-b-2 ${sub===id?'border-midnight text-midnight':'border-transparent text-slate hover:text-carbon'}`;
+  const Row=({l,v})=><div className="flex justify-between gap-3 text-sm py-1 border-b border-neutral-50"><span className="text-slate">{l}</span><span className="font-medium text-midnight text-right">{v}</span></div>;
+  const canEdit=profile.role==='admin'||profile.role==='commercial'||profile.role==='partner';
+  return <>
+    <SidePanel title={`${k.prenom||''} ${k.nom||''}`} onClose={onClose}
+      badge={<div className="flex gap-1 flex-wrap"><StatutBadge statut={k.statut}/>{k.agence&&<ColorBadge label={k.agence} bg="#E4E4E6" color="#1C1F35"/>}<DispoBadge k={k}/></div>}
+      actions={<>
+        {canEdit&&<button onClick={()=>setEdit(true)} className="px-3 py-1.5 text-xs font-medium bg-midnight text-white hover:bg-carbon btn-brutal">Modifier</button>}
+        <button onClick={()=>{onClose();onNavToContact&&onNavToContact(k.id);}} className="px-3 py-1.5 text-xs font-medium border-2 border-neutral-200 text-carbon hover:border-midnight">Fiche contact</button>
+      </>}>
+      <div className="flex gap-1 border-b-2 border-neutral-100 -mt-2">
+        <button className={tabBtn('mission')} onClick={()=>setSub('mission')}>Mission</button>
+        {k.isCdi&&<button className={tabBtn('interco')} onClick={()=>setSub('interco')}>Interco</button>}
+        <button className={tabBtn('infos')} onClick={()=>setSub('infos')}>Infos</button>
+      </div>
+      {sub==='mission'&&(m?<div className="space-y-3">
+        <div className="flex items-center justify-between"><div className="font-bold text-midnight">{m.client||'—'}{m.projet?<span className="text-slate font-normal"> · {m.projet}</span>:null}</div><MissionStatutBadge statut={m.statut}/></div>
+        <Row l="Période" v={`${fmtDateFR(m.date_debut_mission)} → ${fmtDateFR(m.date_fin_mission)}`}/>
+        <Row l="TJM" v={fmtEur0(k.tjm)}/><Row l="CJM" v={fmtEur0(k.cjm)}/>
+        <Row l="Marge" v={<><MargeCell m={k.marge}/>{k.tjm!=null&&k.cjm!=null&&<span className="text-slate text-xs ml-2">{fmtEur0(k.tjm-k.cjm)} / j</span>}</>}/>
+        {m.responsable&&<Row l="Commercial" v={m.responsable}/>}
+        {periods.length>0&&<div><div className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate mb-1">Périodes</div>{periods.map(p=><div key={p.id} className="text-xs text-slate py-0.5">{p.label||'Période'} · {fmtDateFR(p.debut)} → {fmtDateFR(p.fin)}{p.tjm_vente?` · TJM ${fmtEur0(p.tjm_vente)}`:''}</div>)}</div>}
+        <button onClick={()=>setOpenMission(m)} className="px-3 py-1.5 text-xs font-medium border-2 border-neutral-200 text-carbon hover:border-midnight">Ouvrir la mission →</button>
+      </div>:<div className="text-sm text-slate italic">{k.etat==='arret_maladie'||k.etat==='conge'?AgenceCalc.etatDispo(k).label:(k.isCdi?'En intercontrat · '+AgenceCalc.fmtJ(k.intercoAnnee)+' j cumulés cette année':'Sans mission en cours')}</div>)}
+      {sub==='interco'&&k.isCdi&&<IntercoEditor contact={k} profile={profile}/>}
+      {sub==='infos'&&<div>
+        <Row l="Date d'entrée" v={fmtDateFR(k.date_entree)}/>
+        {k.date_sortie&&<Row l="Date de sortie" v={fmtDateFR(k.date_sortie)}/>}
+        {k.isCdi&&<Row l="Salaire brut annuel" v={fmtEur0(k.salaire_annuel)}/>}
+        <Row l="CJM" v={<>{fmtEur0(k.cjm)} <span className="text-xs text-slate">{k.cjm_manuel?'(manuel)':'(calculé)'}</span></>}/>
+        <Row l={k.isCdi?'Partner responsable':'Commercial'} v={(k.isCdi?k.partnerNom:k.responsable)||'—'}/>
+        {!k.isCdi&&<Row l="Type" v={k.typeLabel}/>}
+        <Row l="Statut RH" v={k.statut_rh?AgenceCalc.etatDispo({...k,etat:k.statut_rh}).label:'—'}/>
+        {k.email&&<Row l="Email" v={k.email}/>}{k.telephone&&<Row l="Téléphone" v={k.telephone}/>}
+      </div>}
+    </SidePanel>
+    {edit&&<ContactEditModal contact={k} profile={profile} allProfiles={allProfiles} comptes={comptes||[]} onClose={()=>setEdit(false)} onSaved={()=>{setEdit(false);onRefresh();}}/>}
+    {openMission&&<MissionDetail mission={openMission} histMissions={histMissions||[]} missionPeriods={periods} contacts={contacts||[]} taches={taches||[]} missions={missions||[]} besoins={besoins||[]} comptes={comptes||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setOpenMission(null)} onRefresh={()=>{setOpenMission(null);onRefresh();}} onNavToContact={onNavToContact} onNavToBesoin={()=>{}} onNavToTache={()=>{}} onNavToCompte={()=>{}}/>}
+  </>;
+}
 async function exportEffectifs(rows,mode,agence,setBusy){ toast('Export : en construction'); }
 function TabAgence({ contacts, missions, missionPeriods, intercos, taches, comptes, histMissions, besoins, partnerConsultants, allProfiles, profile, isPartner, onRefresh, onNavToMission, onNavToContact, prefs }) {
   const [mode,setMode]=useState('cdi');
