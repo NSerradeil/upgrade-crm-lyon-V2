@@ -2846,11 +2846,15 @@ function ghostDrag(e, texte) {
   } catch (_) { /* setDragImage absent (Safari ancien) : fantôme natif, pas bloquant */ }
 }
 
-// Métier : liste fermée pour un consultant (la nomenclature), texte libre pour un prospect
-// (« DSI »). Le <datalist> précédent gardait ce qu'on tapait pour ouvrir la liste — une fiche
-// s'est retrouvée avec role = « l ». Un <select> ne peut pas produire ça.
+// Métier : le comportement suit le statut (règle Nicolas 14/09).
+//  · Prospect / Client : c'est le poste de quelqu'un chez le client (« DSI », « Head of
+//    Product ») → texte libre, aucune nomenclature ne peut le couvrir.
+//  · Candidat / consultant : c'est NOTRE métier → liste fermée, pour que le vivier et
+//    l'effectif parlent la même langue à la transformation.
+// Le <datalist> précédent gardait ce qu'on tapait pour ouvrir la liste (une fiche s'est
+// retrouvée avec role = « l ») ; un <select> ne peut pas produire une valeur non choisie.
 function MetierField({ statut, value, onChange }) {
-  const consultant = ['Consultant CDI','Freelance','Prestataire'].includes(statut);
+  const consultant = ['Candidat','Consultant CDI','Freelance','Prestataire'].includes(statut);
   const v = value || '';
   const [libre, setLibre] = useState(false);
   if (!consultant) return <input type="text" value={v} onChange={e=>onChange(e.target.value)} className={inputCls}/>;
