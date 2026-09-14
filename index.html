@@ -2911,6 +2911,78 @@ function AgenceKpiDalles({ collabs, mode, missions, intercos, contactMap, horsEf
     <div style={{marginTop:6,fontSize:11,color:'#bbb',textAlign:'right',fontFamily:'Outfit,sans-serif'}}>{active?'Cliquer un mois / une tranche pour le détail · re-cliquer la dalle pour fermer':'Cliquer sur une dalle pour voir le détail'}</div>
   </div>;
 }
+// ── Modale « Positionner sur un besoin » ─────────────────────────────────────
+function PositionnerModal({ contact, besoins, comptes, profile, onClose, onSaved }) {
+  const [dejaIds, setDejaIds] = useState(new Set());
+  const [q, setQ] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(()=>{
+    let cancelled = false;
+    (async()=>{
+      const { data, error } = await sb.from('besoin_candidats').select('besoin_id').eq('contact_id', contact.id);
+      if (error) { toast('Erreur : '+error.message, 'error'); if(!cancelled) setDejaIds(new Set()); return; }
+      if (!cancelled) setDejaIds(new Set((data||[]).map(r=>r.besoin_id)));
+    })();
+    return ()=>{ cancelled = true; };
+  }, [contact.id]);
+
+  const ouverts = useMemo(()=>(besoins||[])
+    .filter(b=>b.statut!=='Besoin Gagné' && b.statut!=='Besoin Perdu')
+    .sort((a,b)=>new Date(b.updated_at||b.created_at||0)-new Date(a.updated_at||a.created_at||0)), [besoins]);
+
+  const filtres = useMemo(()=>{
+    const nq = norm(q);
+    if (!nq) return ouverts;
+    return ouverts.filter(b=>{
+      const nomCompte = b.compte || comptes.find(c=>c.id===b.compte_id)?.nom || '';
+      return norm(b.titre).includes(nq) || norm(nomCompte).includes(nq);
+    });
+  }, [ouverts, q, comptes]);
+
+  const tronque = filtres.length > 40;
+  const affiches = filtres.slice(0, 40);
+
+  async function positionner(b) {
+    if (saving || dejaIds.has(b.id)) return;
+    setSaving(true);
+    const nomCompte = b.compte || comptes.find(c=>c.id===b.compte_id)?.nom || '';
+    const { error } = await sb.from('besoin_candidats').insert({ besoin_id:b.id, contact_id:contact.id, statut:'en_attente', tjm_propose:null, created_by:profile.nom });
+    if (error) { toast('Erreur : '+error.message, 'error'); setSaving(false); return; }
+    await sb.from('historique_actions').insert({ id_prospect:contact.id, date:getToday(), type_action:'Note interne', details:'Positionné sur le besoin « '+b.titre+' »'+(nomCompte?' ('+nomCompte+')':''), responsable:profile.nom });
+    toast('Positionné sur « '+b.titre+' »');
+    setSaving(false);
+    onSaved();
+  }
+
+  return (
+    <Modal title={<><Icon d={ICONS.target} size={14}/> Positionner {contact.prenom} {contact.nom}</>} onClose={onClose}
+      footer={<button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Fermer</button>}>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher un besoin ou un compte…" className={inputCls}/>
+      {affiches.length===0 && <div className="text-xs text-neutral-300 italic">Aucun besoin ouvert sur ton périmètre.</div>}
+      <div className="max-h-96 overflow-y-auto">
+        {affiches.map(b=>{
+          const dejaPositionne = dejaIds.has(b.id);
+          const nomCompte = b.compte || comptes.find(c=>c.id===b.compte_id)?.nom || '';
+          return (
+            <div key={b.id} onClick={()=>!dejaPositionne && positionner(b)}
+              className={"border-b border-neutral-50 py-2 px-1 "+(dejaPositionne?'opacity-50':'hover:bg-lemon-20 cursor-pointer')}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-bold text-midnight">{b.titre}</span>
+                <BesoinBadge statut={b.statut}/>
+              </div>
+              <div className="text-xs text-slate mt-0.5">
+                {[nomCompte, b.responsable, b.budget_tjm?b.budget_tjm+' €':null].filter(Boolean).join(' · ')}
+                {dejaPositionne && <span className="italic ml-1">· déjà positionné</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {tronque && <div className="text-xs text-neutral-300 italic">affine ta recherche</div>}
+    </Modal>
+  );
+}
 function CollabDetail({ collab: k, missions, missionPeriods, histMissions, contacts, taches, besoins, comptes, profile, allProfiles, onClose, onRefresh, onNavToContact }) {
   const [sub,setSub]=useState('mission');
   const [edit,setEdit]=useState(false);
