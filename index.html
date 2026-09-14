@@ -8563,7 +8563,7 @@ function App() {
   const effectifActif = vContacts.filter(c=>AgenceCalc.CONSULTANT_STATUTS_AGENCE.includes(c.statut)&&!(c.date_sortie&&c.date_sortie<=TODAY)).length;
   const TABS=[
     {id:'taches',     label:<><Icon d={ICONS.check} size={14}/> Tâches ({tachesActives.length}){tachesRetard.length>0&&<span className="w-2 h-2 bg-coral-100 rounded-full inline-block ml-1"/>}</>},
-    {id:'agence',     label:<><Icon d={ICONS.work} size={14}/> Agence ({effectifActif})</>},
+    {id:'agence',     label:<><Icon d={ICONS.building} size={14}/> Agence ({effectifActif})</>},
     {id:'prospects',  label:<><Icon d={ICONS.person} size={14}/> Comptes &amp; Contacts ({vContacts.length})</>},
     {id:'prospection',label:<><Icon d={ICONS.phone} size={14}/> Prosp.</>},
     {id:'besoins',    label:<><Icon d={ICONS.target} size={14}/> Besoins ({vBesoins.length})</>},
