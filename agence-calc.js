@@ -30,7 +30,7 @@
     const isCdi = CDI_STATUTS.includes(c.statut);
     const joursAvantDispo = enCours[0] && enCours[0].date_fin_mission ? joursEntre(todayISO, enCours[0].date_fin_mission) : null;
     const tjm = missionEnCours && missionEnCours.tjm != null ? Number(missionEnCours.tjm) : null;
-    const cjm = (missionEnCours && missionEnCours.cjm != null ? Number(missionEnCours.cjm) : (c.cjm != null && c.cjm !== '' ? Number(c.cjm) : null));
+    const cjm = c.cjm != null && c.cjm !== '' ? Number(c.cjm) : (missionEnCours && missionEnCours.cjm != null ? Number(missionEnCours.cjm) : null);
     const marge = tjm && cjm != null ? (tjm - cjm) / tjm : null;
     const intercoAnnee = intercos.filter((i) => i.contact_consultant_id === c.id && Number(i.annee) === annee)
       .reduce((s, i) => s + (parseFloat(i.jours) || 0), 0);

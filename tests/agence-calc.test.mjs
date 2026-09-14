@@ -77,7 +77,7 @@ test('prochainJourOuvre930 : vendredi → lundi, veille de férié → saute', (
 });
 test('planAlertes : crée à ≤60 j, idempotent, clôt si prolongée', () => {
   const m = { id: 'm1', contact_consultant_id: 1, statut: 'En cours', tjm: 600, cjm: 400, date_fin_mission: '2026-10-30', client: 'EDF', responsable: 'Nicolas Serradeil' };
-  const c = A.computeCollab(mk(), ctx([m]));
+  const c = A.computeCollab(mk({ cjm: 400 }), ctx([m]));
   const r1 = A.planAlertes([c], [], { todayISO: T, feries: FERIES, profilNom: 'Amel Benzai' });
   assert.equal(r1.aCreer.length, 1);
   const t = r1.aCreer[0];
@@ -88,7 +88,7 @@ test('planAlertes : crée à ≤60 j, idempotent, clôt si prolongée', () => {
   const r2 = A.planAlertes([c], [{ id: 'x', mission_id: 'm1', titre: '⏳ Fin de mission Laurie MARTINEAU — EDF le 30/10 (J-46)', statut: 'fait' }], { todayISO: T, feries: FERIES, profilNom: 'Amel' });
   assert.equal(r2.aCreer.length, 0); assert.equal(r2.aClore.length, 0);
   // prolongée > 60 j avec alerte ouverte → aClore
-  const c2 = A.computeCollab(mk(), ctx([{ ...m, date_fin_mission: '2027-03-31' }]));
+  const c2 = A.computeCollab(mk({ cjm: 400 }), ctx([{ ...m, date_fin_mission: '2027-03-31' }]));
   const r3 = A.planAlertes([c2], [{ id: 'x', mission_id: 'm1', titre: '⏳ Fin de mission …', statut: 'en_cours' }], { todayISO: T, feries: FERIES, profilNom: 'Amel' });
   assert.equal(r3.aCreer.length, 0); assert.deepEqual(r3.aClore, [{ id: 'x', note: 'mission prolongée au 31/03/2027' }]);
   // sorti ou sans mission → rien
