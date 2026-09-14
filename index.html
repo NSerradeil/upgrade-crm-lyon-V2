@@ -2987,11 +2987,41 @@ function CollabDetail({ collab: k, missions, missionPeriods, histMissions, conta
   const [sub,setSub]=useState('mission');
   const [edit,setEdit]=useState(false);
   const [openMission,setOpenMission]=useState(null);
+  const [showPos,setShowPos]=useState(false);
+  const [savingPartner,setSavingPartner]=useState(false);
   const m=k.missionEnCours;
   const periods=m?(missionPeriods||[]).filter(p=>p.mission_id===m.id):[];
   const tabBtn=id=>`px-3 py-1.5 text-xs font-bold uppercase tracking-wider border-b-2 ${sub===id?'border-midnight text-midnight':'border-transparent text-slate hover:text-carbon'}`;
+  // Sous-onglets accessibles : navigation clavier ←/→/Début/Fin, comme un vrai tablist ARIA.
+  const onglets=['mission'].concat(k.isCdi?['interco']:[]).concat(['infos']);
+  const navOnglets=e=>{
+    const i=onglets.indexOf(sub); let j=null;
+    if(e.key==='ArrowRight') j=(i+1)%onglets.length;
+    else if(e.key==='ArrowLeft') j=(i-1+onglets.length)%onglets.length;
+    else if(e.key==='Home') j=0; else if(e.key==='End') j=onglets.length-1;
+    if(j==null) return;
+    e.preventDefault(); setSub(onglets[j]);
+    const el=e.currentTarget.querySelector(`[data-onglet="${onglets[j]}"]`); if(el) el.focus();
+  };
+  const Onglet=({id,children})=><button role="tab" id={`collab-tab-${id}`} data-onglet={id} aria-selected={sub===id} aria-controls={`collab-panel-${id}`} tabIndex={sub===id?0:-1} className={tabBtn(id)} onClick={()=>setSub(id)}>{children}</button>;
+  const Panneau=({id,children})=><div role="tabpanel" id={`collab-panel-${id}`} aria-labelledby={`collab-tab-${id}`} tabIndex={0} className="focus:outline-none focus:ring-2 focus:ring-azure-100">{children}</div>;
   const Row=({l,v})=><div className="flex justify-between gap-3 text-sm py-1 border-b border-neutral-50"><span className="text-slate">{l}</span><span className="font-medium text-midnight text-right">{v}</span></div>;
   const canEdit=profile.role==='admin'||profile.role==='commercial'||profile.role==='partner';
+  // Réaffecter un consultant à un partner : admin (Nicolas, Pierre) ou directeur d'agence (db/21).
+  const peutChangerPartner=profile.role==='admin'||!!profile.dir_agence;
+  const peutPositionner=(profile.role==='admin'||profile.role==='commercial')&&(besoins||[]).length>0;
+  const changerPartner=async(tri)=>{
+    setSavingPartner(true);
+    const nom=AgenceCalc.MANAGER_TRIGRAMMES[tri]||null;
+    const {error}=await sb.from('contacts').update({manager_trigramme:tri||null,updated_at:new Date().toISOString()}).eq('id',k.id);
+    if(error){toast('Erreur : '+error.message,'error');setSavingPartner(false);return;}
+    // Si ce partner a un compte CRM, on aligne aussi son périmètre (table partner_consultants).
+    await sb.from('partner_consultants').delete().eq('contact_consultant_id',k.id);
+    const prof=(allProfiles||[]).find(p=>p.role==='partner'&&p.nom===nom);
+    if(prof) await sb.from('partner_consultants').insert({partner_id:prof.id,contact_consultant_id:k.id});
+    await sb.from('historique_actions').insert({id_prospect:k.id,date:getToday(),type_action:'Note interne',details:`Partner responsable → ${nom||'aucun'}`,responsable:profile.nom});
+    toast(`Partner → ${nom||'aucun'}`); setSavingPartner(false); onRefresh();
+  };
   return <>
     <SidePanel title={`${k.prenom||''} ${k.nom||''}`} onClose={onClose}
       badge={<div className="flex gap-1 flex-wrap"><StatutBadge statut={k.statut}/>{k.agence&&<ColorBadge label={k.agence} bg="#E4E4E6" color="#1C1F35"/>}<DispoBadge k={k}/></div>}
@@ -2999,33 +3029,45 @@ function CollabDetail({ collab: k, missions, missionPeriods, histMissions, conta
         {canEdit&&<button onClick={()=>setEdit(true)} className="px-3 py-1.5 text-xs font-medium bg-midnight text-white hover:bg-carbon btn-brutal">Modifier</button>}
         <button onClick={()=>{onClose();onNavToContact&&onNavToContact(k.id);}} className="px-3 py-1.5 text-xs font-medium border-2 border-neutral-200 text-carbon hover:border-midnight">Fiche contact</button>
       </>}>
-      <div className="flex gap-1 border-b-2 border-neutral-100 -mt-2">
-        <button className={tabBtn('mission')} onClick={()=>setSub('mission')}>Mission</button>
-        {k.isCdi&&<button className={tabBtn('interco')} onClick={()=>setSub('interco')}>Interco</button>}
-        <button className={tabBtn('infos')} onClick={()=>setSub('infos')}>Infos</button>
+      <div role="tablist" aria-label={`Fiche de ${k.prenom||''} ${k.nom||''}`} onKeyDown={navOnglets} className="flex gap-1 border-b-2 border-neutral-100 -mt-2">
+        <Onglet id="mission">Mission</Onglet>
+        {k.isCdi&&<Onglet id="interco">Interco</Onglet>}
+        <Onglet id="infos">Infos</Onglet>
       </div>
-      {sub==='mission'&&(m?<div className="space-y-3">
+      {sub==='mission'&&<Panneau id="mission">{(m?<div className="space-y-3">
         <div className="flex items-center justify-between"><div className="font-bold text-midnight">{m.client||'—'}{m.projet?<span className="text-slate font-normal"> · {m.projet}</span>:null}</div><MissionStatutBadge statut={m.statut}/></div>
         <Row l="Période" v={`${fmtDateFR(m.date_debut_mission)} → ${fmtDateFR(m.date_fin_mission)}`}/>
         <Row l="TJM" v={fmtEur0(k.tjm)}/><Row l="CJM" v={fmtEur0(k.cjm)}/>
         <Row l="Marge" v={<><MargeCell m={k.marge}/>{k.tjm!=null&&k.cjm!=null&&<span className="text-slate text-xs ml-2">{fmtEur0(k.tjm-k.cjm)} / j</span>}</>}/>
         {m.responsable&&<Row l="Commercial" v={m.responsable}/>}
         {periods.length>0&&<div><div className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate mb-1">Périodes</div>{periods.map(p=><div key={p.id} className="text-xs text-slate py-0.5">{p.label||'Période'} · {fmtDateFR(p.debut)} → {fmtDateFR(p.fin)}{p.tjm_vente?` · TJM ${fmtEur0(p.tjm_vente)}`:''}</div>)}</div>}
-        <button onClick={()=>setOpenMission(m)} className="px-3 py-1.5 text-xs font-medium border-2 border-neutral-200 text-carbon hover:border-midnight">Ouvrir la mission →</button>
-      </div>:<div className="text-sm text-slate italic">{k.etat==='arret_maladie'||k.etat==='conge'?AgenceCalc.etatDispo(k).label:(k.isCdi?'En intercontrat · '+AgenceCalc.fmtJ(k.intercoAnnee)+' j cumulés cette année':'Sans mission en cours')}</div>)}
-      {sub==='interco'&&k.isCdi&&<IntercoEditor contact={k} profile={profile}/>}
-      {sub==='infos'&&<div>
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={()=>setOpenMission(m)} className="px-3 py-1.5 text-xs font-medium border-2 border-neutral-200 text-carbon hover:border-midnight">Ouvrir la mission →</button>
+          {peutPositionner&&<button onClick={()=>setShowPos(true)} className="px-3 py-1.5 text-xs font-medium border-2 border-neutral-200 text-carbon hover:border-midnight">Positionner sur un besoin</button>}
+        </div>
+      </div>:<div className="space-y-3">
+        <div className="text-sm text-slate italic">{k.etat==='arret_maladie'||k.etat==='conge'?AgenceCalc.etatDispo(k).label:(k.isCdi?'En intercontrat · '+AgenceCalc.fmtJ(k.intercoAnnee)+' j cumulés cette année':'Sans mission en cours')}</div>
+        {peutPositionner&&<button onClick={()=>setShowPos(true)} className="px-3 py-1.5 text-xs font-medium bg-midnight text-white hover:bg-carbon btn-brutal">Positionner sur un besoin</button>}
+      </div>)}</Panneau>}
+      {sub==='interco'&&k.isCdi&&<Panneau id="interco"><IntercoEditor contact={k} profile={profile}/></Panneau>}
+      {sub==='infos'&&<Panneau id="infos"><div>
         <Row l="Date d'entrée" v={fmtDateFR(k.date_entree)}/>
         {k.date_sortie&&<Row l="Date de sortie" v={fmtDateFR(k.date_sortie)}/>}
         {k.isCdi&&<Row l="Salaire brut annuel" v={fmtEur0(k.salaire_annuel)}/>}
         <Row l="CJM" v={<>{fmtEur0(k.cjm)} <span className="text-xs text-slate">{k.cjm_manuel?'(manuel)':'(calculé)'}</span></>}/>
-        <Row l={k.isCdi?'Partner responsable':'Commercial'} v={(k.isCdi?k.partnerNom:k.responsable)||'—'}/>
+        <Row l={k.isCdi?'Partner responsable':'Commercial'} v={k.isCdi&&peutChangerPartner
+          ? <select value={k.manager_trigramme||''} disabled={savingPartner} onChange={e=>changerPartner(e.target.value)} className="text-sm border-2 border-neutral-200 px-2 py-1 focus:outline-none focus:border-midnight" style={{maxWidth:220}}>
+              <option value="">— aucun —</option>
+              {Object.entries(AgenceCalc.MANAGER_TRIGRAMMES).sort((a,b)=>a[1].localeCompare(b[1])).map(([t,n])=><option key={t} value={t}>{n}</option>)}
+            </select>
+          : ((k.isCdi?k.partnerNom:k.responsable)||'—')}/>
         {!k.isCdi&&<Row l="Type" v={k.typeLabel}/>}
         <Row l="Statut RH" v={k.statut_rh?AgenceCalc.etatDispo({...k,etat:k.statut_rh}).label:'—'}/>
         {k.email&&<Row l="Email" v={k.email}/>}{k.telephone&&<Row l="Téléphone" v={k.telephone}/>}
-      </div>}
+      </div></Panneau>}
     </SidePanel>
     {edit&&<ContactEditModal contact={k} profile={profile} allProfiles={allProfiles} comptes={comptes||[]} onClose={()=>setEdit(false)} onSaved={()=>{setEdit(false);onRefresh();}}/>}
+    {showPos&&<PositionnerModal contact={k} besoins={besoins||[]} comptes={comptes||[]} profile={profile} onClose={()=>setShowPos(false)} onSaved={()=>{setShowPos(false);onRefresh();}}/>}
     {openMission&&<MissionDetail mission={openMission} histMissions={histMissions||[]} missionPeriods={periods} contacts={contacts||[]} taches={taches||[]} missions={missions||[]} besoins={besoins||[]} comptes={comptes||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setOpenMission(null)} onRefresh={()=>{setOpenMission(null);onRefresh();}} onNavToContact={onNavToContact} onNavToBesoin={()=>{}} onNavToTache={()=>{}} onNavToCompte={()=>{}}/>}
   </>;
 }
