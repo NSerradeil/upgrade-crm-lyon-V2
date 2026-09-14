@@ -55,8 +55,12 @@ Règles :
   **CAJ Cassandre Jacquemin** (« partner des partners » : elle manage aussi Majo et Louis), APL Anthony
   Plancoulaine, WSA Weronika Sawicki, FEL Fabrice Elmoznino, HSI Hervé Sinpaseuth, SLE Stanislas Le Moy,
   JSE Julian Sendra, COS Constance Salem). Mapping validé par Nicolas le 14/09 (`*` nom de famille à confirmer).
-- **Partner des partners** (Cassandre) : périmètre = ses consultants ∪ les consultants des partners
-  qu'elle manage (résolu via `partner_consultants` en 2 niveaux). V1 : simple règle app, pas de colonne.
+- **Partner des partners** (Cassandre, décision Nicolas 14/09) : nouvelle colonne
+  `profiles.partner_lead boolean default false`. Un partner avec `partner_lead=true` a pour périmètre
+  **l'union de toutes les lignes `partner_consultants`** (tous partners, présents et futurs), en lecture
+  (app : `partnerSet`) ET en écriture (RLS : `is_my_consultant()` retourne vrai si le consultant est
+  rattaché à n'importe quel partner). Mêmes restrictions qu'un partner sinon (pas de besoins/prospection,
+  pas de création ni suppression). Migration incluse dans `db/20_agence.sql`.
 - RLS : aucune nouvelle policy. Les colonnes héritent des policies `contacts` (lecture ouverte,
   UPDATE tout commercial, DELETE responsable/admin, partner scopé `is_my_consultant`). Salaire
   visible par tous ceux qui voient l'onglet (décision Nicolas 14/09).
