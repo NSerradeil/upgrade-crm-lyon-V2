@@ -52,7 +52,7 @@ Règles :
   Si le consultant n'y est pas → afficher `manager_trigramme`. La liste des trigrammes ↔ noms vit dans
   une constante app `MANAGER_TRIGRAMMES` (NSE Nicolas Serradeil, ACD Anne-Claire Decker, CSA Camille
   Salinson, ABE Amel Benzai, PSO Pierre Sotiropoulos*, MJP Majo Paquelier, LBL Louis Blandin,
-  **CAJ Cassandre Jacquemin** (« partner des partners » : elle manage aussi Majo et Louis), APL Anthony
+  **CAJ Cassandre Jacquemin** (« partner des partners » : elle manage tous les partners de France), APL Anthony
   Plancoulaine, WSA Weronika Sawicki, FEL Fabrice Elmoznino, HSI Hervé Sinpaseuth, SLE Stanislas Le Moy,
   JSE Julian Sendra, COS Constance Salem). Mapping validé par Nicolas le 14/09 (`*` nom de famille à confirmer).
 - **Partner des partners** (Cassandre, décision Nicolas 14/09) : nouvelle colonne
