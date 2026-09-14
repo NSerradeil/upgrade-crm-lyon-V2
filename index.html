@@ -2816,6 +2816,71 @@ const fmtEur0 = n => n==null?'—':Math.round(n).toLocaleString('fr-FR')+' €';
 const fmtDateFR = iso => iso?AgenceCalc.fmtJJMMAAAA(iso):'—';
 const MOIS_LBL_AG=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'];
 // Barres mensuelles génériques (même rendu que ChartMissions : barres pleines, mois courant souligné). series: [{values:number[12], color, label}], line?: number[12]
+// Effectif & mouvements de l'année. Deux bandes SÉPARÉES : l'effectif (~60) et les mouvements (0-3)
+// n'ont pas le même ordre de grandeur, les mettre sur une échelle commune écrasait les barres.
+// Palette validée pour le daltonisme : azure/coral (le vert/rouge ne passe pas en deutanopie).
+function ChartEffectif({ as, annee, curMonth, selMonth, onMonthClick }) {
+  const [hover,setHover]=useState(null);
+  const idx = hover!=null?hover:(selMonth!=null?selMonth:curMonth);
+  const C_IN='#5090FE', C_OUT='#FF3D2E', INK='#1C1F35';
+  const vals=as.cumul, vMin=Math.min(...vals), vMax=Math.max(...vals);
+  const lo=vMin-1, hi=vMax+1, span=Math.max(1,hi-lo);
+  const x=i=>((i+0.5)/12)*100, y=v=>100-((v-lo)/span)*100;
+  const maxFlux=Math.max(1,...as.arrivees,...as.sorties);
+  const H=26;   // demi-hauteur des barres de flux
+  const futur=i=>i>curMonth;
+  const s=(n,mot)=>`${n} ${mot}${n>1?'s':''}`;
+  return <div onMouseLeave={()=>setHover(null)}>
+    <div className="flex items-baseline justify-between mb-1 flex-wrap gap-2">
+      <div className="text-sm font-bold text-midnight">Effectif et mouvements {annee}</div>
+      <div className="text-xs text-slate">
+        <span className="font-bold text-midnight">{MOIS_LBL_AG[idx]}</span> · effectif <span className="font-bold text-midnight">{vals[idx]}</span>
+        {' · '}<span style={{color:C_IN,fontWeight:700}}>{s(as.arrivees[idx],'arrivée')}</span>
+        {' · '}<span style={{color:C_OUT,fontWeight:700}}>{s(as.sorties[idx],'sortie')}</span>
+        {futur(idx)&&<span className="text-neutral-300"> · à venir</span>}
+      </div>
+    </div>
+    <div style={{position:'relative'}}>
+      {/* Bande 1 — effectif fin de mois */}
+      <div style={{position:'relative',height:68,borderBottom:'1px solid #E4E4E6'}}>
+        <span style={{position:'absolute',left:0,top:-2,fontSize:9,color:'#A4A6AB'}}>{hi}</span>
+        <span style={{position:'absolute',left:0,bottom:2,fontSize:9,color:'#A4A6AB'}}>{lo}</span>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{position:'absolute',inset:0,width:'100%',height:'100%'}}>
+          <polyline points={vals.map((v,i)=>`${x(i)},${y(v)}`).join(' ')} fill="none" stroke={INK} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>
+        </svg>
+        {vals.map((v,i)=><div key={i} style={{position:'absolute',left:`${x(i)}%`,top:`${y(v)}%`,width:8,height:8,marginLeft:-4,marginTop:-4,borderRadius:4,background:INK,border:'2px solid #fff',boxSizing:'content-box',opacity:futur(i)?0.35:1,outline:i===idx?`2px solid ${INK}`:'none',outlineOffset:2}}/>)}
+        <div style={{position:'absolute',left:`${x(idx)}%`,top:`${y(vals[idx])}%`,transform:'translate(-50%,-150%)',fontSize:11,fontWeight:800,color:INK,whiteSpace:'nowrap'}}>{vals[idx]}</div>
+      </div>
+      {/* Bande 2 — arrivées (haut) / sorties (bas), autour d'une ligne zéro */}
+      <div style={{position:'relative',height:H*2+2,display:'flex'}}>
+        <div style={{position:'absolute',left:0,right:0,top:H,height:1,background:'#E4E4E6'}}/>
+        {as.arrivees.map((a,i)=>{const so=as.sorties[i];const op=futur(i)?0.35:1;
+          return <div key={i} style={{flex:1,position:'relative'}}>
+            {a>0&&<><div style={{position:'absolute',left:'25%',right:'25%',bottom:H+1,height:Math.max(3,(a/maxFlux)*(H-10)),background:C_IN,borderRadius:'4px 4px 0 0',opacity:op}}/>
+              <div style={{position:'absolute',left:0,right:0,bottom:H+Math.max(3,(a/maxFlux)*(H-10))+2,textAlign:'center',fontSize:10,fontWeight:800,color:INK,opacity:op}}>{a}</div></>}
+            {so>0&&<><div style={{position:'absolute',left:'25%',right:'25%',top:H+1,height:Math.max(3,(so/maxFlux)*(H-10)),background:C_OUT,borderRadius:'0 0 4px 4px',opacity:op}}/>
+              <div style={{position:'absolute',left:0,right:0,top:H+Math.max(3,(so/maxFlux)*(H-10))+2,textAlign:'center',fontSize:10,fontWeight:800,color:INK,opacity:op}}>{so}</div></>}
+          </div>;})}
+      </div>
+      {/* Axe des mois */}
+      <div style={{display:'flex',marginTop:2}}>
+        {MOIS_LBL_AG.map((m,i)=><div key={i} style={{flex:1,textAlign:'center',fontSize:10,fontWeight:i===curMonth?800:500,color:futur(i)?'#D2D2D5':(i===curMonth?'#1C1F35':'#565861'),background:i===curMonth?'#FFE500':'transparent'}}>{m}</div>)}
+      </div>
+      {/* Zone de survol : une colonne par mois, cible haute et facile */}
+      <div style={{position:'absolute',inset:0,display:'flex'}}>
+        {MOIS_LBL_AG.map((m,i)=><div key={i} onMouseEnter={()=>setHover(i)} onClick={()=>onMonthClick&&onMonthClick(i)}
+          title={`${m} ${annee} · effectif ${vals[i]} · ${s(as.arrivees[i],'arrivée')} · ${s(as.sorties[i],'sortie')}`}
+          style={{flex:1,cursor:'pointer',background:i===idx?'rgba(28,31,53,0.04)':'transparent',outline:i===selMonth?'2px solid #1C1F35':'none',outlineOffset:-2}}/>)}
+      </div>
+    </div>
+    <div style={{display:'flex',gap:14,marginTop:10,fontSize:11,color:'#565861',flexWrap:'wrap'}}>
+      <span><span style={{display:'inline-block',width:10,height:10,borderRadius:5,background:INK,marginRight:5,verticalAlign:'-1px'}}/>effectif fin de mois</span>
+      <span><span style={{display:'inline-block',width:10,height:10,background:C_IN,marginRight:5,verticalAlign:'-1px'}}/>arrivées</span>
+      <span><span style={{display:'inline-block',width:10,height:10,background:C_OUT,marginRight:5,verticalAlign:'-1px'}}/>sorties</span>
+      <span className="text-neutral-300">· survole un mois pour le détail, clique pour la liste</span>
+    </div>
+  </div>;
+}
 function BarresMensuelles({ series, line, curMonth, selMonth, onMonthClick, fmt=v=>String(v) }) {
   const max=Math.max(1,...series.flatMap(s=>s.values),...(line||[]).filter(v=>v!=null));
   return <div>
@@ -2877,9 +2942,8 @@ function AgenceKpiDalles({ collabs, mode, missions, intercos, contactMap, horsEf
     <KpiCards cards={cards} active={active} onSelect={id=>setActive(a=>a===id?null:id)}/>
     {active&&<div style={{marginTop:12,background:'#fff',borderTop:'2px solid #E4E4E6',borderRight:'2px solid #E4E4E6',borderBottom:'2px solid #E4E4E6',borderLeft:`5px solid ${color}`,padding:'20px 24px 24px',borderRadius:0}}>
       {active==='effectif'&&<>
-        <div className="text-sm font-bold text-midnight mb-3">Arrivées et sorties {annee} · effectif fin de mois</div>
-        <BarresMensuelles series={[{values:as.arrivees,color:'#00C218',label:'arrivées'},{values:as.sorties,color:'#FF3D2E',label:'sorties'}]} line={as.cumul} curMonth={cur} selMonth={moisSel} onMonthClick={i=>setMoisSel(m=>m===i?null:i)}/>
-        {moisSel!=null&&<ListeCollabs titre={`Arrivées ${MOIS_LBL_AG[moisSel]} ${annee}`} items={as.listeArrivees[moisSel]} color="#00C218" onPick={pick} cols={[{v:k=>k.agence||'—'},{v:k=>fmtDateFR(k.date_entree),w:100},{v:k=>(mode==='cdi'?k.partnerNom:k.responsable)||'—',w:150}]} vide="Aucune arrivée ce mois-là."/>}
+        <ChartEffectif as={as} annee={annee} curMonth={cur} selMonth={moisSel} onMonthClick={i=>setMoisSel(m=>m===i?null:i)}/>
+        {moisSel!=null&&<ListeCollabs titre={`Arrivées ${MOIS_LBL_AG[moisSel]} ${annee}`} items={as.listeArrivees[moisSel]} color="#5090FE" onPick={pick} cols={[{v:k=>k.agence||'—'},{v:k=>fmtDateFR(k.date_entree),w:100},{v:k=>(mode==='cdi'?k.partnerNom:k.responsable)||'—',w:150}]} vide="Aucune arrivée ce mois-là."/>}
       </>}
       {active==='inter'&&mode==='cdi'&&<>
         <ChartInter tauxM={ic.tauxM} tauxAnn={ic.tauxAnn} curMonth={cur} selMonth={moisSel!=null?moisSel:ic.idxAff} onMonthClick={i=>setMoisSel(m=>m===i?null:i)}/>
@@ -3769,16 +3833,23 @@ function CompteSidebar({ compte, contactComptes, contacts, missions, historique,
             <div className="text-xs text-neutral-200 italic">Aucune mission en 2026</div>
           )}
         </div>
-        {/* Barre d'onglets (scrollable sur mobile) */}
-        <div className="mobile-tabs flex gap-1 px-4 pb-2">
+        {/* Barre d'onglets (scrollable sur mobile) — tablist ARIA + navigation clavier ←/→/Début/Fin */}
+        <div role="tablist" aria-label={`Fiche ${compte.nom||'compte'}`} onKeyDown={e=>{
+            const i=TABS.findIndex(t=>t.key===activeTab); let j=null;
+            if(e.key==='ArrowRight') j=(i+1)%TABS.length;
+            else if(e.key==='ArrowLeft') j=(i-1+TABS.length)%TABS.length;
+            else if(e.key==='Home') j=0; else if(e.key==='End') j=TABS.length-1;
+            if(j==null) return; e.preventDefault(); setActiveTab(TABS[j].key);
+            const el=e.currentTarget.querySelector(`[data-onglet="${TABS[j].key}"]`); if(el) el.focus();
+          }} className="mobile-tabs flex gap-1 px-4 pb-2">
           {TABS.map(t=>(
-            <button key={t.key} onClick={()=>setActiveTab(t.key)} className={tabBtnCls(activeTab===t.key)}>{t.label}</button>
+            <button key={t.key} role="tab" id={`compte-tab-${t.key}`} data-onglet={t.key} aria-selected={activeTab===t.key} aria-controls="compte-panel" tabIndex={activeTab===t.key?0:-1} onClick={()=>setActiveTab(t.key)} className={tabBtnCls(activeTab===t.key)}>{t.label}</button>
           ))}
         </div>
       </div>
 
       {/* Zone contenu — scroll indépendant, animation à chaque changement d'onglet */}
-      <div key={activeTab} className="flex-1 overflow-y-auto p-4 text-sm tab-content">
+      <div key={activeTab} role="tabpanel" id="compte-panel" aria-labelledby={`compte-tab-${activeTab}`} tabIndex={0} className="flex-1 overflow-y-auto p-4 text-sm tab-content focus:outline-none">
 
         {activeTab==='consultants' && (
           consultantsMission.length===0 ? (
