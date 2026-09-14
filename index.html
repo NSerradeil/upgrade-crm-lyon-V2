@@ -3137,6 +3137,10 @@ function CollabDetail({ collab: k, missions, missionPeriods, histMissions, conta
   const [savingPartner,setSavingPartner]=useState(false);
   const m=k.missionEnCours;
   const periods=m?(missionPeriods||[]).filter(p=>p.mission_id===m.id):[];
+  // Historique : toutes ses autres missions, la plus récente d'abord.
+  const autresMissions=(missions||[]).filter(x=>x.contact_consultant_id===k.id&&(!m||x.id!==m.id))
+    .sort((a,b)=>((b.date_fin_mission||'')+'').localeCompare((a.date_fin_mission||'')+''));
+  const doublonEnCours=(missions||[]).filter(x=>x.contact_consultant_id===k.id&&x.statut==='En cours').length>1;
   const tabBtn=id=>`px-3 py-1.5 text-xs font-bold uppercase tracking-wider border-b-2 ${sub===id?'border-midnight text-midnight':'border-transparent text-slate hover:text-carbon'}`;
   // Sous-onglets accessibles : navigation clavier ←/→/Début/Fin, comme un vrai tablist ARIA.
   const onglets=['mission'].concat(k.isCdi?['interco']:[]).concat(['infos']);
@@ -3204,11 +3208,29 @@ function CollabDetail({ collab: k, missions, missionPeriods, histMissions, conta
         <Row l="Marge" v={<><MargeCell m={k.marge}/>{k.tjm!=null&&k.cjm!=null&&<span className="text-slate text-xs ml-2">{fmtEur0(k.tjm-k.cjm)} / j</span>}</>}/>
         {m.responsable&&<Row l="Commercial" v={m.responsable}/>}
         {periods.length>0&&<div><div className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate mb-1">Périodes</div>{periods.map(p=><div key={p.id} className="text-xs text-slate py-0.5">{p.label||'Période'} · {fmtDateFR(p.debut)} → {fmtDateFR(p.fin)}{p.tjm_vente?` · TJM ${fmtEur0(p.tjm_vente)}`:''}</div>)}</div>}
+        {autresMissions.length>0&&<div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate mb-1 mt-3">Missions précédentes ({autresMissions.length})</div>
+          {autresMissions.map(x=><div key={x.id} onClick={()=>setOpenMission(x)} className="flex items-center gap-2 text-xs py-1.5 border-b border-neutral-50 cursor-pointer hover:bg-lemon-20">
+            <span className="font-medium text-midnight flex-1 truncate">{x.client||'—'}{x.projet?<span className="text-slate font-normal"> · {x.projet}</span>:null}</span>
+            <span className="text-slate whitespace-nowrap">{fmtDateFR(x.date_debut_mission)} → {fmtDateFR(x.date_fin_mission)}</span>
+            {x.tjm!=null&&<span className="text-slate w-14 text-right">{fmtEur0(x.tjm)}</span>}
+            <MissionStatutBadge statut={x.statut}/>
+          </div>)}
+        </div>}
+        {doublonEnCours&&<div className="text-xs text-coral-100 font-medium mt-2">⚠️ Deux missions « En cours » en même temps — une des deux est sans doute à clôturer.</div>}
         <div className="flex gap-2 flex-wrap">
           <button onClick={()=>setOpenMission(m)} className="px-3 py-1.5 text-xs font-medium border-2 border-neutral-200 text-carbon hover:border-midnight">Ouvrir la mission →</button>
           {peutPositionner&&<button onClick={()=>setShowPos(true)} className="px-3 py-1.5 text-xs font-medium border-2 border-neutral-200 text-carbon hover:border-midnight">Positionner sur un besoin</button>}
         </div>
       </div>:<div className="space-y-3">
+        {autresMissions.length>0&&<div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate mb-1">Missions précédentes ({autresMissions.length})</div>
+          {autresMissions.map(x=><div key={x.id} onClick={()=>setOpenMission(x)} className="flex items-center gap-2 text-xs py-1.5 border-b border-neutral-50 cursor-pointer hover:bg-lemon-20">
+            <span className="font-medium text-midnight flex-1 truncate">{x.client||'—'}</span>
+            <span className="text-slate whitespace-nowrap">{fmtDateFR(x.date_debut_mission)} → {fmtDateFR(x.date_fin_mission)}</span>
+            <MissionStatutBadge statut={x.statut}/>
+          </div>)}
+        </div>}
         <div className="text-sm text-slate italic">{k.etat==='arret_maladie'||k.etat==='conge'?AgenceCalc.etatDispo(k).label:(k.isCdi?'En intercontrat · '+AgenceCalc.fmtJ(k.intercoAnnee)+' j cumulés cette année':'Sans mission en cours')}</div>
         {peutPositionner&&<button onClick={()=>setShowPos(true)} className="px-3 py-1.5 text-xs font-medium bg-midnight text-white hover:bg-carbon btn-brutal">Positionner sur un besoin</button>}
       </div>)}</Panneau>}
