@@ -46,6 +46,18 @@ tailwind.config = {
   .kpi-hover { transition: transform 120ms ease, box-shadow 120ms ease; }
   .kpi-hover:not([data-active="true"]):hover { transform: translateY(-2px); }
 
+  /* Répartition : glisser-déposer. Le drag natif ne donne aucun retour visuel —
+     on ajoute le décollage de la ligne prise et l'ouverture de la cible. */
+  .rp-row { transition: opacity 120ms ease, transform 120ms ease, background-color 120ms ease; }
+  .rp-row[data-pris="1"] { opacity: .3; transform: scale(.985); }
+  .rp-list[data-drag="1"] .rp-row:not([data-pris="1"]) { opacity: .55; }
+  .rp-partner { transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease; }
+  .rp-partner[data-cible="1"] { transform: translateX(4px); box-shadow: inset 5px 0 0 #FFE500, 3px 3px 0 #1C1F35; }
+  .rp-partner[data-cible="1"] .rp-n { transform: scale(1.35); }
+  .rp-n { display: inline-block; transition: transform 120ms ease; }
+  .rp-ghost { position: fixed; top: -1000px; left: -1000px; padding: 6px 10px; background: #1C1F35;
+    color: #fff; font: 700 13px 'Outfit', sans-serif; box-shadow: 3px 3px 0 #FFE500; white-space: nowrap; }
+
   .btn-brutal { box-shadow: 3px 3px 0 #FF3D2E; transition: transform 80ms, box-shadow 80ms; }
   .btn-brutal:hover { transform: translate(1px,1px); box-shadow: 2px 2px 0 #FF3D2E; }
   .btn-brutal:active { transform: translate(3px,3px); box-shadow: 0 0 0 #FF3D2E; }
@@ -2814,6 +2826,18 @@ const fmtEur0 = n => n==null?'—':Math.round(n).toLocaleString('fr-FR')+' €';
 const fmtDateFR = iso => iso?AgenceCalc.fmtJJMMAAAA(iso):'—';
 const MOIS_LBL_AG=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'];
 // Barres mensuelles génériques (même rendu que ChartMissions : barres pleines, mois courant souligné). series: [{values:number[12], color, label}], line?: number[12]
+// Vignette suivie par le curseur pendant un glisser : le fantôme natif est une capture
+// de la ligne entière, illisible. On pose une étiquette au nom, supprimée au tour suivant.
+function ghostDrag(e, texte) {
+  try {
+    const g = document.createElement('div');
+    g.className = 'rp-ghost'; g.textContent = texte;
+    document.body.appendChild(g);
+    e.dataTransfer.setDragImage(g, 10, 14);
+    setTimeout(() => g.remove(), 0);
+  } catch (_) { /* setDragImage absent (Safari ancien) : fantôme natif, pas bloquant */ }
+}
+
 function RespBadge({ r }) {
   const d=AgenceCalc.RESPONSABILITES[r]; if(!d) return null;
   return <ColorBadge label={d.court} bg={d.bg} color={d.color}/>;
@@ -2852,10 +2876,11 @@ function RepartitionPartners({ contacts, allProfiles, missions, profile, onClose
   const Ligne=({c,coche})=>{
     const tri=triDe(c);
     const sansCible=sel===''; // vue « sans partner » : rien à cocher, on propose un menu
-    return <div draggable={busy!==c.id} onDragStart={e=>{e.dataTransfer.setData('text/plain',String(c.id));e.dataTransfer.effectAllowed='move';setDrag(c.id);}} onDragEnd={()=>{setDrag(null);setSurvol(null);}}
+    return <div draggable={busy!==c.id} data-pris={drag===c.id?'1':'0'}
+      onDragStart={e=>{e.dataTransfer.setData('text/plain',String(c.id));e.dataTransfer.effectAllowed='move';ghostDrag(e,`${c.prenom} ${c.nom}`);setDrag(c.id);}}
+      onDragEnd={()=>{setDrag(null);setSurvol(null);}}
       onClick={()=>{if(busy===c.id||sansCible)return;affecter(c,coche?'':sel);}}
-      title={sansCible?'Fais-moi glisser sur un partner, ou utilise le menu à droite':'Clique pour rattacher ou détacher · ou fais-moi glisser sur un autre partner'}
-      className={`flex items-center gap-2 px-2 py-2 border-b border-neutral-50 hover:bg-lemon-20 text-sm ${drag===c.id?'opacity-40':''} ${sansCible?'cursor-grab':'cursor-pointer'}`}>
+      className={`rp-row flex items-center gap-2 px-2 py-2 border-b border-neutral-50 hover:bg-lemon-20 text-sm ${sansCible?'cursor-grab active:cursor-grabbing':'cursor-pointer'}`}>
       {sansCible
         ? <span style={{width:16,flexShrink:0,color:'#A4A6AB',fontSize:14,lineHeight:'16px',textAlign:'center',cursor:'grab'}} aria-hidden="true">{busy===c.id?'…':'⠿'}</span>
         : <span style={{width:16,height:16,flexShrink:0,border:'2px solid '+(coche?'#1C1F35':'#D2D2D5'),background:coche?'#1C1F35':'#fff',color:'#fff',fontSize:11,fontWeight:900,lineHeight:'12px',textAlign:'center'}}>{busy===c.id?'…':(coche?'✓':'')}</span>}
@@ -2891,25 +2916,28 @@ function RepartitionPartners({ contacts, allProfiles, missions, profile, onClose
               onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect='move';if(survol!==p.trigramme)setSurvol(p.trigramme);}}
               onDragLeave={()=>setSurvol(s=>s===p.trigramme?null:s)}
               onDrop={e=>{e.preventDefault();const id=parseInt(e.dataTransfer.getData('text/plain'),10);const c=cdis.find(x=>x.id===id);setSurvol(null);setDrag(null);if(c&&triDe(c)!==p.trigramme)affecter(c,p.trigramme);}}
-              style={cible?{outline:'2px dashed #1C1F35',outlineOffset:-3,background:'#FFF9C0'}:{}}
-              className={`w-full text-left px-4 py-2.5 flex items-center gap-2 border-b border-neutral-50 ${on&&!cible?'bg-midnight text-white':'hover:bg-lemon-20'}`}>
+              data-cible={cible?'1':'0'}
+              style={cible?{background:'#FFF9C0',color:'#1C1F35'}:{}}
+              className={`rp-partner w-full text-left px-4 py-2.5 flex items-center gap-2 border-b border-neutral-50 ${on&&!cible?'bg-midnight text-white':'hover:bg-lemon-20'}`}>
               <span className="flex-1 truncate text-sm font-medium">{p.nom}</span>
               {p.source==='commercial'&&<span className={`text-[9px] uppercase ${on?'text-neutral-300':'text-neutral-300'}`}>com.</span>}
-              <span className={`text-sm font-bold ${n===0?'text-coral-100':(on?'text-white':'text-midnight')}`}>{n===0?'⚠ 0':n}</span>
+              <span className={`rp-n text-sm font-bold ${cible?'text-midnight':(n===0?'text-coral-100':(on?'text-white':'text-midnight'))}`}>{cible?n+1:(n===0?'⚠ 0':n)}</span>
             </button>;})}
           {sansPartner.length>0&&<button onClick={()=>setSel('')}
             onDragOver={e=>{e.preventDefault();if(survol!=='__sans')setSurvol('__sans');}}
             onDragLeave={()=>setSurvol(s=>s==='__sans'?null:s)}
             onDrop={e=>{e.preventDefault();const id=parseInt(e.dataTransfer.getData('text/plain'),10);const c=cdis.find(x=>x.id===id);setSurvol(null);setDrag(null);if(c&&triDe(c))affecter(c,'');}}
-            style={survol==='__sans'?{outline:'2px dashed #FF3D2E',outlineOffset:-3,background:'#F5A1A6'}:{}}
-            className={`w-full text-left px-4 py-2.5 flex items-center gap-2 border-b border-neutral-50 ${sel===''&&survol!=='__sans'?'bg-coral-100 text-white':'hover:bg-coral-20'}`}>
+            data-cible={survol==='__sans'?'1':'0'}
+            style={survol==='__sans'?{background:'#F5A1A6',color:'#1C1F35'}:{}}
+            className={`rp-partner w-full text-left px-4 py-2.5 flex items-center gap-2 border-b border-neutral-50 ${sel===''&&survol!=='__sans'?'bg-coral-100 text-white':'hover:bg-coral-20'}`}>
             <span className="flex-1 truncate text-sm font-bold">Sans partner</span><span className="text-sm font-bold">{sansPartner.length}</span>
           </button>}
         </div>
         {/* Colonne droite : les consultants du partner choisi */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="rp-list flex-1 overflow-y-auto" data-drag={drag?'1':'0'}>
           <div className="px-4 py-3 border-b-2 border-neutral-100 sticky top-0 bg-white z-10">
             <div className="font-bold text-midnight text-sm mb-2">{sel===''?'Consultants sans partner':`Consultants de ${nomDe(sel)}`} <span className="text-slate font-normal">· {aMoi.length}</span></div>
+            <div className="text-[11px] text-slate mb-2">{sel===''?'Attrape ⠿ et dépose sur un partner à gauche, ou passe par le menu « Affecter à… ».':'Clique pour détacher · glisse vers un autre partner pour transférer.'}</div>
             {sel!==''&&<input type="text" value={q} onChange={e=>setQ(e.target.value)} placeholder="Ajouter quelqu'un : tape un nom…" className="w-full px-3 py-2 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight"/>}
           </div>
           {aMoi.map(c=><Ligne key={c.id} c={c} coche={true}/>)}
