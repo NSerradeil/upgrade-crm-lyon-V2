@@ -115,9 +115,22 @@ des collaborateurs : ils sont exclus (statut ≠ CONSULTANT_STATUTS).
 - Ligne 2 (filtres) : recherche texte · `select` Agence (Lyon/Paris/Bordeaux/Nantes/Toutes) ·
   `select` Responsable (partner ou commercial selon l'onglet) · chips d'état multi-sélection :
   `En mission` / `Dispo ≤ 60 j` / `Intercontrat` / `Arrêt & congés` · toggle « Sortis » (off par défaut).
-- Ligne 3 : **bandeau KPI** (cartes brutalistes type `PROTO_TDB_multikpi`, 6 tuiles, recalculées sur le
-  périmètre filtré) : Effectif · CJM moyen · TJM moyen · Marge moyenne (MCV) · Dispos ≤ 60 j (nb, cliquable
-  = applique le chip) · Jours interco cumulés année (CDI) / Fins ≤ 60 j (ST).
+- Ligne 3 : **4 widgets KPI cliquables « dalle + détail »**, exactement le composant des cartes du
+  Tableau de bord Missions (carte blanche, liseré gauche couleur, active = fond midnight + ombre portée ;
+  clic = ouvre la zone détail dessous, re-clic sur une autre dalle = change la vue). Recalculés sur le
+  périmètre filtré (agence / partner / chips). Ce sont les chiffres que Pierre lit dans l'Excel (col. A =
+  compteur, lignes de totaux « COLLAB Régies » / « SOUS-TRAITANTS » = CJ/TJM/MCV moyens) :
+  | Dalle | Valeur | Sous-titre | Détail (zone sous les dalles) |
+  |---|---|---|---|
+  | **EFFECTIF** (vert) | nb collaborateurs actifs (CDI, ou free/ST dans l'onglet ST) | « X en mission · Y dispo » | **Arrivées et sorties par mois de l'année en cours** : barres mensuelles (arrivées en jade, sorties en coral), effectif cumulé en fin de mois en ligne ; liste des arrivées du mois cliqué (nom, agence, date, partner). |
+  | **INTERCONTRAT** (jaune) — onglet ST : **SANS MISSION** (gris) | nb CDI en interco le mois affiché (M-1 si mois courant non saisi, logique TDB actuelle) | « Xj YTD · coût · prénoms » + badge MALUS ≥ 8 % / Attention ≥ 5 % | **Le widget existant du TDB, déplacé tel quel** : `ChartInter` (taux mensuel, objectif 5 %, malus 8 %, trimestres) + liste des consultants en interco du mois cliqué (jours, coût, clic → fiche). En onglet ST : liste des free sans mission. |
+  | **TJM MOYEN** (bleu) | TJM moyen des missions en cours du périmètre | « CJM moyen X € · Y missions » | **TJM moyen par mois de l'année** (missions actives chaque mois, ligne) + **répartition par tranche** (barres : < 500 · 500-600 · 600-700 · > 700 €) + **par agence** quand « Toutes agences ». Clic sur une tranche → liste des collaborateurs concernés. |
+  | **MARGE MOYENNE** (rose) | MCV moyenne = moyenne des (TJM−CJM)/TJM | « X % · seuil 30 % » | **Répartition par tranche** (barres : < 20 % rouge · 20-30 % orange · 30-40 % · > 40 % jade) + **liste triée des collaborateurs sous 30 %** (nom, client, TJM, CJM, marge, clic → volet) : c'est la liste d'action commerciale (renégocier / repositionner). Marge moyenne par mois de l'année en ligne. |
+  Le détail TJM / Marge est une proposition (Nicolas n'avait pas d'avis) ; à ajuster après la 1re recette.
+- **Conséquence sur l'onglet Missions (TDB)** : la dalle INTERCONTRAT, `ChartInter` et la liste interco
+  **quittent le TDB** (qui garde EN MISSION · CA YTD · MARGE YTD). Le chargement `interco_imputations`
+  spécifique au TDB est supprimé ; l'onglet Agence utilise les imputations chargées par `fetchAll`.
+  Le composant carte est extrait en `KpiCards({cards, active, onSelect})` partagé par les deux onglets.
 
 ### 5.2 Tableau CDI (desktop)
 Colonnes triables (`thCls` + `SortIcon`) : **Nom Prénom** · Agence · Partner · Entrée · Salaire · CJM ·
@@ -237,8 +250,9 @@ feuille `TACE`. Blocs : « Régies » (CDI), « Forfait » (CDI), « (Freelance�
 
 ## 11. Fichiers touchés
 - `index.html` : `TABS`/`TAB_COLORS`, liste blanche partner, `CONTACTS` select (`fetchAll`), nouveau bloc
-  `tab==='agence'` (`AgenceView`, `CollabDetail`, `AgenceKpis`, `exportEffectifs`), section Collaborateur dans
-  `ContactEditModal`/`AddContactModal`, routine `ensureAlertesDispo`.
+  `tab==='agence'` (`TabAgence`, `CollabDetail`, `KpiCards` partagé + dalles `ChartEffectif`/`ChartInter`/
+  `ChartTjm`/`ChartMarge`, `exportEffectifs`), `TabTDB` allégé (dalle interco retirée), section Collaborateur
+  dans `ContactEditModal`/`AddContactModal`, routine `ensureAlertesDispo`.
 - `db/20_agence.sql` (nouveau).
 - `bin/crm-import-collab.py` (repo Jules, nouveau).
 - `DEPLOY.md` : ligne migration 20.
