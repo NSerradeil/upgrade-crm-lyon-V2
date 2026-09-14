@@ -2991,6 +2991,26 @@ function ChartEffectif({ as, annee, curMonth, selMonth, onMonthClick }) {
     </div>
   </div>;
 }
+// Frise compacte d'évolution : pour une moyenne quasi stable, un grand graphe ment par omission
+// (il fait passer du bruit pour du signal). On donne l'amplitude, la tendance et une micro-courbe.
+function Evolution({ valeurs, curMonth, fmt, couleur, libelle }) {
+  const pts=valeurs.map((v,i)=>({v,i})).filter(x=>x.v!=null&&x.i<=curMonth);
+  if(pts.length<2) return null;
+  const vs=pts.map(x=>x.v), mn=Math.min(...vs), mx=Math.max(...vs);
+  const premier=pts[0], dernier=pts[pts.length-1], d=dernier.v-premier.v;
+  const amp=mx?Math.abs(mx-mn)/mx:0;
+  const y=v=>mx===mn?50:100-((v-mn)/(mx-mn))*100;
+  return <div className="flex items-center gap-4 flex-wrap mb-4 pb-3 border-b border-neutral-100">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{width:120,height:32,flexShrink:0}}>
+      <polyline points={pts.map(x=>`${(x.i/Math.max(1,curMonth))*100},${y(x.v)}`).join(' ')} fill="none" stroke={couleur} strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round"/>
+    </svg>
+    <div className="text-xs text-slate">
+      <span className="font-bold text-midnight">{libelle}</span> · de {fmt(premier.v)} en {MOIS_LBL_AG[premier.i].toLowerCase()} à <span className="font-bold text-midnight">{fmt(dernier.v)}</span> en {MOIS_LBL_AG[dernier.i].toLowerCase()}
+      {' — '}{amp<0.03?'stable sur l\'année':(d>0?`en hausse de ${fmt(Math.abs(d))}`:`en baisse de ${fmt(Math.abs(d))}`)}
+      <span className="text-neutral-300"> · amplitude {fmt(mn)} → {fmt(mx)}</span>
+    </div>
+  </div>;
+}
 function BarresMensuelles({ series, line, curMonth, selMonth, onMonthClick, fmt=v=>String(v) }) {
   const max=Math.max(1,...series.flatMap(s=>s.values),...(line||[]).filter(v=>v!=null));
   return <div>
@@ -3062,9 +3082,8 @@ function AgenceKpiDalles({ collabs, mode, missions, intercos, contactMap, horsEf
       </>}
       {active==='inter'&&mode==='st'&&<ListeCollabs titre="Hors effectif — free / ST sans mission en cours" items={horsEffectif||[]} color="#A4A6AB" onPick={pick} cols={[{v:k=>k.typeLabel},{v:k=>k.agence||'—'},{v:k=>k.responsable||'—',w:150}]} vide="Tous les sous-traitants sont en mission."/>}
       {active==='tjm'&&<>
-        <div className="text-sm font-bold text-midnight mb-3">TJM moyen par mois {annee} (missions actives)</div>
-        <BarresMensuelles series={[{values:tm.tjm.map(v=>v||0),color:'#4A7FE5',label:'TJM moyen'}]} curMonth={cur} fmt={eur}/>
-        <div className="text-sm font-bold text-midnight mt-5 mb-2">Répartition par tranche de TJM</div>
+        <Evolution valeurs={tm.tjm} curMonth={cur} fmt={eur} couleur="#4A7FE5" libelle={`TJM moyen ${annee}`}/>
+        <div className="text-sm font-bold text-midnight mb-2">Répartition par tranche de TJM</div>
         <Tranches tranches={tr} sel={trancheSel} onSel={setTrancheSel}/>
         {trancheSel!=null&&<ListeCollabs titre={`TJM ${tr[trancheSel].label}`} items={tr[trancheSel].items} color="#4A7FE5" onPick={pick} cols={[{v:k=>k.missionEnCours?.client||'—',w:140},{v:k=>eur(k.tjm),w:70,right:true},{v:k=>pct(k.marge),w:60,right:true,color:k=>AgenceCalc.margeStyle(k.marge).color}]}/>}
         {(()=>{const parAgence=[...new Set(act.map(x=>x.agence).filter(Boolean))]; if(parAgence.length<=1) return null;
@@ -3075,9 +3094,8 @@ function AgenceKpiDalles({ collabs, mode, missions, intercos, contactMap, horsEf
           </div>;})()}
       </>}
       {active==='marge'&&<>
-        <div className="text-sm font-bold text-midnight mb-3">Marge moyenne par mois {annee} (missions actives)</div>
-        <BarresMensuelles series={[{values:tm.marge.map(v=>v==null?0:Math.round(v*100)),color:'#FF66FF',label:'marge %'}]} curMonth={cur} fmt={v=>v+' %'}/>
-        <div className="text-sm font-bold text-midnight mt-5 mb-2">Répartition par tranche de marge</div>
+        <Evolution valeurs={tm.marge} curMonth={cur} fmt={v=>Math.round(v*1000)/10+' %'} couleur="#FF66FF" libelle={`Marge moyenne ${annee}`}/>
+        <div className="text-sm font-bold text-midnight mb-2">Répartition par tranche de marge</div>
         <Tranches tranches={tr} sel={trancheSel} onSel={setTrancheSel}/>
         <ListeCollabs titre={trancheSel!=null?`Marge ${tr[trancheSel].label}`:'Sous le seuil de 30 % — à renégocier / repositionner'} items={trancheSel!=null?tr[trancheSel].items:act.filter(x=>x.marge!=null&&x.marge<0.30).sort((a,b)=>a.marge-b.marge)} color={trancheSel!=null?(tr[trancheSel].color==='#1C1F35'?'#E4E4E6':tr[trancheSel].color):'#F97316'} onPick={pick} cols={[{v:k=>k.missionEnCours?.client||'—',w:140},{v:k=>eur(k.tjm),w:70,right:true},{v:k=>eur(k.cjm),w:70,right:true},{v:k=>pct(k.marge),w:60,right:true,color:k=>AgenceCalc.margeStyle(k.marge).color}]} vide="Personne sous 30 %. 👌"/>
       </>}
