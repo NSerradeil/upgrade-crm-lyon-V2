@@ -3251,12 +3251,12 @@ async function exportEffectifs(rows,mode,agence,setBusy){
   try{
     const XLSX=await loadXlsx();
     const d=iso=>iso?new Date(iso.slice(0,10)+'T00:00:00'):null;
-    const cdi=mode==='cdi';
+    const cdi=mode==='cdi', tous=mode==='tous';
     const head=cdi?['Nom Prénom','Agence','Partner','Entrée','Sortie','Salaire brut','CJM','Client','Fin mission','TJM','MCV','Dispo (j)','Interco cumulé (j)','Statut']
-                  :['Nom Prénom','Type','Agence','Commercial','Entrée','Sortie','Client','Fin mission','CJM','TJM','MCV','Fin (j)','Statut'];
+                  :['Nom Prénom','Type','Agence',tous?'Responsable':'Commercial','Entrée','Sortie','Client','Fin mission','CJM','TJM','MCV','Fin (j)','Statut'];
     const line=k=>{const m=k.missionEnCours||{};const st=AgenceCalc.etatDispo(k).label;return cdi
       ?[`${k.nom||''} ${k.prenom||''}`.trim(),k.agence||'',k.partnerNom||'',d(k.date_entree),d(k.date_sortie),k.salaire_annuel!=null?Number(k.salaire_annuel):null,k.cjm,m.client||'',d(m.date_fin_mission),k.tjm,k.marge,k.joursAvantDispo,k.intercoAnnee,st]
-      :[`${k.nom||''} ${k.prenom||''}`.trim(),k.typeLabel,k.agence||'',k.responsable||'',d(k.date_entree),d(k.date_sortie),m.client||'',d(m.date_fin_mission),k.cjm,k.tjm,k.marge,k.joursAvantDispo,st];};
+      :[`${k.nom||''} ${k.prenom||''}`.trim(),k.typeLabel,k.agence||'',(tous?(k.isCdi?k.partnerNom:k.responsable):k.responsable)||'',d(k.date_entree),d(k.date_sortie),m.client||'',d(m.date_fin_mission),k.cjm,k.tjm,k.marge,k.joursAvantDispo,st];};
     const kp=AgenceCalc.computeKpis(rows,mode);
     const total=cdi?[`COLLAB CDI actifs (${kp.effectif})`,'','','','','',kp.cjmMoyen,'','',kp.tjmMoyen,kp.margeMoyenne,'',kp.intercoAnnee,'']
                    :[`${tous?'EFFECTIF TOTAL':'SOUS-TRAITANTS'} actifs (${kp.effectif})`,'','','','','','','',kp.cjmMoyen,kp.tjmMoyen,kp.margeMoyenne,'',''];
