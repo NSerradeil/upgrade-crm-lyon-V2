@@ -2996,8 +2996,6 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
   const [filterAgence,setFilterAgence]=useState(isPartner?'':(profile.agence||''));
   const [filterResp,setFilterResp]=useState('');
   const [etats,setEtats]=useState(new Set());           // 'en_mission' | 'dispo60' | 'intercontrat' | 'rh'
-  const [showSortis,setShowSortis]=useState(false);
-  const [showHorsEffectif,setShowHorsEffectif]=useState(false);   // free/ST sans mission : hors effectif (règle Nicolas 14/09)
   const [sortCol,setSortCol]=useState('dispo'); const [sortDir,setSortDir]=useState('asc');
   const [selected,setSelected]=useState(null);
   const [showAdd,setShowAdd]=useState(false);
@@ -3019,13 +3017,15 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
   const filteredSorted=useMemo(()=>{
     const q=norm(search);
     const rows=collabs.filter(k=>{
-      if(!showSortis&&k.sorti) return false;
-      // Un freelance / sous-traitant sans mission en cours ne fait pas partie des effectifs (règle Nicolas 14/09,
-      // iso fichier Pierre). Les CDI, eux, restent comptés même en intercontrat.
-      if(mode==='st'&&!showHorsEffectif&&k.etat==='sans_mission') return false;
+      // Deux puces « dévoilent » au lieu de filtrer : Sorti·es, et (en vue ST) Sans mission — un freelance
+      // ou sous-traitant sans mission en cours n'est pas dans l'effectif (règle Nicolas 14/09, iso fichier
+      // Pierre). Les CDI, eux, restent comptés même en intercontrat.
+      if(!etats.has('sortis')&&k.sorti) return false;
+      if(mode==='st'&&!etats.has('intercontrat')&&k.etat==='sans_mission') return false;
       if(filterAgence&&k.agence!==filterAgence) return false;
       if(filterResp&&(mode==='cdi'?k.partnerNom:k.responsable)!==filterResp) return false;
-      if(etats.size){
+      const filtres=[...etats].filter(e=>e!=='sortis');   // « sorti·es » dévoile, ne restreint pas
+      if(filtres.length){
         const isDispo60=k.etat==='en_mission'&&k.joursAvantDispo!=null&&k.joursAvantDispo<=60;
         const isRh=k.etat==='arret_maladie'||k.etat==='conge';
         const ok=(etats.has('en_mission')&&k.etat==='en_mission')||(etats.has('dispo60')&&isDispo60)||(etats.has('intercontrat')&&(k.etat==='intercontrat'||k.etat==='sans_mission'))||(etats.has('rh')&&isRh);
@@ -3057,17 +3057,20 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
     };
     rows.sort((a,b)=>{const va=key(a),vb=key(b); if(va<vb) return sortDir==='asc'?-1:1; if(va>vb) return sortDir==='asc'?1:-1; return 0;});
     return rows;
-  },[collabs,search,filterAgence,filterResp,etats,showSortis,showHorsEffectif,sortCol,sortDir,mode]);
+  },[collabs,search,filterAgence,filterResp,etats,sortCol,sortDir,mode]);
   const horsEffectif=useMemo(()=>mode!=='st'?[]:collabs.filter(k=>!k.sorti&&k.etat==='sans_mission'&&(!filterAgence||k.agence===filterAgence)&&(!filterResp||k.responsable===filterResp)),[collabs,mode,filterAgence,filterResp]);
   // Taux d'interco = calcul historique : tous les CDI du périmètre, SORTIS COMPRIS (leurs jours passés comptent).
   const cdisPourInterco=useMemo(()=>mode!=='cdi'?[]:collabs.filter(k=>(!filterAgence||k.agence===filterAgence)&&(!filterResp||k.partnerNom===filterResp)),[collabs,mode,filterAgence,filterResp]);
   const PAGE_SIZE=(typeof window!=='undefined'&&window.innerWidth<768)?50:200;
   const [visibleCount,setVisibleCount]=useState(PAGE_SIZE);
-  useEffect(()=>{setVisibleCount(PAGE_SIZE);},[search,filterAgence,filterResp,etats,showSortis,showHorsEffectif,sortCol,sortDir,mode]);
+  useEffect(()=>{setVisibleCount(PAGE_SIZE);},[search,filterAgence,filterResp,etats,sortCol,sortDir,mode]);
   const visible=filteredSorted.slice(0,visibleCount);
   const thCls="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-azure-100 whitespace-nowrap";
-  const chip=(id,label)=><button key={id} onClick={()=>toggleEtat(id)} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:etats.has(id)?'0':'2px solid #E4E4E6',background:etats.has(id)?'#1C1F35':'#fff',color:etats.has(id)?'#fff':'#1C1F35',cursor:'pointer',borderRadius:0,textTransform:'uppercase',boxShadow:etats.has(id)?'3px 3px 0 #FFE500':'none',transition:'all 120ms'}}>{label}</button>;
+  // `reveal` = la puce dévoile des lignes masquées par défaut (sorti·es, free sans mission) : bordure pointillée
+  // pour la distinguer d'un simple filtre, même langage brutaliste que « Mes contacts » dans Comptes & Contacts.
+  const chip=(id,label,reveal)=><button key={id} onClick={()=>toggleEtat(id)} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:etats.has(id)?'0':(reveal?'2px dashed #A4A6AB':'2px solid #E4E4E6'),background:etats.has(id)?'#1C1F35':'#fff',color:etats.has(id)?'#fff':(reveal?'#565861':'#1C1F35'),cursor:'pointer',borderRadius:0,textTransform:'uppercase',boxShadow:etats.has(id)?'3px 3px 0 #FFE500':'none',transition:'all 120ms'}}>{label}</button>;
   const idsMissionActive=useMemo(()=>new Set((missions||[]).filter(m=>m.statut==='En cours'||m.statut==='New').map(m=>m.contact_consultant_id)),[missions]);
+  const nbSortis=useMemo(()=>collabs.filter(k=>k.sorti&&(!filterAgence||k.agence===filterAgence)&&(!filterResp||(mode==='cdi'?k.partnerNom:k.responsable)===filterResp)).length,[collabs,filterAgence,filterResp,mode]);
   const nbCdi=contacts.filter(c=>AgenceCalc.CDI_STATUTS.includes(c.statut)&&!(c.date_sortie&&c.date_sortie<=TODAY)).length;
   const nbSt=contacts.filter(c=>AgenceCalc.ST_STATUTS.includes(c.statut)&&!(c.date_sortie&&c.date_sortie<=TODAY)&&idsMissionActive.has(c.id)).length;
   const missionLabel=k=>k.missionEnCours?<><div className="font-medium text-midnight">{k.missionEnCours.client||'—'}</div>{k.missionEnCours.date_fin_mission&&<div className="text-xs text-neutral-300">fin {AgenceCalc.fmtJJMM(k.missionEnCours.date_fin_mission)}</div>}</>:<span className="text-neutral-300">—</span>;
@@ -3089,9 +3092,9 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
         <input type="text" placeholder="Rechercher (nom, client, agence…)" value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-[140px] sm:min-w-64 px-3 sm:px-4 py-2 border rounded-lg text-sm focus:outline-none focus:border-midnight"/>
         {!isPartner&&<select value={filterAgence} onChange={e=>{setFilterAgence(e.target.value);setFilterResp('');}} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none"><option value="">Toutes agences</option>{agences.map(a=><option key={a} value={a}>{a}</option>)}</select>}
         <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none hidden sm:block"><option value="">{mode==='cdi'?'Tous partners':'Tous commerciaux'}</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}</select>
-        {chip('en_mission','En mission')}{chip('dispo60','Dispo ≤ 60 j')}{chip('intercontrat',mode==='cdi'?'Intercontrat':'Sans mission')}{chip('rh','Arrêt & congés')}
-        <label className="text-xs text-slate flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={showSortis} onChange={e=>setShowSortis(e.target.checked)}/> Sortis</label>
-        {mode==='st'&&<label className="text-xs text-slate flex items-center gap-1 cursor-pointer" title="Free / ST sans mission en cours : hors effectif"><input type="checkbox" checked={showHorsEffectif} onChange={e=>setShowHorsEffectif(e.target.checked)}/> Hors effectif ({horsEffectif.length})</label>}
+        {chip('en_mission','En mission')}{chip('dispo60',mode==='cdi'?'Dispo ≤ 60 j':'Fin ≤ 60 j')}{chip('intercontrat',mode==='cdi'?'Intercontrat':`Sans mission (${horsEffectif.length})`,mode==='st')}{chip('rh','Arrêt & congés')}
+        <span className="w-px h-5 bg-neutral-200 mx-0.5 hidden sm:block"/>
+        {chip('sortis',`Sorti·es (${nbSortis})`,true)}
       </div>
       <AgenceKpiDalles collabs={filteredSorted} mode={mode} missions={missionsFiltrees} intercos={intercos} contactMap={Object.fromEntries(contacts.map(c=>[c.id,c]))} horsEffectif={horsEffectif} cdisPourInterco={cdisPourInterco} onPick={k=>setSelected(k)} onNavToContact={onNavToContact}/>
       <div className="text-xs text-neutral-300 mb-2">{filteredSorted.length} collaborateur{filteredSorted.length>1?'s':''}</div>
