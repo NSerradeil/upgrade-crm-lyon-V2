@@ -158,22 +158,35 @@
     });
     return { tjm, marge };
   }
-  function intercoStats(cdiIds, intercos, annee, curMonthIdx, joursOuvresMoisFn) {
-    const rows = intercos.filter((r) => Number(r.annee) === annee && cdiIds.has(r.contact_consultant_id));
+  // Taux d'intercontrat HISTORIQUE (correction 14/09) : le dénominateur est l'effectif CDI réellement
+  // présent CHAQUE MOIS (date_entree / date_sortie), pas l'effectif d'aujourd'hui. Sans ça, marquer
+  // quelqu'un « sorti » effaçait rétroactivement ses jours d'interco et faussait le taux annuel (et donc
+  // l'objectif 5 % / malus 8 %). `cdis` doit contenir TOUS les CDI du périmètre, sortis compris.
+  function presentAuMois(c, annee, i) {
+    const deb = d0(c.date_entree) || '0000-01-01';
+    const fin = d0(c.date_sortie) || '9999-12-31';
+    const m = String(i + 1).padStart(2, '0');
+    const dernier = new Date(annee, i + 1, 0).getDate();
+    return deb <= `${annee}-${m}-${dernier}` && fin >= `${annee}-${m}-01`;
+  }
+  function intercoStats(cdis, intercos, annee, curMonthIdx, joursOuvresMoisFn) {
+    const list = Array.isArray(cdis) ? cdis : [...cdis].map((id) => ({ id }));   // compat : un Set d'ids reste accepté
+    const ids = new Set(list.map((c) => c.id));
+    const rows = intercos.filter((r) => Number(r.annee) === annee && ids.has(r.contact_consultant_id));
     const j = (i) => rows.filter((r) => r.mois === i + 1).reduce((s, r) => s + (parseFloat(r.jours) || 0), 0);
     const c = (i) => rows.filter((r) => r.mois === i + 1).reduce((s, r) => s + (parseFloat(r.jours) || 0) * (parseFloat(r.cjm_snapshot) || 0), 0);
-    const n = cdiIds.size;
-    const tauxM = Array.from({ length: 12 }, (_, i) => { const d = n * joursOuvresMoisFn(annee, i); return d > 0 ? (j(i) / d) * 100 : 0; });
+    const effectif = (i) => list.filter((x) => presentAuMois(x, annee, i)).length;
+    const tauxM = Array.from({ length: 12 }, (_, i) => { const d = effectif(i) * joursOuvresMoisFn(annee, i); return d > 0 ? (j(i) / d) * 100 : 0; });
     const joursYTD = Array.from({ length: curMonthIdx + 1 }, (_, i) => j(i)).reduce((a, b) => a + b, 0);
     const coutYTD = Array.from({ length: curMonthIdx + 1 }, (_, i) => c(i)).reduce((a, b) => a + b, 0);
-    const denom = n * Array.from({ length: curMonthIdx + 1 }, (_, i) => joursOuvresMoisFn(annee, i)).reduce((a, b) => a + b, 0);
+    const denom = Array.from({ length: curMonthIdx + 1 }, (_, i) => effectif(i) * joursOuvresMoisFn(annee, i)).reduce((a, b) => a + b, 0);
     const tauxAnn = denom > 0 ? (joursYTD / denom) * 100 : 0;
     const courantRempli = rows.some((r) => r.mois === curMonthIdx + 1 && (parseFloat(r.jours) || 0) > 0);
     const idxAff = (courantRempli || curMonthIdx === 0) ? curMonthIdx : curMonthIdx - 1;
     const parMois = (i) => rows.filter((r) => r.mois === i + 1 && (parseFloat(r.jours) || 0) > 0)
       .map((r) => ({ contact_consultant_id: r.contact_consultant_id, jours: parseFloat(r.jours) || 0, cout: (parseFloat(r.jours) || 0) * (parseFloat(r.cjm_snapshot) || 0) }))
       .sort((a, b) => b.jours - a.jours);
-    return { tauxM, tauxAnn, joursYTD, coutYTD, idxAff, fallbackM1: !courantRempli && idxAff !== curMonthIdx, nbCourant: parMois(idxAff).length, parMois };
+    return { tauxM, tauxAnn, joursYTD, coutYTD, idxAff, fallbackM1: !courantRempli && idxAff !== curMonthIdx, nbCourant: parMois(idxAff).length, parMois, effectif };
   }
 
   const AgenceCalc = { MANAGER_TRIGRAMMES, CDI_STATUTS, ST_STATUTS, CONSULTANT_STATUTS_AGENCE, ALERTE_PREFIX, COL,

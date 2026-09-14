@@ -2846,7 +2846,7 @@ function Tranches({ tranches, sel, onSel, fmtCount=n=>`${n}` }) {
     <span style={{width:40,textAlign:'right',fontSize:13,fontWeight:800}}>{fmtCount(t.items.length)}</span></div>)}</div>;
 }
 // Les 4 dalles + zone détail (spec §5.1). collabs = périmètre filtré ; cdiIds pour l'interco ; missions du périmètre pour TJM/marge par mois.
-function AgenceKpiDalles({ collabs, mode, missions, intercos, contactMap, horsEffectif, onPick, onNavToContact }) {
+function AgenceKpiDalles({ collabs, mode, missions, intercos, contactMap, horsEffectif, cdisPourInterco, onPick, onNavToContact }) {
   const [active,setActive]=useState(null);
   const [moisSel,setMoisSel]=useState(null);
   const [trancheSel,setTrancheSel]=useState(null);
@@ -2855,8 +2855,9 @@ function AgenceKpiDalles({ collabs, mode, missions, intercos, contactMap, horsEf
   const act=collabs.filter(k=>!k.sorti);
   const k=AgenceCalc.computeKpis(act,mode);
   const enMission=act.filter(x=>x.etat==='en_mission').length, dispo=act.filter(x=>x.etat==='intercontrat'||x.etat==='sans_mission').length;
-  const cdiIds=new Set(act.filter(x=>x.isCdi).map(x=>x.id));
-  const ic=mode==='cdi'?AgenceCalc.intercoStats(cdiIds,intercos||[],annee,cur,joursOuvresMois):null;
+  // Interco : on passe TOUS les CDI du périmètre (sortis compris) pour un taux historique mois par mois.
+  const cdisInterco=(cdisPourInterco&&cdisPourInterco.length)?cdisPourInterco:act.filter(x=>x.isCdi);
+  const ic=mode==='cdi'?AgenceCalc.intercoStats(cdisInterco,intercos||[],annee,cur,joursOuvresMois):null;
   const nomsInter=ic?ic.parMois(ic.idxAff).map(r=>{const c=contactMap[r.contact_consultant_id];return c?(c.prenom||c.nom||'').split(' ')[0]:'';}).filter(Boolean):[];
   const cards=[
     {id:'effectif',color:'#00C218',value:k.effectif,label:mode==='cdi'?'CONSULTANTS':'SOUS-TRAITANTS',sub:mode==='cdi'?`${enMission} en mission · ${dispo} en interco`:`${enMission} en mission · ${(horsEffectif||[]).length} hors effectif`},
@@ -3058,6 +3059,8 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
     return rows;
   },[collabs,search,filterAgence,filterResp,etats,showSortis,showHorsEffectif,sortCol,sortDir,mode]);
   const horsEffectif=useMemo(()=>mode!=='st'?[]:collabs.filter(k=>!k.sorti&&k.etat==='sans_mission'&&(!filterAgence||k.agence===filterAgence)&&(!filterResp||k.responsable===filterResp)),[collabs,mode,filterAgence,filterResp]);
+  // Taux d'interco = calcul historique : tous les CDI du périmètre, SORTIS COMPRIS (leurs jours passés comptent).
+  const cdisPourInterco=useMemo(()=>mode!=='cdi'?[]:collabs.filter(k=>(!filterAgence||k.agence===filterAgence)&&(!filterResp||k.partnerNom===filterResp)),[collabs,mode,filterAgence,filterResp]);
   const PAGE_SIZE=(typeof window!=='undefined'&&window.innerWidth<768)?50:200;
   const [visibleCount,setVisibleCount]=useState(PAGE_SIZE);
   useEffect(()=>{setVisibleCount(PAGE_SIZE);},[search,filterAgence,filterResp,etats,showSortis,showHorsEffectif,sortCol,sortDir,mode]);
@@ -3090,7 +3093,7 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
         <label className="text-xs text-slate flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={showSortis} onChange={e=>setShowSortis(e.target.checked)}/> Sortis</label>
         {mode==='st'&&<label className="text-xs text-slate flex items-center gap-1 cursor-pointer" title="Free / ST sans mission en cours : hors effectif"><input type="checkbox" checked={showHorsEffectif} onChange={e=>setShowHorsEffectif(e.target.checked)}/> Hors effectif ({horsEffectif.length})</label>}
       </div>
-      <AgenceKpiDalles collabs={filteredSorted} mode={mode} missions={missionsFiltrees} intercos={intercos} contactMap={Object.fromEntries(contacts.map(c=>[c.id,c]))} horsEffectif={horsEffectif} onPick={k=>setSelected(k)} onNavToContact={onNavToContact}/>
+      <AgenceKpiDalles collabs={filteredSorted} mode={mode} missions={missionsFiltrees} intercos={intercos} contactMap={Object.fromEntries(contacts.map(c=>[c.id,c]))} horsEffectif={horsEffectif} cdisPourInterco={cdisPourInterco} onPick={k=>setSelected(k)} onNavToContact={onNavToContact}/>
       <div className="text-xs text-neutral-300 mb-2">{filteredSorted.length} collaborateur{filteredSorted.length>1?'s':''}</div>
       {/* Cartes mobile */}
       <div className="md:hidden space-y-2">

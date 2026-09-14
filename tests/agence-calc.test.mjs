@@ -117,6 +117,29 @@ test('tjmMargeParMois', () => {
   assert.equal(r.tjm[0], 700); assert.equal(r.tjm[1], 800); assert.equal(r.tjm[2], null);
   assert.equal(Math.round(r.marge[0] * 1000) / 1000, 0.417); assert.equal(r.marge[1], 0.5);
 });
+test('intercoStats historique : dénominateur = effectif présent chaque mois', () => {
+  const jo = () => 20;
+  const intercos = [
+    { contact_consultant_id: 1, annee: 2026, mois: 1, jours: 10, cjm_snapshot: 400 },   // parti fin février
+    { contact_consultant_id: 2, annee: 2026, mois: 2, jours: 4, cjm_snapshot: 300 },
+  ];
+  const cdis = [
+    { id: 1, date_entree: '2025-01-01', date_sortie: '2026-02-28' },   // sorti : compte en jan/fév, pas après
+    { id: 2, date_entree: '2025-01-01', date_sortie: null },
+    { id: 3, date_entree: '2026-03-01', date_sortie: null },           // arrivé en mars : ne compte pas en jan/fév
+  ];
+  const s = A.intercoStats(cdis, intercos, 2026, 2, jo);
+  assert.equal(s.effectif(0), 2); assert.equal(s.effectif(1), 2); assert.equal(s.effectif(2), 2);
+  assert.equal(s.tauxM[0], 25);           // 10 j / (2 × 20)
+  assert.equal(s.tauxM[1], 10);           // 4 j / (2 × 20)
+  assert.equal(s.joursYTD, 14);           // les jours d'un sorti restent comptés
+  assert.equal(Math.round(s.tauxAnn * 100) / 100, 11.67);  // 14 / (2×20 + 2×20 + 2×20)
+  // la sortie n'efface rien : mêmes jours qu'avec tout le monde présent
+  const sansSortie = A.intercoStats(cdis.map(c => ({ ...c, date_sortie: null })), intercos, 2026, 2, jo);
+  assert.equal(sansSortie.joursYTD, s.joursYTD);
+  assert.equal(sansSortie.effectif(2), 3);   // mais l'effectif de mars monte à 3
+});
+
 test('intercoStats (logique TDB)', () => {
   const jo = () => 20; // 20 j ouvrés / mois pour le test
   const intercos = [{ contact_consultant_id: 1, annee: 2026, mois: 1, jours: 10, cjm_snapshot: 400 }, { contact_consultant_id: 2, annee: 2026, mois: 2, jours: 4, cjm_snapshot: 300 }];
