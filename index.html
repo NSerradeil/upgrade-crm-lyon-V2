@@ -3130,7 +3130,7 @@ function AgenceKpiDalles({ collabs, mode, missions, intercos, contactMap, horsEf
       ?{id:'inter',color:ic.nbCourant>0?'#FFE500':'#ccc',value:ic.nbCourant,label:'INTERCONTRAT',sub:ic.nbCourant>0?`${ic.fallbackM1?`${MOIS_LBL_AG[ic.idxAff].toLowerCase()} (M-1) · `:''}${AgenceCalc.fmtJ(ic.joursYTD)}j YTD · ${fmtK(ic.coutYTD)} · ${nomsInter.join(', ')}`:'Aucun',badge:ic.tauxAnn>=5?'Au-dessus de l\u2019objectif':null,badgeColor:'#92400e'}
       :{id:'inter',color:'#A4A6AB',value:(horsEffectif||[]).length,label:'HORS EFFECTIF',sub:(horsEffectif||[]).length>0?'free / ST sans mission — non comptés':'Aucun'},
     {id:'tjm',color:'#4A7FE5',value:k.tjmMoyen==null?'—':Math.round(k.tjmMoyen)+' €',label:'TJM MOYEN',sub:`CJM moyen ${k.cjmMoyen==null?'—':Math.round(k.cjmMoyen)+' €'} · ${enMission} mission${enMission>1?'s':''}`},
-    {id:'marge',color:'#FF66FF',value:k.margeMoyenne==null?'—':Math.round(k.margeMoyenne*100)+' %',label:'MARGE MOYENNE',sub:`seuil 30 % CDI · 20 % free/ST · ${act.filter(AgenceCalc.sousSeuil).length} sous le seuil`,badge:act.some(AgenceCalc.sousSeuil)?'Sous seuil':null,badgeColor:'#F97316'},
+    {id:'marge',color:'#FF66FF',value:k.margeMoyenne==null?'—':Math.round(k.margeMoyenne*100)+' %',label:'MARGE MOYENNE',sub:`${mode==='cdi'?'seuil 30 %':(mode==='st'?'seuil 20 %':'seuil 30 % CDI · 20 % free/ST')} · ${act.filter(AgenceCalc.sousSeuil).length} sous le seuil`,badge:k.margeMoyenne!=null&&k.margeMoyenne<(mode==='st'?0.20:0.30)?'Sous seuil':null,badgeColor:'#F97316'},
   ];
   const color=cards.find(c=>c.id===active)?.color||'#E4E4E6';
   const as=active==='effectif'?AgenceCalc.arriveesSortiesParMois(collabs,annee):null;
