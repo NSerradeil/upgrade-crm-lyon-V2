@@ -2950,7 +2950,39 @@ function CollabDetail({ collab: k, missions, missionPeriods, histMissions, conta
     {openMission&&<MissionDetail mission={openMission} histMissions={histMissions||[]} missionPeriods={periods} contacts={contacts||[]} taches={taches||[]} missions={missions||[]} besoins={besoins||[]} comptes={comptes||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setOpenMission(null)} onRefresh={()=>{setOpenMission(null);onRefresh();}} onNavToContact={onNavToContact} onNavToBesoin={()=>{}} onNavToTache={()=>{}} onNavToCompte={()=>{}}/>}
   </>;
 }
-async function exportEffectifs(rows,mode,agence,setBusy){ toast('Export : en construction'); }
+let _xlsxPromise=null;
+function loadXlsx(){ // SheetJS chargé au 1er clic seulement (≈400 Ko), même CDN que React
+  if(window.XLSX) return Promise.resolve(window.XLSX);
+  if(!_xlsxPromise) _xlsxPromise=new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';s.onload=()=>res(window.XLSX);s.onerror=()=>{_xlsxPromise=null;rej(new Error('SheetJS introuvable'));};document.head.appendChild(s);});
+  return _xlsxPromise;
+}
+async function exportEffectifs(rows,mode,agence,setBusy){
+  setBusy(true);
+  try{
+    const XLSX=await loadXlsx();
+    const d=iso=>iso?new Date(iso.slice(0,10)+'T00:00:00'):null;
+    const cdi=mode==='cdi';
+    const head=cdi?['Nom Prénom','Agence','Partner','Entrée','Sortie','Salaire brut','CJM','Client','Fin mission','TJM','MCV','Dispo (j)','Interco cumulé (j)','Statut']
+                  :['Nom Prénom','Type','Agence','Commercial','Entrée','Sortie','Client','Fin mission','CJM','TJM','MCV','Fin (j)','Statut'];
+    const line=k=>{const m=k.missionEnCours||{};const st=AgenceCalc.etatDispo(k).label;return cdi
+      ?[`${k.nom||''} ${k.prenom||''}`.trim(),k.agence||'',k.partnerNom||'',d(k.date_entree),d(k.date_sortie),k.salaire_annuel!=null?Number(k.salaire_annuel):null,k.cjm,m.client||'',d(m.date_fin_mission),k.tjm,k.marge,k.joursAvantDispo,k.intercoAnnee,st]
+      :[`${k.nom||''} ${k.prenom||''}`.trim(),k.typeLabel,k.agence||'',k.responsable||'',d(k.date_entree),d(k.date_sortie),m.client||'',d(m.date_fin_mission),k.cjm,k.tjm,k.marge,k.joursAvantDispo,st];};
+    const kp=AgenceCalc.computeKpis(rows,mode);
+    const total=cdi?[`COLLAB ${cdi?'CDI':'ST'} (${kp.effectif})`,'','','','','',kp.cjmMoyen,'','',kp.tjmMoyen,kp.margeMoyenne,'',kp.intercoAnnee,'']
+                   :[`SOUS-TRAITANTS (${kp.effectif})`,'','','','','','','',kp.cjmMoyen,kp.tjmMoyen,kp.margeMoyenne,'',''];
+    const aoa=[head,...rows.map(line),[],total];
+    const ws=XLSX.utils.aoa_to_sheet(aoa,{cellDates:true});
+    const R=aoa.length, iMcv=head.indexOf('MCV'), dateCols=head.map((h,i)=>/Entrée|Sortie|Fin mission/.test(h)?i:-1).filter(i=>i>=0), eurCols=head.map((h,i)=>/Salaire|CJM|TJM/.test(h)?i:-1).filter(i=>i>=0);
+    for(let r=1;r<R;r++){ const c=XLSX.utils.encode_cell({r,c:iMcv}); if(ws[c]&&typeof ws[c].v==='number') ws[c].z='0%';
+      dateCols.forEach(ci=>{const a=XLSX.utils.encode_cell({r,c:ci}); if(ws[a]&&ws[a].v instanceof Date) ws[a].z='dd/mm/yyyy';});
+      eurCols.forEach(ci=>{const a=XLSX.utils.encode_cell({r,c:ci}); if(ws[a]&&typeof ws[a].v==='number') ws[a].z='#,##0 €';}); }
+    ws['!cols']=head.map(h=>({wch:h.length>10?h.length+2:12}));
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,cdi?'CDI':'Sous-traitants');
+    XLSX.writeFile(wb,`Effectifs_${cdi?'CDI':'ST'}_${agence||'France'}_${TODAY}.xlsx`);
+    toast(`Export ${rows.length} ligne${rows.length>1?'s':''}`);
+  }catch(e){ toast('Export impossible : '+e.message,'error'); }
+  finally{ setBusy(false); }
+}
 function TabAgence({ contacts, missions, missionPeriods, intercos, taches, comptes, histMissions, besoins, partnerConsultants, allProfiles, profile, isPartner, onRefresh, onNavToMission, onNavToContact, prefs }) {
   const [mode,setMode]=useState('cdi');
   const [search,setSearch]=useState('');
