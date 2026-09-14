@@ -3032,7 +3032,7 @@ function AgenceKpiDalles({ collabs, mode, missions, intercos, contactMap, horsEf
   const enMission=act.filter(x=>x.etat==='en_mission').length, dispo=act.filter(x=>x.etat==='intercontrat'||x.etat==='sans_mission').length;
   // Interco : on passe TOUS les CDI du périmètre (sortis compris) pour un taux historique mois par mois.
   const cdisInterco=(cdisPourInterco&&cdisPourInterco.length)?cdisPourInterco:act.filter(x=>x.isCdi);
-  const ic=mode==='cdi'?AgenceCalc.intercoStats(cdisInterco,intercos||[],annee,cur,joursOuvresMois):null;
+  const ic=mode!=='st'?AgenceCalc.intercoStats(cdisInterco,intercos||[],annee,cur,joursOuvresMois):null;
   const nomsInter=ic?ic.parMois(ic.idxAff).map(r=>{const c=contactMap[r.contact_consultant_id];return c?(c.prenom||c.nom||'').split(' ')[0]:'';}).filter(Boolean):[];
   const cards=[
     {id:'effectif',color:'#00C218',value:k.effectif,label:mode==='cdi'?'CONSULTANTS':(mode==='st'?'SOUS-TRAITANTS':'COLLABORATEURS'),sub:mode==='cdi'?`${enMission} en mission · ${dispo} en interco`:`${enMission} en mission · ${(horsEffectif||[]).length} hors effectif`},
