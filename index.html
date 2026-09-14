@@ -2846,7 +2846,7 @@ function Tranches({ tranches, sel, onSel, fmtCount=n=>`${n}` }) {
     <span style={{width:40,textAlign:'right',fontSize:13,fontWeight:800}}>{fmtCount(t.items.length)}</span></div>)}</div>;
 }
 // Les 4 dalles + zone détail (spec §5.1). collabs = périmètre filtré ; cdiIds pour l'interco ; missions du périmètre pour TJM/marge par mois.
-function AgenceKpiDalles({ collabs, mode, missions, intercos, contactMap, onPick, onNavToContact }) {
+function AgenceKpiDalles({ collabs, mode, missions, intercos, contactMap, horsEffectif, onPick, onNavToContact }) {
   const [active,setActive]=useState(null);
   const [moisSel,setMoisSel]=useState(null);
   const [trancheSel,setTrancheSel]=useState(null);
@@ -2859,10 +2859,10 @@ function AgenceKpiDalles({ collabs, mode, missions, intercos, contactMap, onPick
   const ic=mode==='cdi'?AgenceCalc.intercoStats(cdiIds,intercos||[],annee,cur,joursOuvresMois):null;
   const nomsInter=ic?ic.parMois(ic.idxAff).map(r=>{const c=contactMap[r.contact_consultant_id];return c?(c.prenom||c.nom||'').split(' ')[0]:'';}).filter(Boolean):[];
   const cards=[
-    {id:'effectif',color:'#00C218',value:k.effectif,label:mode==='cdi'?'CONSULTANTS':'SOUS-TRAITANTS',sub:`${enMission} en mission · ${dispo} ${mode==='cdi'?'en interco':'sans mission'}`},
+    {id:'effectif',color:'#00C218',value:k.effectif,label:mode==='cdi'?'CONSULTANTS':'SOUS-TRAITANTS',sub:mode==='cdi'?`${enMission} en mission · ${dispo} en interco`:`${enMission} en mission · ${(horsEffectif||[]).length} hors effectif`},
     mode==='cdi'
       ?{id:'inter',color:ic.nbCourant>0?'#FFE500':'#ccc',value:ic.nbCourant,label:'INTERCONTRAT',sub:ic.nbCourant>0?`${ic.fallbackM1?`${MOIS_LBL_AG[ic.idxAff].toLowerCase()} (M-1) · `:''}${AgenceCalc.fmtJ(ic.joursYTD)}j YTD · ${fmtK(ic.coutYTD)} · ${nomsInter.join(', ')}`:'Aucun',badge:ic.tauxAnn>=8?'MALUS':ic.tauxAnn>=5?'Attention':null,badgeColor:ic.tauxAnn>=8?'#FF3D2E':'#92400e'}
-      :{id:'inter',color:'#A4A6AB',value:dispo,label:'SANS MISSION',sub:dispo>0?act.filter(x=>x.etat==='sans_mission').map(x=>x.prenom).join(', '):'Aucun'},
+      :{id:'inter',color:'#A4A6AB',value:(horsEffectif||[]).length,label:'HORS EFFECTIF',sub:(horsEffectif||[]).length>0?'free / ST sans mission — non comptés':'Aucun'},
     {id:'tjm',color:'#4A7FE5',value:k.tjmMoyen==null?'—':Math.round(k.tjmMoyen)+' €',label:'TJM MOYEN',sub:`CJM moyen ${k.cjmMoyen==null?'—':Math.round(k.cjmMoyen)+' €'} · ${enMission} mission${enMission>1?'s':''}`},
     {id:'marge',color:'#FF66FF',value:k.margeMoyenne==null?'—':Math.round(k.margeMoyenne*100)+' %',label:'MARGE MOYENNE',sub:`seuil 30 % · ${act.filter(x=>x.marge!=null&&x.marge<0.30).length} sous le seuil`,badge:k.margeMoyenne!=null&&k.margeMoyenne<0.30?'Sous seuil':null,badgeColor:'#F97316'},
   ];
@@ -2885,7 +2885,7 @@ function AgenceKpiDalles({ collabs, mode, missions, intercos, contactMap, onPick
         {(()=>{const idx=moisSel!=null?moisSel:ic.idxAff; const rows=ic.parMois(idx).map(r=>Object.assign({},contactMap[r.contact_consultant_id]||{id:r.contact_consultant_id,nom:'(inconnu)'},{jours:r.jours,cout:r.cout})); const tj=rows.reduce((s,x)=>s+x.jours,0), tc=rows.reduce((s,x)=>s+x.cout,0);
           return <ListeCollabs titre={`En intercontrat — ${MOIS_LBL_AG[idx]} ${annee}${moisSel==null&&ic.fallbackM1?' (M-1)':''} · ${AgenceCalc.fmtJ(tj)}j · ${fmtK(tc)}`} items={rows} color="#FFE500" onPick={k=>onNavToContact&&onNavToContact(k.id)} cols={[{v:k=>k.agence||'—'},{v:k=>AgenceCalc.fmtJ(k.jours)+'j',w:48,right:true},{v:k=>fmtK(k.cout),w:64,right:true,color:()=>'#FF3D2E'}]} vide="Aucun consultant en intercontrat ce mois-ci."/>;})()}
       </>}
-      {active==='inter'&&mode==='st'&&<ListeCollabs titre="Sous-traitants sans mission" items={act.filter(x=>x.etat==='sans_mission')} color="#F97316" onPick={pick} cols={[{v:k=>k.typeLabel},{v:k=>k.agence||'—'},{v:k=>k.responsable||'—',w:150}]} vide="Tous les sous-traitants sont en mission."/>}
+      {active==='inter'&&mode==='st'&&<ListeCollabs titre="Hors effectif — free / ST sans mission en cours" items={horsEffectif||[]} color="#A4A6AB" onPick={pick} cols={[{v:k=>k.typeLabel},{v:k=>k.agence||'—'},{v:k=>k.responsable||'—',w:150}]} vide="Tous les sous-traitants sont en mission."/>}
       {active==='tjm'&&<>
         <div className="text-sm font-bold text-midnight mb-3">TJM moyen par mois {annee} (missions actives)</div>
         <BarresMensuelles series={[{values:tm.tjm.map(v=>v||0),color:'#4A7FE5',label:'TJM moyen'}]} curMonth={cur} fmt={eur}/>
@@ -2996,6 +2996,7 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
   const [filterResp,setFilterResp]=useState('');
   const [etats,setEtats]=useState(new Set());           // 'en_mission' | 'dispo60' | 'intercontrat' | 'rh'
   const [showSortis,setShowSortis]=useState(false);
+  const [showHorsEffectif,setShowHorsEffectif]=useState(false);   // free/ST sans mission : hors effectif (règle Nicolas 14/09)
   const [sortCol,setSortCol]=useState('dispo'); const [sortDir,setSortDir]=useState('asc');
   const [selected,setSelected]=useState(null);
   const [showAdd,setShowAdd]=useState(false);
@@ -3018,6 +3019,9 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
     const q=norm(search);
     const rows=collabs.filter(k=>{
       if(!showSortis&&k.sorti) return false;
+      // Un freelance / sous-traitant sans mission en cours ne fait pas partie des effectifs (règle Nicolas 14/09,
+      // iso fichier Pierre). Les CDI, eux, restent comptés même en intercontrat.
+      if(mode==='st'&&!showHorsEffectif&&k.etat==='sans_mission') return false;
       if(filterAgence&&k.agence!==filterAgence) return false;
       if(filterResp&&(mode==='cdi'?k.partnerNom:k.responsable)!==filterResp) return false;
       if(etats.size){
@@ -3052,15 +3056,17 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
     };
     rows.sort((a,b)=>{const va=key(a),vb=key(b); if(va<vb) return sortDir==='asc'?-1:1; if(va>vb) return sortDir==='asc'?1:-1; return 0;});
     return rows;
-  },[collabs,search,filterAgence,filterResp,etats,showSortis,sortCol,sortDir,mode]);
+  },[collabs,search,filterAgence,filterResp,etats,showSortis,showHorsEffectif,sortCol,sortDir,mode]);
+  const horsEffectif=useMemo(()=>mode!=='st'?[]:collabs.filter(k=>!k.sorti&&k.etat==='sans_mission'&&(!filterAgence||k.agence===filterAgence)&&(!filterResp||k.responsable===filterResp)),[collabs,mode,filterAgence,filterResp]);
   const PAGE_SIZE=(typeof window!=='undefined'&&window.innerWidth<768)?50:200;
   const [visibleCount,setVisibleCount]=useState(PAGE_SIZE);
-  useEffect(()=>{setVisibleCount(PAGE_SIZE);},[search,filterAgence,filterResp,etats,showSortis,sortCol,sortDir,mode]);
+  useEffect(()=>{setVisibleCount(PAGE_SIZE);},[search,filterAgence,filterResp,etats,showSortis,showHorsEffectif,sortCol,sortDir,mode]);
   const visible=filteredSorted.slice(0,visibleCount);
   const thCls="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-azure-100 whitespace-nowrap";
   const chip=(id,label)=><button key={id} onClick={()=>toggleEtat(id)} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:etats.has(id)?'0':'2px solid #E4E4E6',background:etats.has(id)?'#1C1F35':'#fff',color:etats.has(id)?'#fff':'#1C1F35',cursor:'pointer',borderRadius:0,textTransform:'uppercase',boxShadow:etats.has(id)?'3px 3px 0 #FFE500':'none',transition:'all 120ms'}}>{label}</button>;
+  const idsMissionActive=useMemo(()=>new Set((missions||[]).filter(m=>m.statut==='En cours'||m.statut==='New').map(m=>m.contact_consultant_id)),[missions]);
   const nbCdi=contacts.filter(c=>AgenceCalc.CDI_STATUTS.includes(c.statut)&&!(c.date_sortie&&c.date_sortie<=TODAY)).length;
-  const nbSt=contacts.filter(c=>AgenceCalc.ST_STATUTS.includes(c.statut)&&!(c.date_sortie&&c.date_sortie<=TODAY)).length;
+  const nbSt=contacts.filter(c=>AgenceCalc.ST_STATUTS.includes(c.statut)&&!(c.date_sortie&&c.date_sortie<=TODAY)&&idsMissionActive.has(c.id)).length;
   const missionLabel=k=>k.missionEnCours?<><div className="font-medium text-midnight">{k.missionEnCours.client||'—'}</div>{k.missionEnCours.date_fin_mission&&<div className="text-xs text-neutral-300">fin {AgenceCalc.fmtJJMM(k.missionEnCours.date_fin_mission)}</div>}</>:<span className="text-neutral-300">—</span>;
   const missionsFiltrees=useMemo(()=>{const ids=new Set(filteredSorted.map(k=>k.id));return missions.filter(m=>ids.has(m.contact_consultant_id));},[missions,filteredSorted]);
 
@@ -3082,8 +3088,9 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
         <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none hidden sm:block"><option value="">{mode==='cdi'?'Tous partners':'Tous commerciaux'}</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}</select>
         {chip('en_mission','En mission')}{chip('dispo60','Dispo ≤ 60 j')}{chip('intercontrat',mode==='cdi'?'Intercontrat':'Sans mission')}{chip('rh','Arrêt & congés')}
         <label className="text-xs text-slate flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={showSortis} onChange={e=>setShowSortis(e.target.checked)}/> Sortis</label>
+        {mode==='st'&&<label className="text-xs text-slate flex items-center gap-1 cursor-pointer" title="Free / ST sans mission en cours : hors effectif"><input type="checkbox" checked={showHorsEffectif} onChange={e=>setShowHorsEffectif(e.target.checked)}/> Hors effectif ({horsEffectif.length})</label>}
       </div>
-      <AgenceKpiDalles collabs={filteredSorted} mode={mode} missions={missionsFiltrees} intercos={intercos} contactMap={Object.fromEntries(contacts.map(c=>[c.id,c]))} onPick={k=>setSelected(k)} onNavToContact={onNavToContact}/>
+      <AgenceKpiDalles collabs={filteredSorted} mode={mode} missions={missionsFiltrees} intercos={intercos} contactMap={Object.fromEntries(contacts.map(c=>[c.id,c]))} horsEffectif={horsEffectif} onPick={k=>setSelected(k)} onNavToContact={onNavToContact}/>
       <div className="text-xs text-neutral-300 mb-2">{filteredSorted.length} collaborateur{filteredSorted.length>1?'s':''}</div>
       {/* Cartes mobile */}
       <div className="md:hidden space-y-2">
