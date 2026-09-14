@@ -3278,6 +3278,7 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
   const [search,setSearch]=useState('');
   const [filterAgence,setFilterAgence]=useState(isPartner?'':(profile.agence||''));
   const [filterResp,setFilterResp]=useState('');
+  const [filterMetier,setFilterMetier]=useState('');
   const [etats,setEtats]=useState(new Set());           // 'en_mission' | 'dispo60' | 'intercontrat' | 'rh'
   const [sortCol,setSortCol]=useState('dispo'); const [sortDir,setSortDir]=useState('asc');
   const [selected,setSelected]=useState(null);
@@ -3299,6 +3300,7 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
     return contacts.filter(c=>statuts.includes(c.statut)).map(c=>AgenceCalc.computeCollab(c,ctx));
   },[contacts,missions,intercos,partnerNomById,partnerIdByContact,partnerNomByTri,mode]);
   const agences=useMemo(()=>[...new Set(collabs.map(k=>k.agence).filter(Boolean))].sort(),[collabs]);
+  const metiers=useMemo(()=>[...new Set(collabs.map(k=>(k.role||'').trim()).filter(Boolean))].sort(),[collabs]);
   const responsables=useMemo(()=>[...new Set(collabs.map(k=>k.isCdi?k.partnerNom:k.responsable).filter(Boolean))].sort(),[collabs,mode]);
 
   const filteredSorted=useMemo(()=>{
@@ -3311,6 +3313,7 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
       if(mode!=='cdi'&&!etats.has('intercontrat')&&k.etat==='sans_mission') return false;
       if(filterAgence&&k.agence!==filterAgence) return false;
       if(filterResp&&(k.isCdi?k.partnerNom:k.responsable)!==filterResp) return false;
+      if(filterMetier&&(k.role||'').trim()!==filterMetier) return false;
       const filtres=[...etats].filter(e=>e!=='sortis');   // « sorti·es » dévoile, ne restreint pas
       if(filtres.length){
         const isDispo60=k.etat==='en_mission'&&k.joursAvantDispo!=null&&k.joursAvantDispo<=60;
@@ -3345,13 +3348,13 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
     };
     rows.sort((a,b)=>{const va=key(a),vb=key(b); if(va<vb) return sortDir==='asc'?-1:1; if(va>vb) return sortDir==='asc'?1:-1; return 0;});
     return rows;
-  },[collabs,search,filterAgence,filterResp,etats,sortCol,sortDir,mode]);
+  },[collabs,search,filterAgence,filterResp,filterMetier,etats,sortCol,sortDir,mode]);
   const horsEffectif=useMemo(()=>mode==='cdi'?[]:collabs.filter(k=>!k.sorti&&k.etat==='sans_mission'&&(!filterAgence||k.agence===filterAgence)&&(!filterResp||(k.isCdi?k.partnerNom:k.responsable)===filterResp)),[collabs,mode,filterAgence,filterResp]);
   // Taux d'interco = calcul historique : tous les CDI du périmètre, SORTIS COMPRIS (leurs jours passés comptent).
   const cdisPourInterco=useMemo(()=>mode==='st'?[]:collabs.filter(k=>k.isCdi&&(!filterAgence||k.agence===filterAgence)&&(!filterResp||k.partnerNom===filterResp)),[collabs,mode,filterAgence,filterResp]);
   const PAGE_SIZE=(typeof window!=='undefined'&&window.innerWidth<768)?50:200;
   const [visibleCount,setVisibleCount]=useState(PAGE_SIZE);
-  useEffect(()=>{setVisibleCount(PAGE_SIZE);},[search,filterAgence,filterResp,etats,sortCol,sortDir,mode]);
+  useEffect(()=>{setVisibleCount(PAGE_SIZE);},[search,filterAgence,filterResp,filterMetier,etats,sortCol,sortDir,mode]);
   const visible=filteredSorted.slice(0,visibleCount);
   const thCls="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-azure-100 whitespace-nowrap";
   // `reveal` = la puce dévoile des lignes masquées par défaut (sorti·es, free sans mission) : bordure pointillée
