@@ -13,6 +13,13 @@
   const COL = { vert: '#00C218', orange: '#F97316', rouge: '#FF3D2E', gris: '#E4E4E6', midnight: '#1C1F35', blanc: '#FFFFFF', mute: '#A4A6AB' };
 
   // Casquettes internes (contacts.responsabilite). null = salarié·e sans casquette.
+  // Nomenclature métier des consultants (arbitrage Nicolas 14/09). `contacts.role` ne porte plus
+  // que ça : l'intitulé de la mission vit dans `missions.projet`. Texte libre conservé pour les
+  // prospects (« DSI », « Head of Product »), d'où une liste de suggestions et non une contrainte.
+  const METIERS = ['Product Designer', 'Product Owner', 'Product Manager', 'Business Analyst',
+    'Motion Designer', 'UX Research', 'Chef·fe de projet', 'Scrum master', 'Coach Agile',
+    'UI Designer', 'UX Designer', 'Lead Designer'];
+
   const RESPONSABILITES = {
     lead_partner:        { label: 'Lead partner',           court: 'Lead partner', bg: '#823DE8', color: '#FFFFFF' },
     partner:             { label: 'Partner',                court: 'Partner',      bg: '#1C1F35', color: '#FFFFFF' },
@@ -217,7 +224,7 @@
     return { tauxM, tauxAnn, joursYTD, coutYTD, idxAff, fallbackM1: !courantRempli && idxAff !== curMonthIdx, nbCourant: parMois(idxAff).length, parMois, effectif };
   }
 
-  const AgenceCalc = { MANAGER_TRIGRAMMES, RESPONSABILITES, EST_PARTNER, optionsPartners, seuilMarge, sousSeuil, CDI_STATUTS, ST_STATUTS, CONSULTANT_STATUTS_AGENCE, ALERTE_PREFIX, COL,
+  const AgenceCalc = { MANAGER_TRIGRAMMES, METIERS, RESPONSABILITES, EST_PARTNER, optionsPartners, seuilMarge, sousSeuil, CDI_STATUTS, ST_STATUTS, CONSULTANT_STATUTS_AGENCE, ALERTE_PREFIX, COL,
     cjmFromSalaire, joursEntre, fmtJJMM, fmtJJMMAAAA, fmtJ, computeCollab, etatDispo, margeStyle, computeKpis, prochainJourOuvre930, planAlertes,
     arriveesSortiesParMois, tranchesTjm, tranchesMarge, tjmMargeParMois, intercoStats };
   root.AgenceCalc = AgenceCalc;

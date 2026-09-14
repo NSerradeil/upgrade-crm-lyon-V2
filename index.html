@@ -136,6 +136,17 @@ tailwind.config = {
 </head>
 <body>
 <div id="root"></div>
+<!-- Nomenclature métier (cf. db/23_metier.sql). Suggestions, pas contrainte : `role` reste
+     du texte libre pour les prospects. Remplie au démarrage depuis AgenceCalc.METIERS. -->
+<datalist id="metiers-upgrade"></datalist>
+<script>
+  (function () {
+    const dl = document.getElementById('metiers-upgrade');
+    (window.AgenceCalc ? AgenceCalc.METIERS : []).forEach(function (m) {
+      const o = document.createElement('option'); o.value = m; dl.appendChild(o);
+    });
+  })();
+</script>
 
 <script type="text/babel">
 const { useState, useEffect, useMemo, useCallback, useRef } = React;
@@ -1439,7 +1450,7 @@ function ContactEditModal({ contact, profile, allProfiles, comptes, contacts, on
         <Field label="Nom"><input type="text" value={f.nom} onChange={e=>setF(v=>({...v,nom:e.target.value.toUpperCase()}))} className={inputCls}/></Field>
       </div>
       <CompteAssocField statut={f.statut} groupe={f.groupe} employeur={f.employeur} compteId={f.compte_id} comptes={comptes} onPickCompte={(id,nom)=>setF(v=>({...v,compte_id:id,groupe:nom}))} onChangeText={val=>setF(v=>({...v,employeur:val,groupe:val}))}/>
-      <Field label="Rôle / Poste"><input type="text" value={f.role} onChange={s('role')} className={inputCls}/></Field>
+      <Field label="Métier / Poste"><input type="text" list="metiers-upgrade" value={f.role} onChange={s('role')} className={inputCls}/></Field>
       <Field label="Ville"><input type="text" value={f.ville} onChange={e=>setF(v=>({...v,ville:normVille(e.target.value)}))} className={inputCls}/></Field>
       <Field label="Téléphone"><input type="tel" value={f.telephone} onChange={s('telephone')} className={inputCls}/></Field>
       <Field label="Email"><input type="email" value={f.email} onChange={e=>setF(v=>({...v,email:normEmail(e.target.value)}))} className={inputCls}/></Field>
@@ -1845,7 +1856,7 @@ function AddContactModal({ profile, allProfiles, comptes, contacts, onClose, onS
         <Field label="Nom *"><input type="text" value={f.nom} onChange={sNorm('nom',normNom)} className={inputCls} placeholder="ex: DUPONT"/></Field>
       </div>
       <CompteAssocField statut={f.statut} groupe={f.groupe} employeur={f.employeur} compteId={f.compte_id} comptes={comptes} onPickCompte={(id,nom)=>setF(v=>({...v,compte_id:id,groupe:nom}))} onChangeText={val=>setF(v=>({...v,employeur:val,groupe:val}))}/>
-      <Field label="Rôle / Poste"><input type="text" value={f.role} onChange={s('role')} className={inputCls}/></Field>
+      <Field label="Métier / Poste"><input type="text" list="metiers-upgrade" value={f.role} onChange={s('role')} className={inputCls}/></Field>
       <Field label="Ville"><input type="text" value={f.ville} onChange={sNorm('ville',normVille)} className={inputCls}/></Field>
       <Field label="Téléphone"><input type="tel" value={f.telephone} onChange={s('telephone')} className={inputCls}/></Field>
       <Field label="Email"><input type="email" value={f.email} onChange={sNorm('email',normEmail)} className={inputCls}/></Field>
@@ -3374,8 +3385,7 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
   const [search,setSearch]=useState('');
   const [filterAgence,setFilterAgence]=useState(isPartner?'':(profile.agence||''));
   const [filterResp,setFilterResp]=useState('');
-  const [filterMetier,setFilterMetier]=useState('');
-  const [etats,setEtats]=useState(new Set());           // 'en_mission' | 'dispo60' | 'intercontrat' | 'rh'
+    const [etats,setEtats]=useState(new Set());           // 'en_mission' | 'dispo60' | 'intercontrat' | 'rh'
   const [sortCol,setSortCol]=useState('dispo'); const [sortDir,setSortDir]=useState('asc');
   const [selected,setSelected]=useState(null);
   const [showAdd,setShowAdd]=useState(false);
@@ -3396,7 +3406,6 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
     return contacts.filter(c=>statuts.includes(c.statut)).map(c=>AgenceCalc.computeCollab(c,ctx));
   },[contacts,missions,intercos,partnerNomById,partnerIdByContact,partnerNomByTri,mode]);
   const agences=useMemo(()=>[...new Set(collabs.map(k=>k.agence).filter(Boolean))].sort(),[collabs]);
-  const metiers=useMemo(()=>[...new Set(collabs.map(k=>(k.role||'').trim()).filter(Boolean))].sort(),[collabs]);
   const responsables=useMemo(()=>[...new Set(collabs.map(k=>k.isCdi?k.partnerNom:k.responsable).filter(Boolean))].sort(),[collabs,mode]);
 
   const filteredSorted=useMemo(()=>{
@@ -3409,7 +3418,6 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
       if(mode!=='cdi'&&!etats.has('intercontrat')&&k.etat==='sans_mission') return false;
       if(filterAgence&&k.agence!==filterAgence) return false;
       if(filterResp&&(k.isCdi?k.partnerNom:k.responsable)!==filterResp) return false;
-      if(filterMetier&&(k.role||'').trim()!==filterMetier) return false;
       const filtres=[...etats].filter(e=>e!=='sortis');   // « sorti·es » dévoile, ne restreint pas
       if(filtres.length){
         const isDispo60=k.etat==='en_mission'&&k.joursAvantDispo!=null&&k.joursAvantDispo<=60;
@@ -3444,13 +3452,13 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
     };
     rows.sort((a,b)=>{const va=key(a),vb=key(b); if(va<vb) return sortDir==='asc'?-1:1; if(va>vb) return sortDir==='asc'?1:-1; return 0;});
     return rows;
-  },[collabs,search,filterAgence,filterResp,filterMetier,etats,sortCol,sortDir,mode]);
+  },[collabs,search,filterAgence,filterResp,etats,sortCol,sortDir,mode]);
   const horsEffectif=useMemo(()=>mode==='cdi'?[]:collabs.filter(k=>!k.sorti&&k.etat==='sans_mission'&&(!filterAgence||k.agence===filterAgence)&&(!filterResp||(k.isCdi?k.partnerNom:k.responsable)===filterResp)),[collabs,mode,filterAgence,filterResp]);
   // Taux d'interco = calcul historique : tous les CDI du périmètre, SORTIS COMPRIS (leurs jours passés comptent).
   const cdisPourInterco=useMemo(()=>mode==='st'?[]:collabs.filter(k=>k.isCdi&&(!filterAgence||k.agence===filterAgence)&&(!filterResp||k.partnerNom===filterResp)),[collabs,mode,filterAgence,filterResp]);
   const PAGE_SIZE=(typeof window!=='undefined'&&window.innerWidth<768)?50:200;
   const [visibleCount,setVisibleCount]=useState(PAGE_SIZE);
-  useEffect(()=>{setVisibleCount(PAGE_SIZE);},[search,filterAgence,filterResp,filterMetier,etats,sortCol,sortDir,mode]);
+  useEffect(()=>{setVisibleCount(PAGE_SIZE);},[search,filterAgence,filterResp,etats,sortCol,sortDir,mode]);
   const visible=filteredSorted.slice(0,visibleCount);
   const thCls="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-azure-100 whitespace-nowrap";
   // `reveal` = la puce dévoile des lignes masquées par défaut (sorti·es, free sans mission) : bordure pointillée
@@ -3480,7 +3488,6 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
       <div className="flex gap-2 sm:gap-3 mb-3 flex-wrap items-center">
         <input type="text" placeholder="Rechercher (nom, client, agence…)" value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-[140px] sm:min-w-64 px-3 sm:px-4 py-2 border rounded-lg text-sm focus:outline-none focus:border-midnight"/>
         {!isPartner&&<select value={filterAgence} onChange={e=>{setFilterAgence(e.target.value);setFilterResp('');}} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none"><option value="">Toutes agences</option>{agences.map(a=><option key={a} value={a}>{a}</option>)}</select>}
-        <select value={filterMetier} onChange={e=>setFilterMetier(e.target.value)} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none"><option value="">Tous métiers</option>{metiers.map(m=><option key={m} value={m}>{m}</option>)}</select>
         <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none hidden sm:block"><option value="">{mode==='cdi'?'Tous partners':(mode==='st'?'Tous commerciaux':'Tous responsables')}</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}</select>
         {chip('en_mission','En mission')}{chip('dispo60',mode==='st'?'Fin ≤ 60 j':'Dispo ≤ 60 j')}{chip('intercontrat',mode==='cdi'?'Intercontrat':(mode==='st'?`Sans mission (${horsEffectif.length})`:`Interco / sans mission (${horsEffectif.length})`))}{chip('rh','Arrêt & congés')}
         <span className="w-px h-5 bg-neutral-200 mx-0.5 hidden sm:block"/>
