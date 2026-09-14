@@ -1348,7 +1348,7 @@ function IntercoEditor({ contact, profile }) {
 }
 
 // Section « Collaborateur » des formulaires contact (statuts CDI / Freelance / Prestataire) — SPEC_agence_effectifs §5.6
-function CollabFields({ f, setF }) {
+function CollabFields({ f, setF, partners }) {
   const isCdi=f.statut==='Consultant CDI', isSt=['Freelance','Prestataire'].includes(f.statut);
   if(!isCdi&&!isSt) return null;
   const s=k=>e=>setF(v=>({...v,[k]:e.target.value}));
@@ -1369,13 +1369,11 @@ function CollabFields({ f, setF }) {
       <Field label="Statut RH"><select value={f.statut_rh||''} onChange={s('statut_rh')} className={inputCls}><option value="">— (en mission / dispo)</option><option value="arret_maladie">Arrêt maladie</option><option value="conge">Congé long (mat., sabbatique…)</option></select></Field>
       <Field label="Depuis le"><input type="date" value={f.statut_rh_depuis||''} onChange={s('statut_rh_depuis')} className={inputCls} disabled={!f.statut_rh}/></Field>
     </div>
-    <div className="grid grid-cols-2 gap-3">
-      {isSt&&<Field label="Type"><select value={f.type_presta||(f.statut==='Prestataire'?'sous_traitant':'freelance')} onChange={s('type_presta')} className={inputCls}><option value="freelance">Freelance</option><option value="sous_traitant">Sous-traitant (portage, ESN)</option></select></Field>}
-      <Field label={isCdi?'Partner responsable':'Manager (trigramme)'}><select value={f.manager_trigramme||''} onChange={s('manager_trigramme')} className={inputCls}><option value="">—</option>{Object.entries(AgenceCalc.MANAGER_TRIGRAMMES).sort((a,b)=>a[1].localeCompare(b[1])).map(([t,n])=><option key={t} value={t}>{n} ({t})</option>)}</select></Field>
-    </div>
+    {/* Le partner ne concerne que les CDI : pour un free/ST, c'est le champ « Responsable » (le commercial) qui fait foi. */}
+    {isCdi&&<Field label="Partner responsable"><select value={f.manager_trigramme||''} onChange={s('manager_trigramme')} className={inputCls}><option value="">—</option>{(partners||[]).map(p=><option key={p.trigramme} value={p.trigramme}>{p.nom}{p.source==='commercial'?' (commercial)':''}</option>)}</select></Field>}
   </div>;
 }
-function ContactEditModal({ contact, profile, allProfiles, comptes, onClose, onSaved }) {
+function ContactEditModal({ contact, profile, allProfiles, comptes, contacts, onClose, onSaved }) {
   const isAdmin=profile.role==='admin';
   const initCompteId=(()=>{const c=(comptes||[]).find(x=>x.nom&&x.nom===contact.groupe);return c?c.id:'';})();
   const [f,setF] = useState({ prenom:contact.prenom||'', nom:contact.nom||'', telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', employeur:contact.employeur||'', compte_id:initCompteId, responsable:contact.responsable||'', linkedin:contact.linkedin||'', ats:contact.ats||'', cjm:contact.cjm??'', agence:contact.agence||'', ne_pas_recontacter:contact.ne_pas_recontacter||false, ne_pas_recontacter_note:contact.ne_pas_recontacter_note||'', date_entree:contact.date_entree||'', date_sortie:contact.date_sortie||'', salaire_annuel:contact.salaire_annuel??'', cjm_manuel:!!contact.cjm_manuel, statut_rh:contact.statut_rh||'', statut_rh_depuis:contact.statut_rh_depuis||'', type_presta:contact.type_presta||'', manager_trigramme:contact.manager_trigramme||'' });
@@ -1387,7 +1385,7 @@ function ContactEditModal({ contact, profile, allProfiles, comptes, onClose, onS
     const upd={ prenom:normPrenom(f.prenom)||contact.prenom, nom:(f.nom||'').toUpperCase()||contact.nom, telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, employeur:f.employeur||null, responsable:f.responsable||contact.responsable, linkedin:normalizeLinkedinUrl(f.linkedin), cjm:(f.cjm===''||f.cjm==null)?null:parseFloat(f.cjm), agence:f.agence||contact.agence, updated_at:new Date().toISOString(), ne_pas_recontacter:f.ne_pas_recontacter||false, ne_pas_recontacter_note:f.ne_pas_recontacter_note||null, ne_pas_recontacter_date:f.ne_pas_recontacter?contact.ne_pas_recontacter_date||(f.ne_pas_recontacter!==contact.ne_pas_recontacter?getToday():null):null };
     if(['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)) upd.ats=f.ats||null;
     if(['Consultant CDI','Freelance','Prestataire'].includes(f.statut)){
-      Object.assign(upd,{ date_entree:f.date_entree||null, date_sortie:f.date_sortie||null, salaire_annuel:(f.salaire_annuel===''||f.salaire_annuel==null)?null:parseFloat(f.salaire_annuel), cjm_manuel:!!f.cjm_manuel, statut_rh:f.statut_rh||null, statut_rh_depuis:f.statut_rh?(f.statut_rh_depuis||getToday()):null, type_presta:f.statut==='Consultant CDI'?null:(f.type_presta||(f.statut==='Prestataire'?'sous_traitant':'freelance')), manager_trigramme:f.manager_trigramme||null });
+      Object.assign(upd,{ date_entree:f.date_entree||null, date_sortie:f.date_sortie||null, salaire_annuel:(f.salaire_annuel===''||f.salaire_annuel==null)?null:parseFloat(f.salaire_annuel), cjm_manuel:!!f.cjm_manuel, statut_rh:f.statut_rh||null, statut_rh_depuis:f.statut_rh?(f.statut_rh_depuis||getToday()):null, type_presta:f.statut==='Consultant CDI'?null:(f.statut==='Prestataire'?'sous_traitant':'freelance'), manager_trigramme:f.manager_trigramme||null });
       if(f.statut==='Consultant CDI'&&!f.cjm_manuel&&upd.salaire_annuel!=null) upd.cjm=AgenceCalc.cjmFromSalaire(upd.salaire_annuel);
     }
     const { error } = await sb.from('contacts').update(upd).eq('id',contact.id);
@@ -1440,7 +1438,7 @@ function ContactEditModal({ contact, profile, allProfiles, comptes, onClose, onS
         <Field label="Agence">{canEditAgence?<select value={f.agence||''} onChange={s('agence')} className={inputCls}><option value="Lyon">Lyon</option><option value="Paris">Paris</option><option value="Bordeaux">Bordeaux</option><option value="Nantes">Nantes</option></select>:<div className={inputCls} style={{background:'#f5f5f5',color:'#999',borderRadius:0}}>{contact.agence||'\u2014'}</div>}</Field>
       </div>
       {['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)&&<Field label="ATS (lien candidat)"><input type="url" value={f.ats} onChange={s('ats')} className={inputCls} placeholder="Lien Recruitee"/></Field>}
-      <CollabFields f={f} setF={setF}/>
+      <CollabFields f={f} setF={setF} partners={AgenceCalc.optionsPartners(contacts||[],allProfiles||[])}/>
       {f.statut==='Consultant CDI' && <IntercoEditor contact={contact} profile={profile} />}
       <Field label="Commentaires"><textarea rows={3} value={f.commentaires} onChange={s('commentaires')} className={inputCls+' resize-none'}/></Field>
       <div style={{borderTop:'2px solid #E4E4E6',paddingTop:12,marginTop:12}}>
@@ -1803,7 +1801,7 @@ function AddTacheModal({ contacts, besoins, missions, profile, allProfiles, onCl
     </Modal>
   );
 }
-function AddContactModal({ profile, allProfiles, comptes, onClose, onSaved, defaults }) {
+function AddContactModal({ profile, allProfiles, comptes, contacts, onClose, onSaved, defaults }) {
   const [f,setF] = useState({ prenom:'', nom:'', groupe:'', employeur:'', compte_id:'', ville:'', role:'', telephone:'', email:'', linkedin:'', ats:'', cjm:'', statut:(defaults&&defaults.statut)||'Prospect', responsable:profile.nom, commentaires:'', agence:(defaults&&defaults.agence)||profile.agence||'', date_entree:'', date_sortie:'', salaire_annuel:'', cjm_manuel:false, statut_rh:'', statut_rh_depuis:'', type_presta:'', manager_trigramme:'' });
   const [saving,setSaving]=useState(false); const [err,setErr]=useState('');
   const s = k => e => setF(v=>({...v,[k]:e.target.value}));
@@ -1814,7 +1812,7 @@ function AddContactModal({ profile, allProfiles, comptes, onClose, onSaved, defa
     const ins={ prenom:f.prenom||null, nom:f.nom.trim(), employeur:f.employeur||null, ville:f.ville||null, role:f.role||null, telephone:f.telephone||null, email:f.email||null, linkedin:normalizeLinkedinUrl(f.linkedin), cjm:(f.cjm===''||f.cjm==null)?null:parseFloat(f.cjm), statut:f.statut, responsable:f.responsable, commentaires:f.commentaires||null, nb_relance:0, updated_at:new Date().toISOString(), agence:f.agence||profile.agence||null };
     if(['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)) ins.ats=f.ats||null;
     if(['Consultant CDI','Freelance','Prestataire'].includes(f.statut)){
-      Object.assign(ins,{ date_entree:f.date_entree||null, date_sortie:f.date_sortie||null, salaire_annuel:(f.salaire_annuel===''||f.salaire_annuel==null)?null:parseFloat(f.salaire_annuel), cjm_manuel:!!f.cjm_manuel, statut_rh:f.statut_rh||null, statut_rh_depuis:f.statut_rh?(f.statut_rh_depuis||getToday()):null, type_presta:f.statut==='Consultant CDI'?null:(f.type_presta||(f.statut==='Prestataire'?'sous_traitant':'freelance')), manager_trigramme:f.manager_trigramme||null });
+      Object.assign(ins,{ date_entree:f.date_entree||null, date_sortie:f.date_sortie||null, salaire_annuel:(f.salaire_annuel===''||f.salaire_annuel==null)?null:parseFloat(f.salaire_annuel), cjm_manuel:!!f.cjm_manuel, statut_rh:f.statut_rh||null, statut_rh_depuis:f.statut_rh?(f.statut_rh_depuis||getToday()):null, type_presta:f.statut==='Consultant CDI'?null:(f.statut==='Prestataire'?'sous_traitant':'freelance'), manager_trigramme:f.manager_trigramme||null });
       if(f.statut==='Consultant CDI'&&!f.cjm_manuel&&ins.salaire_annuel!=null) ins.cjm=AgenceCalc.cjmFromSalaire(ins.salaire_annuel);
     }
     const { data:inserted, error } = await sb.from('contacts').insert(ins).select('id').single();
@@ -1850,7 +1848,7 @@ function AddContactModal({ profile, allProfiles, comptes, onClose, onSaved, defa
       </div>
       {['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)&&<Field label="ATS (lien candidat)"><input type="url" value={f.ats} onChange={s('ats')} className={inputCls} placeholder="Lien Recruitee"/></Field>}
       {['Consultant CDI','Freelance','Prestataire'].includes(f.statut)&&<Field label="Agence"><select value={f.agence||''} onChange={s('agence')} className={inputCls}><option value="">—</option><option value="Lyon">Lyon</option><option value="Paris">Paris</option><option value="Bordeaux">Bordeaux</option><option value="Nantes">Nantes</option></select></Field>}
-      <CollabFields f={f} setF={setF}/>
+      <CollabFields f={f} setF={setF} partners={AgenceCalc.optionsPartners(contacts||[],allProfiles||[])}/>
       <Field label="Commentaires"><textarea rows={2} value={f.commentaires} onChange={s('commentaires')} className={inputCls+' resize-none'}/></Field>
       {err && <div className="text-xs text-coral-100 bg-coral-20 rounded px-3 py-2">{err}</div>}
     </Modal>
@@ -1988,7 +1986,7 @@ function ConfirmDeleteCompteModal({ compte, contactComptes, onClose, onConfirm, 
 // DETAIL PANELS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function ContactDetail({ contact, historique, taches, missions, besoins, comptes, contactComptes, profile, allProfiles, onClose, onRefresh, onNavToBesoin, onNavToMission, onNavToTache, onNavToCompte, fromCompte }) {
+function ContactDetail({ contact, contacts, historique, taches, missions, besoins, comptes, contactComptes, profile, allProfiles, onClose, onRefresh, onNavToBesoin, onNavToMission, onNavToTache, onNavToCompte, fromCompte }) {
   const [modal,setModal] = useState(null);
   const [deleting,setDeleting] = useState(false);
   // canEdit : ouvert a tous les commerciaux (db/09). canDelete : proprietaire ou admin.
@@ -2120,7 +2118,7 @@ function ContactDetail({ contact, historique, taches, missions, besoins, comptes
             ))}</div>
         }
       </div>
-      {modal==='edit'  && <ContactEditModal   contact={contact} profile={profile} allProfiles={allProfiles} comptes={comptes} onClose={()=>setModal(null)} onSaved={saved} />}
+      {modal==='edit'  && <ContactEditModal   contact={contact} contacts={contacts||[]} profile={profile} allProfiles={allProfiles} comptes={comptes} onClose={()=>setModal(null)} onSaved={saved} />}
       {modal==='hist'  && <AddHistoriqueModal contact={contact} profile={profile} onClose={()=>setModal(null)} onSaved={saved}/>}
       {modal==='tache' && <AddTacheModal contacts={[contact]} besoins={besoins||[]} missions={missions||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved} defaultContactId={contact.id}/>}
     </SidePanel>
@@ -2803,7 +2801,7 @@ function MissionDetail({ mission, histMissions, missionPeriods, contacts, taches
       {modal==='edit'&&<MissionFormModal mission={mission} profile={profile} allProfiles={allProfiles} contacts={contacts} besoins={besoins} onClose={()=>setModal(null)} onSaved={saved}/>}
       {modal==='tache'&&<AddTacheModal contacts={contacts} besoins={besoins||[]} missions={missions||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved} defaultMissionId={mission.id}/>}
       {modal==='terminer'&&<TerminerMissionModal mission={mission} profile={profile} onClose={()=>setModal(null)} onSaved={()=>{setModal(null);onRefresh();onClose();}}/>}
-      {viewContact&&<ContactDetail contact={viewContact} historique={[]} taches={[]} profile={profile} allProfiles={allProfiles} onClose={()=>setViewContact(null)} onRefresh={()=>{setViewContact(null);onRefresh();}}/>}
+      {viewContact&&<ContactDetail contact={viewContact} contacts={contacts||[]} historique={[]} taches={[]} profile={profile} allProfiles={allProfiles} onClose={()=>setViewContact(null)} onRefresh={()=>{setViewContact(null);onRefresh();}}/>}
     </SidePanel>
   );
 }
@@ -2816,6 +2814,90 @@ const fmtEur0 = n => n==null?'—':Math.round(n).toLocaleString('fr-FR')+' €';
 const fmtDateFR = iso => iso?AgenceCalc.fmtJJMMAAAA(iso):'—';
 const MOIS_LBL_AG=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'];
 // Barres mensuelles génériques (même rendu que ChartMissions : barres pleines, mois courant souligné). series: [{values:number[12], color, label}], line?: number[12]
+function RespBadge({ r }) {
+  const d=AgenceCalc.RESPONSABILITES[r]; if(!d) return null;
+  return <ColorBadge label={d.court} bg={d.bg} color={d.color}/>;
+}
+// Écran « Répartition » : qui manage qui. Colonne gauche = les partners avec leur effectif
+// (alerte si personne), colonne droite = leurs consultants, cochables. Réservé admin /
+// directeur d'agence / lead partner (db/21-22).
+function RepartitionPartners({ contacts, allProfiles, missions, profile, onClose, onRefresh }) {
+  const partners=useMemo(()=>AgenceCalc.optionsPartners(contacts,allProfiles),[contacts,allProfiles]);
+  const cdis=useMemo(()=>contacts.filter(c=>AgenceCalc.CDI_STATUTS.includes(c.statut)&&!(c.date_sortie&&c.date_sortie<=TODAY))
+    .sort((a,b)=>(a.nom||'').localeCompare(b.nom||'')),[contacts]);
+  const [sel,setSel]=useState(partners[0]?partners[0].trigramme:null);
+  const [q,setQ]=useState('');
+  const [busy,setBusy]=useState(null);
+  const [local,setLocal]=useState({});      // id → trigramme, pour un affichage immédiat
+  useEffect(()=>{const h=e=>{if(e.key==='Escape')onClose();};window.addEventListener('keydown',h);return()=>window.removeEventListener('keydown',h);},[onClose]);
+  const triDe=c=>local[c.id]!==undefined?local[c.id]:(c.manager_trigramme||'');
+  const compte=tri=>cdis.filter(c=>triDe(c)===tri).length;
+  const nomDe=tri=>(partners.find(p=>p.trigramme===tri)||{}).nom||tri;
+  const affecter=async(c,tri)=>{
+    setBusy(c.id);
+    const {error}=await sb.from('contacts').update({manager_trigramme:tri||null,updated_at:new Date().toISOString()}).eq('id',c.id);
+    if(error){toast('Erreur : '+error.message,'error');setBusy(null);return;}
+    await sb.from('partner_consultants').delete().eq('contact_consultant_id',c.id);
+    const prof=(allProfiles||[]).find(p=>p.role==='partner'&&p.trigramme===tri);
+    if(prof) await sb.from('partner_consultants').insert({partner_id:prof.id,contact_consultant_id:c.id});
+    await sb.from('historique_actions').insert({id_prospect:c.id,date:getToday(),type_action:'Note interne',details:`Partner responsable → ${tri?nomDe(tri):'aucun'}`,responsable:profile.nom});
+    setLocal(l=>Object.assign({},l,{[c.id]:tri||''})); setBusy(null);
+  };
+  const aMoi=cdis.filter(c=>triDe(c)===sel);
+  const nq=norm(q);
+  const autres=cdis.filter(c=>triDe(c)!==sel&&nq&&[c.prenom,c.nom,c.agence].some(v=>norm(v||'').includes(nq)));
+  const sansPartner=cdis.filter(c=>!triDe(c));
+  const Ligne=({c,coche})=>{
+    const tri=triDe(c);
+    return <div onClick={()=>busy!==c.id&&affecter(c,coche?'':sel)} className="flex items-center gap-2 px-2 py-2 border-b border-neutral-50 hover:bg-lemon-20 cursor-pointer text-sm">
+      <span style={{width:16,height:16,flexShrink:0,border:'2px solid '+(coche?'#1C1F35':'#D2D2D5'),background:coche?'#1C1F35':'#fff',color:'#fff',fontSize:11,fontWeight:900,lineHeight:'12px',textAlign:'center'}}>{busy===c.id?'…':(coche?'✓':'')}</span>
+      <span className="font-medium text-midnight flex-1 truncate">{c.prenom} {c.nom}<RespBadge r={c.responsabilite}/></span>
+      <span className="text-xs text-slate w-16 truncate">{c.agence||'—'}</span>
+      <span className="text-xs w-32 truncate" style={{color:tri&&tri!==sel?'#A4A6AB':'transparent'}}>{tri&&tri!==sel?nomDe(tri):'·'}</span>
+    </div>;
+  };
+  return <div className="fixed inset-0 bg-midnight/80 z-50 flex items-center justify-center px-2 sm:px-6" onClick={onClose}>
+    <div className="bg-white border-2 border-midnight w-full max-w-5xl max-h-[92vh] flex flex-col" onClick={e=>e.stopPropagation()}>
+      <div className="flex items-center justify-between px-5 py-4 border-b-4 border-midnight">
+        <div>
+          <div className="font-bold text-lg text-midnight">Répartition des consultants</div>
+          <div className="text-xs text-slate">{cdis.length} CDI · {sansPartner.length>0?<span className="text-coral-100 font-bold">{sansPartner.length} sans partner</span>:'tous rattachés'}</div>
+        </div>
+        <button onClick={onClose} className="text-neutral-400 hover:text-midnight text-2xl leading-none">×</button>
+      </div>
+      <div className="flex-1 overflow-hidden flex flex-col sm:flex-row">
+        {/* Colonne gauche : les partners */}
+        <div className="sm:w-64 border-b-2 sm:border-b-0 sm:border-r-2 border-neutral-100 overflow-y-auto max-h-48 sm:max-h-none">
+          {partners.map(p=>{const n=compte(p.trigramme); const on=sel===p.trigramme;
+            return <button key={p.trigramme} onClick={()=>setSel(p.trigramme)} className={`w-full text-left px-4 py-2.5 flex items-center gap-2 border-b border-neutral-50 ${on?'bg-midnight text-white':'hover:bg-lemon-20'}`}>
+              <span className="flex-1 truncate text-sm font-medium">{p.nom}</span>
+              {p.source==='commercial'&&<span className={`text-[9px] uppercase ${on?'text-neutral-300':'text-neutral-300'}`}>com.</span>}
+              <span className={`text-sm font-bold ${n===0?'text-coral-100':(on?'text-white':'text-midnight')}`}>{n===0?'⚠ 0':n}</span>
+            </button>;})}
+          {sansPartner.length>0&&<button onClick={()=>setSel('')} className={`w-full text-left px-4 py-2.5 flex items-center gap-2 border-b border-neutral-50 ${sel===''?'bg-coral-100 text-white':'hover:bg-coral-20'}`}>
+            <span className="flex-1 truncate text-sm font-bold">Sans partner</span><span className="text-sm font-bold">{sansPartner.length}</span>
+          </button>}
+        </div>
+        {/* Colonne droite : les consultants du partner choisi */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-4 py-3 border-b-2 border-neutral-100 sticky top-0 bg-white z-10">
+            <div className="font-bold text-midnight text-sm mb-2">{sel===''?'Consultants sans partner':`Consultants de ${nomDe(sel)}`} <span className="text-slate font-normal">· {aMoi.length}</span></div>
+            {sel!==''&&<input type="text" value={q} onChange={e=>setQ(e.target.value)} placeholder="Ajouter quelqu'un : tape un nom…" className="w-full px-3 py-2 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight"/>}
+          </div>
+          {aMoi.map(c=><Ligne key={c.id} c={c} coche={true}/>)}
+          {!aMoi.length&&<div className="px-4 py-4 text-xs text-neutral-300 italic">Personne pour l'instant{sel!==''?' — cherche un nom ci-dessus pour en ajouter.':'.'}</div>}
+          {sel!==''&&q&&<><div className="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate bg-neutral-50 border-y border-neutral-100">À ajouter ({autres.length})</div>
+            {autres.map(c=><Ligne key={c.id} c={c} coche={false}/>)}
+            {!autres.length&&<div className="px-4 py-3 text-xs text-neutral-300 italic">Aucun résultat.</div>}</>}
+        </div>
+      </div>
+      <div className="px-5 py-3 border-t-2 border-neutral-100 flex items-center justify-between gap-3 flex-wrap">
+        <div className="text-xs text-neutral-300">Clique une ligne pour rattacher ou détacher. Chaque changement est enregistré aussitôt.</div>
+        <button onClick={()=>{onClose();onRefresh&&onRefresh();}} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">Terminé</button>
+      </div>
+    </div>
+  </div>;
+}
 // Effectif & mouvements de l'année. Deux bandes SÉPARÉES : l'effectif (~60) et les mouvements (0-3)
 // n'ont pas le même ordre de grandeur, les mettre sur une échelle commune écrasait les barres.
 // Palette validée pour le daltonisme : azure/coral (le vert/rouge ne passe pas en deutanopie).
@@ -3072,11 +3154,28 @@ function CollabDetail({ collab: k, missions, missionPeriods, histMissions, conta
   const Row=({l,v})=><div className="flex justify-between gap-3 text-sm py-1 border-b border-neutral-50"><span className="text-slate">{l}</span><span className="font-medium text-midnight text-right">{v}</span></div>;
   const canEdit=profile.role==='admin'||profile.role==='commercial'||profile.role==='partner';
   // Réaffecter un consultant à un partner : admin (Nicolas, Pierre) ou directeur d'agence (db/21).
-  const peutChangerPartner=profile.role==='admin'||!!profile.dir_agence;
+  const peutChangerPartner=profile.role==='admin'||!!profile.dir_agence||!!profile.partner_lead;
+  const partners=AgenceCalc.optionsPartners(contacts||[],allProfiles||[]);
   const peutPositionner=(profile.role==='admin'||profile.role==='commercial')&&(besoins||[]).length>0;
+  const changerResponsabilite=async(resp)=>{
+    setSavingPartner(true);
+    const upd={responsabilite:resp||null,updated_at:new Date().toISOString()};
+    // Un partner a besoin d'un trigramme pour être proposé comme responsable : on en fabrique un.
+    if(AgenceCalc.EST_PARTNER(resp)&&!k.trigramme){
+      const base=((k.prenom||'')[0]||'')+((k.nom||'').replace(/[^A-Za-zÀ-ÿ]/g,'').slice(0,2));
+      let tri=base.toUpperCase().padEnd(3,'X'), n=1;
+      const pris=new Set(partners.map(p=>p.trigramme));
+      while(pris.has(tri)&&n<10){ tri=tri.slice(0,2)+String(n); n++; }
+      upd.trigramme=tri;
+    }
+    const {error}=await sb.from('contacts').update(upd).eq('id',k.id);
+    if(error){toast('Erreur : '+error.message,'error');setSavingPartner(false);return;}
+    await sb.from('historique_actions').insert({id_prospect:k.id,date:getToday(),type_action:'Note interne',details:`Responsabilité → ${AgenceCalc.RESPONSABILITES[resp]?.label||'Salarié·e'}`,responsable:profile.nom});
+    toast(`Responsabilité → ${AgenceCalc.RESPONSABILITES[resp]?.label||'Salarié·e'}`); setSavingPartner(false); onRefresh();
+  };
   const changerPartner=async(tri)=>{
     setSavingPartner(true);
-    const nom=AgenceCalc.MANAGER_TRIGRAMMES[tri]||null;
+    const nom=(partners.find(p=>p.trigramme===tri)||{}).nom||AgenceCalc.MANAGER_TRIGRAMMES[tri]||null;
     const {error}=await sb.from('contacts').update({manager_trigramme:tri||null,updated_at:new Date().toISOString()}).eq('id',k.id);
     if(error){toast('Erreur : '+error.message,'error');setSavingPartner(false);return;}
     // Si ce partner a un compte CRM, on aligne aussi son périmètre (table partner_consultants).
@@ -3122,15 +3221,21 @@ function CollabDetail({ collab: k, missions, missionPeriods, histMissions, conta
         <Row l={k.isCdi?'Partner responsable':'Commercial'} v={k.isCdi&&peutChangerPartner
           ? <select value={k.manager_trigramme||''} disabled={savingPartner} onChange={e=>changerPartner(e.target.value)} className="text-sm border-2 border-neutral-200 px-2 py-1 focus:outline-none focus:border-midnight" style={{maxWidth:220}}>
               <option value="">— aucun —</option>
-              {Object.entries(AgenceCalc.MANAGER_TRIGRAMMES).sort((a,b)=>a[1].localeCompare(b[1])).map(([t,n])=><option key={t} value={t}>{n}</option>)}
+              {partners.map(p=><option key={p.trigramme} value={p.trigramme}>{p.nom}{p.source==='commercial'?' (commercial)':''}</option>)}
             </select>
           : ((k.isCdi?k.partnerNom:k.responsable)||'—')}/>
+        {k.isCdi&&<Row l="Responsabilité" v={peutChangerPartner
+          ? <select value={k.responsabilite||''} disabled={savingPartner} onChange={e=>changerResponsabilite(e.target.value)} className="text-sm border-2 border-neutral-200 px-2 py-1 focus:outline-none focus:border-midnight" style={{maxWidth:220}}>
+              <option value="">Salarié·e</option>
+              {Object.entries(AgenceCalc.RESPONSABILITES).map(([v,r])=><option key={v} value={v}>{r.label}</option>)}
+            </select>
+          : (AgenceCalc.RESPONSABILITES[k.responsabilite]?.label||'Salarié·e')}/>}
         {!k.isCdi&&<Row l="Type" v={k.typeLabel}/>}
         <Row l="Statut RH" v={k.statut_rh?AgenceCalc.etatDispo({...k,etat:k.statut_rh}).label:'—'}/>
         {k.email&&<Row l="Email" v={k.email}/>}{k.telephone&&<Row l="Téléphone" v={k.telephone}/>}
       </div></Panneau>}
     </SidePanel>
-    {edit&&<ContactEditModal contact={k} profile={profile} allProfiles={allProfiles} comptes={comptes||[]} onClose={()=>setEdit(false)} onSaved={()=>{setEdit(false);onRefresh();}}/>}
+    {edit&&<ContactEditModal contact={k} contacts={contacts||[]} profile={profile} allProfiles={allProfiles} comptes={comptes||[]} onClose={()=>setEdit(false)} onSaved={()=>{setEdit(false);onRefresh();}}/>}
     {showPos&&<PositionnerModal contact={k} besoins={besoins||[]} comptes={comptes||[]} profile={profile} onClose={()=>setShowPos(false)} onSaved={()=>{setShowPos(false);onRefresh();}}/>}
     {openMission&&<MissionDetail mission={openMission} histMissions={histMissions||[]} missionPeriods={periods} contacts={contacts||[]} taches={taches||[]} missions={missions||[]} besoins={besoins||[]} comptes={comptes||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setOpenMission(null)} onRefresh={()=>{setOpenMission(null);onRefresh();}} onNavToContact={onNavToContact} onNavToBesoin={()=>{}} onNavToTache={()=>{}} onNavToCompte={()=>{}}/>}
   </>;
@@ -3177,6 +3282,7 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
   const [sortCol,setSortCol]=useState('dispo'); const [sortDir,setSortDir]=useState('asc');
   const [selected,setSelected]=useState(null);
   const [showAdd,setShowAdd]=useState(false);
+  const [showRepartition,setShowRepartition]=useState(false);
   const [exporting,setExporting]=useState(false);
   const toggleSort=col=>{ if(sortCol===col) setSortDir(d=>d==='asc'?'desc':'asc'); else { setSortCol(col); setSortDir('asc'); } };
   const SortIcon=({col})=> sortCol!==col?<span className="ml-1 text-neutral-200">↕</span>:<span className="ml-1 text-azure-100">{sortDir==='asc'?'↑':'↓'}</span>;
@@ -3184,11 +3290,14 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
 
   const partnerNomById=useMemo(()=>Object.fromEntries((allProfiles||[]).map(p=>[p.id,p.nom])),[allProfiles]);
   const partnerIdByContact=useMemo(()=>{const o={};(partnerConsultants||[]).forEach(x=>{if(o[x.contact_consultant_id]==null)o[x.contact_consultant_id]=x.partner_id;});return o;},[partnerConsultants]);
+  const partners=useMemo(()=>AgenceCalc.optionsPartners(contacts||[],allProfiles||[]),[contacts,allProfiles]);
+  const partnerNomByTri=useMemo(()=>Object.fromEntries(partners.map(p=>[p.trigramme,p.nom])),[partners]);
+  const peutGererPartners=profile.role==='admin'||!!profile.dir_agence||!!profile.partner_lead;
   const collabs=useMemo(()=>{
     const statuts=mode==='cdi'?AgenceCalc.CDI_STATUTS:AgenceCalc.ST_STATUTS;
-    const ctx={missions,intercos,partnerNomById,partnerIdByContact,todayISO:TODAY,annee:new Date().getFullYear()};
+    const ctx={missions,intercos,partnerNomById,partnerIdByContact,partnerNomByTri,todayISO:TODAY,annee:new Date().getFullYear()};
     return contacts.filter(c=>statuts.includes(c.statut)).map(c=>AgenceCalc.computeCollab(c,ctx));
-  },[contacts,missions,intercos,partnerNomById,partnerIdByContact,mode]);
+  },[contacts,missions,intercos,partnerNomById,partnerIdByContact,partnerNomByTri,mode]);
   const agences=useMemo(()=>[...new Set(collabs.map(k=>k.agence).filter(Boolean))].sort(),[collabs]);
   const responsables=useMemo(()=>[...new Set(collabs.map(k=>mode==='cdi'?k.partnerNom:k.responsable).filter(Boolean))].sort(),[collabs,mode]);
 
@@ -3263,6 +3372,7 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
         </div>
         <div className="flex gap-2">
           <button onClick={()=>exportEffectifs(filteredSorted,mode,filterAgence,setExporting)} disabled={exporting||!filteredSorted.length} className="px-3 py-2 text-sm font-medium border-2 border-neutral-200 text-carbon hover:border-midnight disabled:opacity-50 transition-colors">{exporting?'…':'Export Excel'}</button>
+          {peutGererPartners&&<button onClick={()=>setShowRepartition(true)} className="px-3 py-2 text-sm font-medium border-2 border-neutral-200 text-carbon hover:border-midnight transition-colors">Répartition</button>}
           {!isPartner&&<button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">+ Nouveau collaborateur</button>}
         </div>
       </div>
@@ -3281,7 +3391,7 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
         {visible.map(k=>(
           <div key={k.id} onClick={()=>setSelected(k)} data-detail tabIndex="0" className="bg-white border-2 border-neutral-200 hover:border-midnight p-3 cursor-pointer active:bg-azure-20 focus:outline-none focus:border-midnight transition-colors">
             <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0"><div className="font-bold text-midnight text-sm">{k.prenom} {k.nom}</div><div className="text-xs text-slate mt-0.5">{k.agence} · {mode==='cdi'?k.partnerNom:k.responsable}</div></div>
+              <div className="min-w-0"><div className="font-bold text-midnight text-sm flex items-center gap-1.5 flex-wrap">{k.prenom} {k.nom}<RespBadge r={k.responsabilite}/></div><div className="text-xs text-slate mt-0.5">{k.agence} · {mode==='cdi'?k.partnerNom:k.responsable}</div></div>
               <DispoBadge k={k}/>
             </div>
             <div className="flex items-center gap-3 mt-2 text-xs text-slate">{k.missionEnCours&&<span>{k.missionEnCours.client}</span>}{k.tjm!=null&&<span>TJM {fmtEur0(k.tjm)}</span>}<MargeCell m={k.marge}/></div>
@@ -3306,7 +3416,7 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
           </tr></thead>
           <tbody>{visible.map(k=>(
             <tr key={k.id} onClick={()=>setSelected(k)} data-detail tabIndex="0" className={`border-t border-neutral-50 hover:bg-lemon-20 focus:bg-azure-20 focus:outline-none cursor-pointer transition-colors${selected&&selected.id===k.id?' bg-azure-20':''}${k.sorti?' opacity-50':''}`}>
-              <td className="px-4 py-3"><div className="font-medium text-midnight">{k.prenom} {k.nom}</div>{k.sorti&&<div className="text-xs text-coral-100">sorti le {fmtDateFR(k.date_sortie)}</div>}</td>
+              <td className="px-4 py-3"><div className="font-medium text-midnight flex items-center gap-1.5 flex-wrap">{k.prenom} {k.nom}<RespBadge r={k.responsabilite}/></div>{k.sorti&&<div className="text-xs text-coral-100">sorti le {fmtDateFR(k.date_sortie)}</div>}</td>
               {mode==='st'&&<td className="px-4 py-3"><ColorBadge label={k.typeLabel} bg={k.typeLabel==='Freelance'?'#FF66FF':'#F97316'} color={k.typeLabel==='Freelance'?'#1C1F35':'#FFFFFF'}/></td>}
               <td className="px-4 py-3 text-slate">{k.agence||'—'}</td>
               <td className="px-4 py-3 text-slate text-xs">{(mode==='cdi'?k.partnerNom:k.responsable)||'—'}</td>
@@ -3324,7 +3434,8 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
       </div>
       {filteredSorted.length>visibleCount&&<div className="mt-3 flex justify-center"><button onClick={()=>setVisibleCount(v=>v+PAGE_SIZE)} className="px-4 py-2 text-sm font-medium border-2 border-neutral-200 text-carbon hover:border-midnight transition-colors">Charger plus ({filteredSorted.length-visibleCount} restants)</button></div>}
       {selected&&<CollabDetail collab={filteredSorted.find(k=>k.id===selected.id)||selected} missions={missions} missionPeriods={missionPeriods} histMissions={histMissions} contacts={contacts} taches={taches} besoins={besoins} comptes={comptes} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{onRefresh();}} onNavToContact={onNavToContact}/>}
-      {showAdd&&<AddContactModal profile={profile} allProfiles={allProfiles} comptes={comptes||[]} defaults={{statut:mode==='cdi'?'Consultant CDI':'Freelance',agence:filterAgence||profile.agence||''}} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
+      {showRepartition&&<RepartitionPartners contacts={contacts||[]} allProfiles={allProfiles||[]} missions={missions} profile={profile} onClose={()=>setShowRepartition(false)} onRefresh={onRefresh}/>}
+      {showAdd&&<AddContactModal contacts={contacts||[]} profile={profile} allProfiles={allProfiles} comptes={comptes||[]} defaults={{statut:mode==='cdi'?'Consultant CDI':'Freelance',agence:filterAgence||profile.agence||''}} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
     </div>
   );
 }
@@ -3502,8 +3613,8 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
       )}
       </>}
       {viewMode==='comptes'&&<ComptesView comptes={comptes||[]} contactComptes={contactComptes||[]} contacts={contacts} missions={allMissions||missions} historique={historique} taches={taches} histMissions={histMissions||[]} profile={profile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} selected={selectedCompte?((comptes||[]).find(c=>c.id===selectedCompte.id)||selectedCompte):null} onSelect={c=>{setSelectedCompte(c);setFromContact(null);}} onNavToContact={cid=>{const c=contacts.find(x=>x.id===cid);if(c)setSelected(c);}} fromContact={fromContact} onBackToContact={()=>{setSelected(fromContact);setSelectedCompte(null);setFromContact(null);setViewMode('contacts');}} onEditCompte={setEditingCompte} onDeleteCompte={setDeletingCompte}/>}
-      {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} missions={missions} besoins={besoins} comptes={comptes||[]} contactComptes={contactComptes||[]} profile={profile} allProfiles={allProfiles} fromCompte={viewMode==='comptes'?selectedCompte:null} onRefresh={()=>{onRefresh();setSelected(null);}} onClose={()=>setSelected(null)} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache} onNavToCompte={cid=>{const cmpt=(comptes||[]).find(x=>x.id===cid);if(cmpt){setFromContact(selected);setSelected(null);setSelectedCompte(cmpt);setViewMode('comptes');}}}/>}
-      {showAdd&&<AddContactModal profile={profile} allProfiles={allProfiles} comptes={comptes||[]} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
+      {selected&&<ContactDetail contact={selected} contacts={contacts||[]} historique={historique} taches={taches} missions={missions} besoins={besoins} comptes={comptes||[]} contactComptes={contactComptes||[]} profile={profile} allProfiles={allProfiles} fromCompte={viewMode==='comptes'?selectedCompte:null} onRefresh={()=>{onRefresh();setSelected(null);}} onClose={()=>setSelected(null)} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache} onNavToCompte={cid=>{const cmpt=(comptes||[]).find(x=>x.id===cid);if(cmpt){setFromContact(selected);setSelected(null);setSelectedCompte(cmpt);setViewMode('comptes');}}}/>}
+      {showAdd&&<AddContactModal contacts={contacts||[]} profile={profile} allProfiles={allProfiles} comptes={comptes||[]} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
       {showAddCompte&&<CompteFormModal compte={null} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAddCompte(false)} onSaved={()=>{setShowAddCompte(false);onRefresh();}}/>}
       {editingCompte&&<CompteFormModal compte={editingCompte} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingCompte(null)} onSaved={()=>{setEditingCompte(null);onRefresh();}}/>}
       {deletingCompte&&<ConfirmDeleteCompteModal compte={deletingCompte} contactComptes={contactComptes||[]} deleting={compteDeleting} onClose={()=>{if(!compteDeleting)setDeletingCompte(null);}} onConfirm={async()=>{setCompteDeleting(true);const {error}=await sb.from('comptes').delete().eq('id',deletingCompte.id);if(error){toast('Erreur : '+error.message);setCompteDeleting(false);return;}toast('Compte supprimé');setSelectedCompte(null);setDeletingCompte(null);setCompteDeleting(false);onRefresh();}}/>}
@@ -5820,7 +5931,7 @@ function TabHistorique({ historique, contacts, contactMap, taches, besoins, prof
           Voir plus ({filtered.length-visibleCount} restantes)
         </button>
       )}
-      {selected&&<ContactDetail contact={selected} historique={historique} taches={taches} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
+      {selected&&<ContactDetail contact={selected} contacts={contacts||[]} historique={historique} taches={taches} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
     </div>
   );
 }
@@ -8545,7 +8656,7 @@ function App() {
         {data:partnerConsultants,error:e11},
         {data:intercos,error:e12},
       ] = await Promise.all([
-        sb.from('contacts').select('id,statut,prenom,nom,ville,role,telephone,email,linkedin,besoins,responsable,date_dernier,commentaires,ats,updated_at,agence,created_at,date_dernier_suivi_client,ne_pas_recontacter,ne_pas_recontacter_note,ne_pas_recontacter_date,cjm,employeur,date_entree,date_sortie,salaire_annuel,cjm_manuel,statut_rh,statut_rh_depuis,type_presta,manager_trigramme').order('id').limit(L),
+        sb.from('contacts').select('id,statut,prenom,nom,ville,role,telephone,email,linkedin,besoins,responsable,date_dernier,commentaires,ats,updated_at,agence,created_at,date_dernier_suivi_client,ne_pas_recontacter,ne_pas_recontacter_note,ne_pas_recontacter_date,cjm,employeur,date_entree,date_sortie,salaire_annuel,cjm_manuel,statut_rh,statut_rh_depuis,type_presta,manager_trigramme,responsabilite,trigramme').order('id').limit(L),
         sb.from('historique_actions').select('id,id_prospect,date,type_action,details,responsable,tache_id,besoin_id').order('date',{ascending:false}).limit(histLimit),
         sb.from('taches').select('id,titre,statut,due_date,contact_id,mission_id,besoin_id,notes,responsable,date_completion,session_prospection_id,updated_at').order('due_date',{ascending:true,nullsFirst:false}).limit(L),
         sb.from('besoins').select('id,titre,statut,lien,compte_id,contact_id,description,budget,budget_tjm,budget_jours,budget_date_debut,budget_date_fin,candidat_id,consultant_id,date_entretien,compte_rendu,date_demarrage,date_fin,tjm_vente,cjm_achat,motif_perte,motif_perte_precision,responsable,agence,created_at,updated_at').order('created_at',{ascending:false}).limit(L),

@@ -12,6 +12,30 @@
   const CONSULTANT_STATUTS_AGENCE = CDI_STATUTS.concat(ST_STATUTS);
   const COL = { vert: '#00C218', orange: '#F97316', rouge: '#FF3D2E', gris: '#E4E4E6', midnight: '#1C1F35', blanc: '#FFFFFF', mute: '#A4A6AB' };
 
+  // Casquettes internes (contacts.responsabilite). null = salarié·e sans casquette.
+  const RESPONSABILITES = {
+    lead_partner:        { label: 'Lead partner',           court: 'Lead partner', bg: '#823DE8', color: '#FFFFFF' },
+    partner:             { label: 'Partner',                court: 'Partner',      bg: '#1C1F35', color: '#FFFFFF' },
+    referent_technique:  { label: 'Référent·e technique',   court: 'Réf. tech',    bg: '#5090FE', color: '#FFFFFF' },
+    referent_design_ops: { label: 'Référent·e Design Ops',  court: 'Réf. DesignOps', bg: '#FF78FD', color: '#1C1F35' },
+  };
+  const EST_PARTNER = (r) => r === 'partner' || r === 'lead_partner';
+  // Liste des « partners responsables » proposables : les consultants porteurs d'une casquette
+  // partner/lead partner + les commerciaux. Dédoublonnée par trigramme (Majo existe des deux côtés).
+  function optionsPartners(contacts, profiles) {
+    const out = new Map();
+    (contacts || []).forEach((c) => {
+      if (!EST_PARTNER(c.responsabilite) || !c.trigramme) return;
+      if (c.date_sortie && d0(c.date_sortie) <= new Date().toISOString().slice(0, 10)) return;
+      out.set(c.trigramme, { trigramme: c.trigramme, nom: `${c.prenom || ''} ${c.nom || ''}`.trim(), source: 'consultant', responsabilite: c.responsabilite, contact_id: c.id });
+    });
+    (profiles || []).forEach((p) => {
+      if (!p.trigramme || out.has(p.trigramme)) return;
+      out.set(p.trigramme, { trigramme: p.trigramme, nom: p.nom, source: 'commercial', profile_id: p.id });
+    });
+    return [...out.values()].sort((a, b) => (a.source === b.source ? a.nom.localeCompare(b.nom) : a.source === 'consultant' ? -1 : 1));
+  }
+
   const cjmFromSalaire = (s) => Math.round((Number(s) / 215) * 1.7 * 100) / 100;
   const d0 = (iso) => (iso || '').slice(0, 10);
   const joursEntre = (a, b) => Math.round((Date.parse(d0(b) + 'T00:00:00Z') - Date.parse(d0(a) + 'T00:00:00Z')) / 86400000);
@@ -20,7 +44,7 @@
   const fmtJ = (n) => (n % 1 ? n.toFixed(1).replace('.', ',') : String(n));
 
   function computeCollab(c, ctx) {
-    const { missions = [], intercos = [], partnerNomById = {}, partnerIdByContact = {}, todayISO, annee } = ctx;
+    const { missions = [], intercos = [], partnerNomById = {}, partnerIdByContact = {}, partnerNomByTri = {}, todayISO, annee } = ctx;
     const mine = missions.filter((m) => m.contact_consultant_id === c.id);
     const enCours = mine.filter((m) => m.statut === 'En cours')
       .sort((a, b) => (d0(b.date_fin_mission) || '9999').localeCompare(d0(a.date_fin_mission) || '9999'));
@@ -41,8 +65,8 @@
     else etat = isCdi ? 'intercontrat' : 'sans_mission';
     const sorti = !!(c.date_sortie && d0(c.date_sortie) <= todayISO);
     const pid = partnerIdByContact[c.id];
-    const partnerNom = (pid && partnerNomById[pid]) || MANAGER_TRIGRAMMES[c.manager_trigramme] || c.manager_trigramme || '';
-    const typeLabel = isCdi ? 'CDI' : (c.type_presta === 'sous_traitant' || (!c.type_presta && c.statut === 'Prestataire') ? 'Sous-traitant' : 'Freelance');
+    const partnerNom = (pid && partnerNomById[pid]) || (partnerNomByTri || {})[c.manager_trigramme] || MANAGER_TRIGRAMMES[c.manager_trigramme] || c.manager_trigramme || '';
+    const typeLabel = isCdi ? 'CDI' : (c.statut === 'Prestataire' ? 'Sous-traitant' : 'Freelance');
     return Object.assign({}, c, { missionEnCours, joursAvantDispo, tjm, cjm, marge, intercoAnnee, etat, sorti, partnerNom, typeLabel, isCdi, _annee: annee });
   }
 
@@ -189,7 +213,7 @@
     return { tauxM, tauxAnn, joursYTD, coutYTD, idxAff, fallbackM1: !courantRempli && idxAff !== curMonthIdx, nbCourant: parMois(idxAff).length, parMois, effectif };
   }
 
-  const AgenceCalc = { MANAGER_TRIGRAMMES, CDI_STATUTS, ST_STATUTS, CONSULTANT_STATUTS_AGENCE, ALERTE_PREFIX, COL,
+  const AgenceCalc = { MANAGER_TRIGRAMMES, RESPONSABILITES, EST_PARTNER, optionsPartners, CDI_STATUTS, ST_STATUTS, CONSULTANT_STATUTS_AGENCE, ALERTE_PREFIX, COL,
     cjmFromSalaire, joursEntre, fmtJJMM, fmtJJMMAAAA, fmtJ, computeCollab, etatDispo, margeStyle, computeKpis, prochainJourOuvre930, planAlertes,
     arriveesSortiesParMois, tranchesTjm, tranchesMarge, tjmMargeParMois, intercoStats };
   root.AgenceCalc = AgenceCalc;
