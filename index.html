@@ -1441,13 +1441,13 @@ function ContactEditModal({ contact, profile, allProfiles, comptes, contacts, on
       <CollabFields f={f} setF={setF} partners={AgenceCalc.optionsPartners(contacts||[],allProfiles||[])}/>
       {f.statut==='Consultant CDI' && <IntercoEditor contact={contact} profile={profile} />}
       <Field label="Commentaires"><textarea rows={3} value={f.commentaires} onChange={s('commentaires')} className={inputCls+' resize-none'}/></Field>
-      <div style={{borderTop:'2px solid #E4E4E6',paddingTop:12,marginTop:12}}>
+      {(f.statut==='Prospect'||contact.ne_pas_recontacter)&&<div style={{borderTop:'2px solid #E4E4E6',paddingTop:12,marginTop:12}}>
         <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
           <input type="checkbox" checked={f.ne_pas_recontacter||false} onChange={function(e){setF(function(v){var n={};for(var k in v)n[k]=v[k];n.ne_pas_recontacter=e.target.checked;if(e.target.checked)n.ne_pas_recontacter_date=getToday();return n;});}}/>
           <span style={{fontSize:12,fontWeight:700,color:'#FF3D2E'}}>Ne pas recontacter</span>
         </label>
         {f.ne_pas_recontacter&&<textarea rows={2} placeholder="Raison (optionnel)" value={f.ne_pas_recontacter_note||''} onChange={function(e){setF(function(v){var n={};for(var k in v)n[k]=v[k];n.ne_pas_recontacter_note=e.target.value;return n;});}} style={{marginTop:6,width:'100%',fontSize:12,padding:'6px 10px',border:'1px solid #E4E4E6',borderRadius:0,resize:'none'}} className={inputCls}/>}
-      </div>
+      </div>}
       {err && <div className="text-xs text-coral-100 bg-coral-20 rounded px-3 py-2">{err}</div>}
     </Modal>
   );
