@@ -2771,7 +2771,249 @@ function MissionDetail({ mission, histMissions, missionPeriods, contacts, taches
 
 // ── Onglet Prospects ──────────────────────────────────────────────────────────
 // ═══ Onglet Agence (SPEC_agence_effectifs.md) ═══
-function TabAgence(props){ return <div className="tab-content text-sm text-slate italic">Onglet Agence — en construction ({props.contacts.length} contacts visibles)</div>; }
+function DispoBadge({ k }) { const b=AgenceCalc.etatDispo(k); return <ColorBadge label={b.label} bg={b.bg} color={b.color}/>; }
+function MargeCell({ m }) { if(m==null) return <span className="text-neutral-300">—</span>; return <span className="font-medium" style={AgenceCalc.margeStyle(m)}>{Math.round(m*100)} %</span>; }
+const fmtEur0 = n => n==null?'—':Math.round(n).toLocaleString('fr-FR')+' €';
+const fmtDateFR = iso => iso?AgenceCalc.fmtJJMMAAAA(iso):'—';
+const MOIS_LBL_AG=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'];
+// Barres mensuelles génériques (même rendu que ChartMissions : barres pleines, mois courant souligné). series: [{values:number[12], color, label}], line?: number[12]
+function BarresMensuelles({ series, line, curMonth, selMonth, onMonthClick, fmt=v=>String(v) }) {
+  const max=Math.max(1,...series.flatMap(s=>s.values),...(line||[]).filter(v=>v!=null));
+  return <div>
+    <div style={{display:'flex',gap:6,alignItems:'flex-end',height:140,position:'relative'}}>
+      {MOIS_LBL_AG.map((m,i)=><div key={i} onClick={()=>onMonthClick&&onMonthClick(i)} title={series.map(s=>`${s.label} ${fmt(s.values[i])}`).join(' · ')} style={{flex:1,display:'flex',gap:2,alignItems:'flex-end',height:'100%',cursor:onMonthClick?'pointer':'default',outline:selMonth===i?'2px solid #1C1F35':'none',outlineOffset:2}}>
+        {series.map(s=><div key={s.label} style={{flex:1,background:s.color,height:Math.max(2,(s.values[i]/max)*130),opacity:i>curMonth?0.35:1}}/>)}
+        {line&&line[i]!=null&&<div style={{position:'absolute',bottom:(line[i]/max)*130,left:`${(i+0.5)*100/12}%`,width:6,height:6,marginLeft:-3,borderRadius:3,background:'#1C1F35'}}/>}
+      </div>)}
+    </div>
+    <div style={{display:'flex',gap:6,marginTop:4}}>{MOIS_LBL_AG.map((m,i)=><div key={i} style={{flex:1,textAlign:'center',fontSize:10,fontWeight:i===curMonth?800:500,color:i===curMonth?'#1C1F35':'#9ca3af',background:i===curMonth?'#FFE500':'transparent'}}>{m}</div>)}</div>
+    <div style={{display:'flex',gap:12,marginTop:8,fontSize:11,color:'#6b7280'}}>{series.map(s=><span key={s.label}><span style={{display:'inline-block',width:10,height:10,background:s.color,marginRight:4,verticalAlign:'middle'}}/>{s.label}</span>)}{line&&<span><span style={{display:'inline-block',width:8,height:8,borderRadius:4,background:'#1C1F35',marginRight:4,verticalAlign:'middle'}}/>effectif fin de mois</span>}</div>
+  </div>;
+}
+// Liste « détail » sous une dalle : lignes cliquables → volet collaborateur
+function ListeCollabs({ titre, items, cols, color='#1C1F35', onPick, vide='Rien à afficher.' }) {
+  return <div style={{marginTop:12,background:'#fff',border:'2px solid #1C1F35',borderRadius:0}}>
+    <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 16px',borderBottom:'2px solid #1C1F35',background:color,color:color==='#1C1F35'||color==='#FF3D2E'?'#fff':'#1C1F35'}}><span style={{fontSize:13,fontWeight:800,textTransform:'uppercase',letterSpacing:.5}}>{titre}</span><span style={{marginLeft:'auto',fontSize:12,fontWeight:700}}>{items.length}</span></div>
+    {!items.length?<div style={{padding:16,fontSize:13,color:'#9ca3af'}}>{vide}</div>:items.map(k=><div key={k.id} onClick={()=>onPick(k)} className="hover:bg-azure-20 transition-colors" style={{display:'flex',alignItems:'center',gap:12,padding:'10px 16px',borderBottom:'1px solid #E4E4E6',cursor:'pointer',fontSize:13}}>
+      <span style={{flex:1,fontWeight:700,color:'#1C1F35'}}>{k.prenom} {k.nom}</span>{cols.map((c,i)=><span key={i} style={{width:c.w||90,textAlign:c.right?'right':'left',color:c.color?c.color(k):'#6b7280',fontWeight:c.right?700:400}}>{c.v(k)}</span>)}<span style={{width:16,textAlign:'right',color:'#4A7FE5',fontWeight:800}}>→</span></div>)}
+  </div>;
+}
+// Barres horizontales de répartition par tranche (TJM / marge) — clic = liste
+function Tranches({ tranches, sel, onSel, fmtCount=n=>`${n}` }) {
+  const max=Math.max(1,...tranches.map(t=>t.items.length));
+  return <div className="space-y-2">{tranches.map((t,i)=><div key={t.label} onClick={()=>onSel(sel===i?null:i)} style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer',opacity:sel==null||sel===i?1:0.4}}>
+    <span style={{width:80,fontSize:12,fontWeight:700,color:t.color||'#1C1F35'}}>{t.label}</span>
+    <div style={{flex:1,background:'#F4F4F5',height:22}}><div style={{width:`${(t.items.length/max)*100}%`,height:'100%',background:t.color||'#4A7FE5',outline:sel===i?'2px solid #1C1F35':'none'}}/></div>
+    <span style={{width:40,textAlign:'right',fontSize:13,fontWeight:800}}>{fmtCount(t.items.length)}</span></div>)}</div>;
+}
+// Les 4 dalles + zone détail (spec §5.1). collabs = périmètre filtré ; cdiIds pour l'interco ; missions du périmètre pour TJM/marge par mois.
+function AgenceKpiDalles({ collabs, mode, missions, intercos, contactMap, onPick, onNavToContact }) {
+  const [active,setActive]=useState(null);
+  const [moisSel,setMoisSel]=useState(null);
+  const [trancheSel,setTrancheSel]=useState(null);
+  useEffect(()=>{setMoisSel(null);setTrancheSel(null);},[active,mode]);
+  const annee=new Date().getFullYear(), cur=new Date().getMonth();
+  const act=collabs.filter(k=>!k.sorti);
+  const k=AgenceCalc.computeKpis(act,mode);
+  const enMission=act.filter(x=>x.etat==='en_mission').length, dispo=act.filter(x=>x.etat==='intercontrat'||x.etat==='sans_mission').length;
+  const cdiIds=new Set(act.filter(x=>x.isCdi).map(x=>x.id));
+  const ic=mode==='cdi'?AgenceCalc.intercoStats(cdiIds,intercos||[],annee,cur,joursOuvresMois):null;
+  const nomsInter=ic?ic.parMois(ic.idxAff).map(r=>{const c=contactMap[r.contact_consultant_id];return c?(c.prenom||c.nom||'').split(' ')[0]:'';}).filter(Boolean):[];
+  const cards=[
+    {id:'effectif',color:'#00C218',value:k.effectif,label:mode==='cdi'?'CONSULTANTS':'SOUS-TRAITANTS',sub:`${enMission} en mission · ${dispo} ${mode==='cdi'?'en interco':'sans mission'}`},
+    mode==='cdi'
+      ?{id:'inter',color:ic.nbCourant>0?'#FFE500':'#ccc',value:ic.nbCourant,label:'INTERCONTRAT',sub:ic.nbCourant>0?`${ic.fallbackM1?`${MOIS_LBL_AG[ic.idxAff].toLowerCase()} (M-1) · `:''}${AgenceCalc.fmtJ(ic.joursYTD)}j YTD · ${fmtK(ic.coutYTD)} · ${nomsInter.join(', ')}`:'Aucun',badge:ic.tauxAnn>=8?'MALUS':ic.tauxAnn>=5?'Attention':null,badgeColor:ic.tauxAnn>=8?'#FF3D2E':'#92400e'}
+      :{id:'inter',color:dispo>0?'#F97316':'#ccc',value:dispo,label:'SANS MISSION',sub:dispo>0?act.filter(x=>x.etat==='sans_mission').map(x=>x.prenom).join(', '):'Aucun'},
+    {id:'tjm',color:'#4A7FE5',value:k.tjmMoyen==null?'—':Math.round(k.tjmMoyen)+' €',label:'TJM MOYEN',sub:`CJM moyen ${k.cjmMoyen==null?'—':Math.round(k.cjmMoyen)+' €'} · ${enMission} mission${enMission>1?'s':''}`},
+    {id:'marge',color:'#FF66FF',value:k.margeMoyenne==null?'—':Math.round(k.margeMoyenne*100)+' %',label:'MARGE MOYENNE',sub:`seuil 30 % · ${act.filter(x=>x.marge!=null&&x.marge<0.30).length} sous le seuil`,badge:k.margeMoyenne!=null&&k.margeMoyenne<0.30?'Sous seuil':null,badgeColor:'#F97316'},
+  ];
+  const color=cards.find(c=>c.id===active)?.color||'#E4E4E6';
+  const as=active==='effectif'?AgenceCalc.arriveesSortiesParMois(collabs,annee):null;
+  const tm=active==='tjm'||active==='marge'?AgenceCalc.tjmMargeParMois(missions,annee):null;
+  const tr=active==='tjm'?AgenceCalc.tranchesTjm(act):active==='marge'?AgenceCalc.tranchesMarge(act):null;
+  const pick=k=>onPick(k);
+  const eur=v=>v==null?'—':Math.round(v)+' €', pct=v=>v==null?'—':Math.round(v*100)+' %';
+  return <div className="mb-4">
+    <KpiCards cards={cards} active={active} onSelect={id=>setActive(a=>a===id?null:id)}/>
+    {active&&<div style={{marginTop:12,background:'#fff',borderTop:'2px solid #E4E4E6',borderRight:'2px solid #E4E4E6',borderBottom:'2px solid #E4E4E6',borderLeft:`5px solid ${color}`,padding:'20px 24px 24px',borderRadius:0}}>
+      {active==='effectif'&&<>
+        <div className="text-sm font-bold text-midnight mb-3">Arrivées et sorties {annee} · effectif fin de mois</div>
+        <BarresMensuelles series={[{values:as.arrivees,color:'#00C218',label:'arrivées'},{values:as.sorties,color:'#FF3D2E',label:'sorties'}]} line={as.cumul} curMonth={cur} selMonth={moisSel} onMonthClick={i=>setMoisSel(m=>m===i?null:i)}/>
+        {moisSel!=null&&<ListeCollabs titre={`Arrivées ${MOIS_LBL_AG[moisSel]} ${annee}`} items={as.listeArrivees[moisSel]} color="#00C218" onPick={pick} cols={[{v:k=>k.agence||'—'},{v:k=>fmtDateFR(k.date_entree),w:100},{v:k=>(mode==='cdi'?k.partnerNom:k.responsable)||'—',w:150}]} vide="Aucune arrivée ce mois-là."/>}
+      </>}
+      {active==='inter'&&mode==='cdi'&&<>
+        <ChartInter tauxM={ic.tauxM} tauxAnn={ic.tauxAnn} curMonth={cur} selMonth={moisSel!=null?moisSel:ic.idxAff} onMonthClick={i=>setMoisSel(m=>m===i?null:i)}/>
+        {(()=>{const idx=moisSel!=null?moisSel:ic.idxAff; const rows=ic.parMois(idx).map(r=>Object.assign({},contactMap[r.contact_consultant_id]||{id:r.contact_consultant_id,nom:'(inconnu)'},{jours:r.jours,cout:r.cout})); const tj=rows.reduce((s,x)=>s+x.jours,0), tc=rows.reduce((s,x)=>s+x.cout,0);
+          return <ListeCollabs titre={`En intercontrat — ${MOIS_LBL_AG[idx]} ${annee}${moisSel==null&&ic.fallbackM1?' (M-1)':''} · ${AgenceCalc.fmtJ(tj)}j · ${fmtK(tc)}`} items={rows} color="#FFE500" onPick={k=>onNavToContact&&onNavToContact(k.id)} cols={[{v:k=>k.agence||'—'},{v:k=>AgenceCalc.fmtJ(k.jours)+'j',w:48,right:true},{v:k=>fmtK(k.cout),w:64,right:true,color:()=>'#FF3D2E'}]} vide="Aucun consultant en intercontrat ce mois-ci."/>;})()}
+      </>}
+      {active==='inter'&&mode==='st'&&<ListeCollabs titre="Sous-traitants sans mission" items={act.filter(x=>x.etat==='sans_mission')} color="#F97316" onPick={pick} cols={[{v:k=>k.typeLabel},{v:k=>k.agence||'—'},{v:k=>k.responsable||'—',w:150}]} vide="Tous les sous-traitants sont en mission."/>}
+      {active==='tjm'&&<>
+        <div className="text-sm font-bold text-midnight mb-3">TJM moyen par mois {annee} (missions actives)</div>
+        <BarresMensuelles series={[{values:tm.tjm.map(v=>v||0),color:'#4A7FE5',label:'TJM moyen'}]} curMonth={cur} fmt={eur}/>
+        <div className="text-sm font-bold text-midnight mt-5 mb-2">Répartition par tranche de TJM</div>
+        <Tranches tranches={tr} sel={trancheSel} onSel={setTrancheSel}/>
+        {trancheSel!=null&&<ListeCollabs titre={`TJM ${tr[trancheSel].label}`} items={tr[trancheSel].items} color="#4A7FE5" onPick={pick} cols={[{v:k=>k.missionEnCours?.client||'—',w:140},{v:k=>eur(k.tjm),w:70,right:true},{v:k=>pct(k.marge),w:60,right:true,color:k=>AgenceCalc.margeStyle(k.marge).color}]}/>}
+      </>}
+      {active==='marge'&&<>
+        <div className="text-sm font-bold text-midnight mb-3">Marge moyenne par mois {annee} (missions actives)</div>
+        <BarresMensuelles series={[{values:tm.marge.map(v=>v==null?0:Math.round(v*100)),color:'#FF66FF',label:'marge %'}]} curMonth={cur} fmt={v=>v+' %'}/>
+        <div className="text-sm font-bold text-midnight mt-5 mb-2">Répartition par tranche de marge</div>
+        <Tranches tranches={tr} sel={trancheSel} onSel={setTrancheSel}/>
+        <ListeCollabs titre={trancheSel!=null?`Marge ${tr[trancheSel].label}`:'Sous le seuil de 30 % — à renégocier / repositionner'} items={trancheSel!=null?tr[trancheSel].items:act.filter(x=>x.marge!=null&&x.marge<0.30).sort((a,b)=>a.marge-b.marge)} color={trancheSel!=null?(tr[trancheSel].color==='#1C1F35'?'#E4E4E6':tr[trancheSel].color):'#F97316'} onPick={pick} cols={[{v:k=>k.missionEnCours?.client||'—',w:140},{v:k=>eur(k.tjm),w:70,right:true},{v:k=>eur(k.cjm),w:70,right:true},{v:k=>pct(k.marge),w:60,right:true,color:k=>AgenceCalc.margeStyle(k.marge).color}]} vide="Personne sous 30 %. 👌"/>
+      </>}
+    </div>}
+    <div style={{marginTop:6,fontSize:11,color:'#bbb',textAlign:'right',fontFamily:'Outfit,sans-serif'}}>{active?'Cliquer un mois / une tranche pour le détail · re-cliquer la dalle pour fermer':'Cliquer sur une dalle pour voir le détail'}</div>
+  </div>;
+}
+function CollabDetail({ collab, onClose }){ return <SidePanel title={`${collab.prenom} ${collab.nom}`} onClose={onClose}><div className="text-sm text-slate italic">Volet en construction</div></SidePanel>; }
+async function exportEffectifs(rows,mode,agence,setBusy){ toast('Export : en construction'); }
+function TabAgence({ contacts, missions, missionPeriods, intercos, taches, comptes, histMissions, besoins, partnerConsultants, allProfiles, profile, isPartner, onRefresh, onNavToMission, onNavToContact, prefs }) {
+  const [mode,setMode]=useState('cdi');
+  const [search,setSearch]=useState('');
+  const [filterAgence,setFilterAgence]=useState(isPartner?'':(profile.agence||''));
+  const [filterResp,setFilterResp]=useState('');
+  const [etats,setEtats]=useState(new Set());           // 'en_mission' | 'dispo60' | 'intercontrat' | 'rh'
+  const [showSortis,setShowSortis]=useState(false);
+  const [sortCol,setSortCol]=useState('dispo'); const [sortDir,setSortDir]=useState('asc');
+  const [selected,setSelected]=useState(null);
+  const [showAdd,setShowAdd]=useState(false);
+  const [exporting,setExporting]=useState(false);
+  const toggleSort=col=>{ if(sortCol===col) setSortDir(d=>d==='asc'?'desc':'asc'); else { setSortCol(col); setSortDir('asc'); } };
+  const SortIcon=({col})=> sortCol!==col?<span className="ml-1 text-neutral-200">↕</span>:<span className="ml-1 text-azure-100">{sortDir==='asc'?'↑':'↓'}</span>;
+  const toggleEtat=e=>setEtats(s=>{const n=new Set(s); n.has(e)?n.delete(e):n.add(e); return n;});
+
+  const partnerNomById=useMemo(()=>Object.fromEntries((allProfiles||[]).map(p=>[p.id,p.nom])),[allProfiles]);
+  const partnerIdByContact=useMemo(()=>{const o={};(partnerConsultants||[]).forEach(x=>{if(o[x.contact_consultant_id]==null)o[x.contact_consultant_id]=x.partner_id;});return o;},[partnerConsultants]);
+  const collabs=useMemo(()=>{
+    const statuts=mode==='cdi'?AgenceCalc.CDI_STATUTS:AgenceCalc.ST_STATUTS;
+    const ctx={missions,intercos,partnerNomById,partnerIdByContact,todayISO:TODAY,annee:new Date().getFullYear()};
+    return contacts.filter(c=>statuts.includes(c.statut)).map(c=>AgenceCalc.computeCollab(c,ctx));
+  },[contacts,missions,intercos,partnerNomById,partnerIdByContact,mode]);
+  const agences=useMemo(()=>[...new Set(collabs.map(k=>k.agence).filter(Boolean))].sort(),[collabs]);
+  const responsables=useMemo(()=>[...new Set(collabs.map(k=>mode==='cdi'?k.partnerNom:k.responsable).filter(Boolean))].sort(),[collabs,mode]);
+
+  const filteredSorted=useMemo(()=>{
+    const q=norm(search);
+    const rows=collabs.filter(k=>{
+      if(!showSortis&&k.sorti) return false;
+      if(filterAgence&&k.agence!==filterAgence) return false;
+      if(filterResp&&(mode==='cdi'?k.partnerNom:k.responsable)!==filterResp) return false;
+      if(etats.size){
+        const isDispo60=k.etat==='en_mission'&&k.joursAvantDispo!=null&&k.joursAvantDispo<=60;
+        const isRh=k.etat==='arret_maladie'||k.etat==='conge';
+        const ok=(etats.has('en_mission')&&k.etat==='en_mission')||(etats.has('dispo60')&&isDispo60)||(etats.has('intercontrat')&&(k.etat==='intercontrat'||k.etat==='sans_mission'))||(etats.has('rh')&&isRh);
+        if(!ok) return false;
+      }
+      if(q&&![k.prenom,k.nom,k.agence,k.partnerNom,k.responsable,k.missionEnCours&&k.missionEnCours.client].some(v=>norm(v||'').includes(q))) return false;
+      return true;
+    });
+    const key=k=>{
+      switch(sortCol){
+        case 'nom': return (k.nom||'').toLowerCase()+' '+(k.prenom||'').toLowerCase();
+        case 'agence': return k.agence||'';
+        case 'resp': return (mode==='cdi'?k.partnerNom:k.responsable)||'';
+        case 'entree': return k.date_entree||'0000';
+        case 'salaire': return k.salaire_annuel==null?-1:Number(k.salaire_annuel);
+        case 'cjm': return k.cjm==null?-1:k.cjm;
+        case 'tjm': return k.tjm==null?-1:k.tjm;
+        case 'marge': return k.marge==null?-9:k.marge;
+        case 'mission': return (k.missionEnCours&&k.missionEnCours.client||'').toLowerCase();
+        case 'type': return k.typeLabel;
+        case 'dispo': default: {
+          // urgences en tête : RH (-2), dépassées/≤60 par jours, interco/sans mission (-1), en mission lointaine, fin non définie (9998), démarre bientôt (9999)
+          if(k.etat==='arret_maladie'||k.etat==='conge') return -2;
+          if(k.etat==='intercontrat'||k.etat==='sans_mission') return -1;
+          if(k.etat==='demarre_bientot') return 9999;
+          return k.joursAvantDispo==null?9998:k.joursAvantDispo;
+        }
+      }
+    };
+    rows.sort((a,b)=>{const va=key(a),vb=key(b); if(va<vb) return sortDir==='asc'?-1:1; if(va>vb) return sortDir==='asc'?1:-1; return 0;});
+    return rows;
+  },[collabs,search,filterAgence,filterResp,etats,showSortis,sortCol,sortDir,mode]);
+  const PAGE_SIZE=(typeof window!=='undefined'&&window.innerWidth<768)?50:200;
+  const [visibleCount,setVisibleCount]=useState(PAGE_SIZE);
+  useEffect(()=>{setVisibleCount(PAGE_SIZE);},[search,filterAgence,filterResp,etats,showSortis,sortCol,sortDir,mode]);
+  const visible=filteredSorted.slice(0,visibleCount);
+  const thCls="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-azure-100 whitespace-nowrap";
+  const chip=(id,label)=><button key={id} onClick={()=>toggleEtat(id)} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:etats.has(id)?'0':'2px solid #E4E4E6',background:etats.has(id)?'#1C1F35':'#fff',color:etats.has(id)?'#fff':'#1C1F35',cursor:'pointer',borderRadius:0,textTransform:'uppercase',boxShadow:etats.has(id)?'3px 3px 0 #FFE500':'none',transition:'all 120ms'}}>{label}</button>;
+  const nbCdi=contacts.filter(c=>AgenceCalc.CDI_STATUTS.includes(c.statut)&&!(c.date_sortie&&c.date_sortie<=TODAY)).length;
+  const nbSt=contacts.filter(c=>AgenceCalc.ST_STATUTS.includes(c.statut)&&!(c.date_sortie&&c.date_sortie<=TODAY)).length;
+  const missionLabel=k=>k.missionEnCours?<><div className="font-medium text-midnight">{k.missionEnCours.client||'—'}</div>{k.missionEnCours.date_fin_mission&&<div className="text-xs text-neutral-300">fin {AgenceCalc.fmtJJMM(k.missionEnCours.date_fin_mission)}</div>}</>:<span className="text-neutral-300">—</span>;
+
+  return (
+    <div className="tab-content">
+      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+        <div className="flex border rounded-lg overflow-hidden text-sm">
+          <button onClick={()=>setMode('cdi')} className={`px-3 py-2 font-medium ${mode==='cdi'?'bg-midnight text-white':'bg-white text-slate hover:bg-neutral-50'}`}>CDI ({nbCdi})</button>
+          <button onClick={()=>setMode('st')} className={`px-3 py-2 font-medium border-l ${mode==='st'?'bg-midnight text-white':'bg-white text-slate hover:bg-neutral-50'}`}>Sous-traitants ({nbSt})</button>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={()=>exportEffectifs(filteredSorted,mode,filterAgence,setExporting)} disabled={exporting||!filteredSorted.length} className="px-3 py-2 text-sm font-medium border-2 border-neutral-200 text-carbon hover:border-midnight disabled:opacity-50 transition-colors">{exporting?'…':'Export Excel'}</button>
+          {!isPartner&&<button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">+ Nouveau collaborateur</button>}
+        </div>
+      </div>
+      <div className="flex gap-2 sm:gap-3 mb-3 flex-wrap items-center">
+        <input type="text" placeholder="Rechercher (nom, client, agence…)" value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 min-w-[140px] sm:min-w-64 px-3 sm:px-4 py-2 border rounded-lg text-sm focus:outline-none focus:border-midnight"/>
+        {!isPartner&&<select value={filterAgence} onChange={e=>{setFilterAgence(e.target.value);setFilterResp('');}} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none"><option value="">Toutes agences</option>{agences.map(a=><option key={a} value={a}>{a}</option>)}</select>}
+        <select value={filterResp} onChange={e=>setFilterResp(e.target.value)} className="px-2 sm:px-3 py-2 border rounded-lg text-sm focus:outline-none hidden sm:block"><option value="">{mode==='cdi'?'Tous partners':'Tous commerciaux'}</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}</select>
+        {chip('en_mission','En mission')}{chip('dispo60','Dispo ≤ 60 j')}{chip('intercontrat',mode==='cdi'?'Intercontrat':'Sans mission')}{chip('rh','Arrêt & congés')}
+        <label className="text-xs text-slate flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={showSortis} onChange={e=>setShowSortis(e.target.checked)}/> Sortis</label>
+      </div>
+      <AgenceKpiDalles collabs={filteredSorted} mode={mode} missions={missions.filter(m=>filteredSorted.some(k=>k.id===m.contact_consultant_id))} intercos={intercos} contactMap={Object.fromEntries(contacts.map(c=>[c.id,c]))} onPick={k=>setSelected(k)} onNavToContact={onNavToContact}/>
+      <div className="text-xs text-neutral-300 mb-2">{filteredSorted.length} collaborateur{filteredSorted.length>1?'s':''}</div>
+      {/* Cartes mobile */}
+      <div className="md:hidden space-y-2">
+        {visible.map(k=>(
+          <div key={k.id} onClick={()=>setSelected(k)} data-detail tabIndex="0" className="bg-white border-2 border-neutral-200 hover:border-midnight p-3 cursor-pointer active:bg-azure-20 focus:outline-none focus:border-midnight transition-colors">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0"><div className="font-bold text-midnight text-sm">{k.prenom} {k.nom}</div><div className="text-xs text-slate mt-0.5">{k.agence} · {mode==='cdi'?k.partnerNom:k.responsable}</div></div>
+              <DispoBadge k={k}/>
+            </div>
+            <div className="flex items-center gap-3 mt-2 text-xs text-slate">{k.missionEnCours&&<span>{k.missionEnCours.client}</span>}{k.tjm!=null&&<span>TJM {fmtEur0(k.tjm)}</span>}<MargeCell m={k.marge}/></div>
+          </div>
+        ))}
+      </div>
+      {/* Tableau desktop */}
+      <div className="hidden md:block bg-white border-2 border-neutral-200 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead><tr className="bg-neutral-50 text-[11px] font-bold uppercase tracking-[0.1em] text-slate">
+            <th className={thCls} onClick={()=>toggleSort('nom')}>Collaborateur<SortIcon col="nom"/></th>
+            {mode==='st'&&<th className={thCls} onClick={()=>toggleSort('type')}>Type<SortIcon col="type"/></th>}
+            <th className={thCls} onClick={()=>toggleSort('agence')}>Agence<SortIcon col="agence"/></th>
+            <th className={thCls} onClick={()=>toggleSort('resp')}>{mode==='cdi'?'Partner':'Commercial'}<SortIcon col="resp"/></th>
+            <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('entree')}>Entrée<SortIcon col="entree"/></th>
+            {mode==='cdi'&&<th className={thCls+" hidden xl:table-cell"} onClick={()=>toggleSort('salaire')}>Salaire<SortIcon col="salaire"/></th>}
+            <th className={thCls} onClick={()=>toggleSort('cjm')}>CJM<SortIcon col="cjm"/></th>
+            <th className={thCls} onClick={()=>toggleSort('mission')}>Mission<SortIcon col="mission"/></th>
+            <th className={thCls} onClick={()=>toggleSort('tjm')}>TJM<SortIcon col="tjm"/></th>
+            <th className={thCls} onClick={()=>toggleSort('marge')}>Marge<SortIcon col="marge"/></th>
+            <th className={thCls} onClick={()=>toggleSort('dispo')}>{mode==='cdi'?'Dispo':'Fin mission'}<SortIcon col="dispo"/></th>
+          </tr></thead>
+          <tbody>{visible.map(k=>(
+            <tr key={k.id} onClick={()=>setSelected(k)} data-detail tabIndex="0" className={`border-t border-neutral-50 hover:bg-lemon-20 focus:bg-azure-20 focus:outline-none cursor-pointer transition-colors${selected&&selected.id===k.id?' bg-azure-20':''}${k.sorti?' opacity-50':''}`}>
+              <td className="px-4 py-3"><div className="font-medium text-midnight">{k.prenom} {k.nom}</div>{k.sorti&&<div className="text-xs text-coral-100">sorti le {fmtDateFR(k.date_sortie)}</div>}</td>
+              {mode==='st'&&<td className="px-4 py-3"><ColorBadge label={k.typeLabel} bg={k.typeLabel==='Freelance'?'#FF66FF':'#F97316'} color={k.typeLabel==='Freelance'?'#1C1F35':'#FFFFFF'}/></td>}
+              <td className="px-4 py-3 text-slate">{k.agence||'—'}</td>
+              <td className="px-4 py-3 text-slate text-xs">{(mode==='cdi'?k.partnerNom:k.responsable)||'—'}</td>
+              <td className="px-4 py-3 text-slate text-xs hidden lg:table-cell">{fmtDateFR(k.date_entree)}</td>
+              {mode==='cdi'&&<td className="px-4 py-3 text-slate hidden xl:table-cell">{fmtEur0(k.salaire_annuel)}</td>}
+              <td className="px-4 py-3 text-slate">{fmtEur0(k.cjm)}</td>
+              <td className="px-4 py-3">{missionLabel(k)}</td>
+              <td className="px-4 py-3 text-slate">{fmtEur0(k.tjm)}</td>
+              <td className="px-4 py-3"><MargeCell m={k.marge}/></td>
+              <td className="px-4 py-3"><DispoBadge k={k}/></td>
+            </tr>
+          ))}</tbody>
+        </table>
+        {!filteredSorted.length&&<div className="px-4 py-6 text-xs text-neutral-300 italic">{mode==='cdi'?'Aucun collaborateur sur ce périmètre':'Aucun sous-traitant sur ce périmètre'}</div>}
+      </div>
+      {filteredSorted.length>visibleCount&&<div className="mt-3 flex justify-center"><button onClick={()=>setVisibleCount(v=>v+PAGE_SIZE)} className="px-4 py-2 text-sm font-medium border-2 border-neutral-200 text-carbon hover:border-midnight transition-colors">Charger plus ({filteredSorted.length-visibleCount} restants)</button></div>}
+      {selected&&<CollabDetail collab={filteredSorted.find(k=>k.id===selected.id)||selected} missions={missions} missionPeriods={missionPeriods} histMissions={histMissions} contacts={contacts} taches={taches} besoins={besoins} comptes={comptes} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{onRefresh();}} onNavToContact={onNavToContact}/>}
+      {showAdd&&<AddContactModal profile={profile} allProfiles={allProfiles} comptes={comptes||[]} defaults={{statut:mode==='cdi'?'Consultant CDI':'Freelance',agence:filterAgence||profile.agence||''}} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
+    </div>
+  );
+}
 function TabProspects({ contacts, contactMap, historique, taches, histMissions, missions, allMissions, besoins, comptes, contactComptes, compteMap, profile, allProfiles, commerciauxParAgence, onRefresh, navContactId, navContactKey, navCompteId, navCompteKey, onNavToBesoin, onNavToMission, onNavToTache, prefs }) {
   const prefResp=prefs?.contacts_filter_responsable==='moi'?profile.nom:(prefs?.contacts_filter_responsable==='all'?'':(prefs?.filter_responsable==='moi'?profile.nom:(prefs?.filter_responsable||'')));
   const prefStatut=prefs?.contacts_filter_statut&&prefs.contacts_filter_statut!=='all'?prefs.contacts_filter_statut:'';
