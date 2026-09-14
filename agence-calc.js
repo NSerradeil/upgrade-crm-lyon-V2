@@ -89,10 +89,14 @@
     }
   }
 
-  function margeStyle(m) {
+  // Seuil de marge : 30 % en CDI, 20 % en portage / sous-traitance (règle Upgrade).
+  function seuilMarge(k) { return k && k.isCdi === false ? 0.20 : 0.30; }
+  function sousSeuil(k) { return k && k.marge != null && k.marge < seuilMarge(k); }
+  function margeStyle(m, k) {
     if (m == null || isNaN(m)) return { color: COL.mute };
-    if (m < 0.20) return { color: COL.rouge };
-    if (m < 0.30) return { color: COL.orange };
+    const s = seuilMarge(k);
+    if (m < s - 0.10) return { color: COL.rouge };
+    if (m < s) return { color: COL.orange };
     return { color: COL.midnight };
   }
 
@@ -213,7 +217,7 @@
     return { tauxM, tauxAnn, joursYTD, coutYTD, idxAff, fallbackM1: !courantRempli && idxAff !== curMonthIdx, nbCourant: parMois(idxAff).length, parMois, effectif };
   }
 
-  const AgenceCalc = { MANAGER_TRIGRAMMES, RESPONSABILITES, EST_PARTNER, optionsPartners, CDI_STATUTS, ST_STATUTS, CONSULTANT_STATUTS_AGENCE, ALERTE_PREFIX, COL,
+  const AgenceCalc = { MANAGER_TRIGRAMMES, RESPONSABILITES, EST_PARTNER, optionsPartners, seuilMarge, sousSeuil, CDI_STATUTS, ST_STATUTS, CONSULTANT_STATUTS_AGENCE, ALERTE_PREFIX, COL,
     cjmFromSalaire, joursEntre, fmtJJMM, fmtJJMMAAAA, fmtJ, computeCollab, etatDispo, margeStyle, computeKpis, prochainJourOuvre930, planAlertes,
     arriveesSortiesParMois, tranchesTjm, tranchesMarge, tjmMargeParMois, intercoStats };
   root.AgenceCalc = AgenceCalc;

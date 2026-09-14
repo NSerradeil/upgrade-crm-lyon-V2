@@ -57,6 +57,17 @@ test('sorti + partnerNom + fallback trigramme', () => {
   const c2 = A.computeCollab(mk({ date_sortie: '2027-01-01' }), ctx([], [], { partnerIdByContact: { 1: 'u-majo' } }));
   assert.equal(c2.sorti, false); assert.equal(c2.partnerNom, 'Majo Paquelier');
 });
+test('seuil de marge : 30 % en CDI, 20 % en free/ST', () => {
+  const cdi = A.computeCollab(mk({ cjm: 400 }), ctx([{ id: 'm', contact_consultant_id: 1, statut: 'En cours', tjm: 500, date_fin_mission: '2026-12-31' }])); // marge 20 %
+  const free = A.computeCollab(mk({ statut: 'Freelance', cjm: 400 }), ctx([{ id: 'm', contact_consultant_id: 1, statut: 'En cours', tjm: 500, date_fin_mission: '2026-12-31' }]));
+  assert.equal(A.seuilMarge(cdi), 0.30); assert.equal(A.seuilMarge(free), 0.20);
+  assert.equal(A.sousSeuil(cdi), true);          // 20 % < 30 % → sous le seuil pour un CDI
+  assert.equal(A.sousSeuil(free), false);        // 20 % = seuil free → dans les clous
+  assert.equal(A.margeStyle(0.20, cdi).color, '#F97316');   // orange
+  assert.equal(A.margeStyle(0.20, free).color, '#1C1F35');  // normal
+  assert.equal(A.margeStyle(0.09, free).color, '#FF3D2E');  // rouge sous 10 % pour un free
+});
+
 test('margeStyle', () => {
   assert.equal(A.margeStyle(0.35).color, '#1C1F35'); assert.equal(A.margeStyle(0.25).color, '#F97316'); assert.equal(A.margeStyle(0.15).color, '#FF3D2E'); assert.equal(A.margeStyle(null).color, '#A4A6AB');
 });
