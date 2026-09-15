@@ -2276,6 +2276,36 @@ function AddHistMissionModal({ mission, profile, onClose, onSaved }) {
 // ── Modal : Créer / Modifier mission ─────────────────────────────────────────
 const MISSION_STATUTS=['En cours','New','Terminée'];
 const MISSION_CONTRATS=['CDI','Freelance','Prestataire','CDD','Alternance'];
+// Statuts contact éligibles pour être rattaché comme consultant d'une mission.
+// 'Candidat' inclus : un besoin peut être passé à Gagné avant que le contact
+// n'ait été formellement re-statutué Consultant CDI/Freelance/Prestataire.
+const MISSION_CONSULTANT_STATUTS=['Consultant CDI','Freelance','Prestataire','Candidat'];
+
+// Construit les champs de pré-remplissage d'une mission à partir d'un besoin (Gagné).
+// Source de vérité unique : utilisée à la fois par le bouton "Créer la mission depuis
+// ce besoin" (BesoinDetail) et par le sélecteur "Besoin lié" du formulaire mission.
+function prefillFromBesoin(besoin, contacts, allProfiles, profile){
+  if(!besoin) return {};
+  const contactRef=besoin.contact_id?(contacts||[]).find(c=>String(c.id)===String(besoin.contact_id)):null;
+  const consId=besoin.consultant_id||besoin.candidat_id;
+  const cons=consId?(contacts||[]).find(c=>String(c.id)===String(consId)):null;
+  const out={};
+  if(contactRef){out.contact_referent_id=contactRef.id;out.referent=`${contactRef.prenom||''} ${contactRef.nom||''}`.trim();}
+  if(cons){out.contact_consultant_id=cons.id;out.consultant=`${cons.prenom||''} ${cons.nom||''}`.trim();}
+  if(besoin.compte)out.client=besoin.compte;
+  if(besoin.compte_id)out.compte_id=besoin.compte_id;
+  if(besoin.titre)out.projet=besoin.titre;
+  if(besoin.responsable){out.responsable=besoin.responsable;out.agence=(allProfiles||[]).find(p=>p.nom===besoin.responsable)?.agence||profile?.agence||'Lyon';}
+  const tjmB=besoin.tjm_vente||besoin.budget_tjm;
+  if(tjmB)out.tjm=tjmB;
+  if(besoin.cjm_achat)out.cjm=besoin.cjm_achat;
+  const ddSrc=besoin.date_demarrage||besoin.budget_date_debut;const dd=ddSrc?extractDate(ddSrc):'';
+  if(dd){out.date_debut_mission=dd;out.date_demarrage_initiale=dd;}
+  const dfSrc=besoin.date_fin||besoin.budget_date_fin;const df=dfSrc?extractDate(dfSrc):'';
+  if(df)out.date_fin_mission=df;
+  out.besoin_id=besoin.id;
+  return out;
+}
 
 function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, onClose, onSaved, prefillBesoinId }) {
   const isEdit=!!mission&&!!mission.id;
@@ -2288,6 +2318,21 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, on
   });
   const [saving,setSaving]=useState(false);
   const s=key=>e=>setF(v=>({...v,[key]:e.target.value}));
+
+  // Pré-remplissage garanti quand la modale s'ouvre directement sur un besoin
+  // (prefillBesoinId) : ne remplace jamais un champ déjà saisi par l'appelant/l'utilisateur.
+  useEffect(()=>{
+    if(!prefillBesoinId||isEdit) return;
+    const b=(besoins||[]).find(x=>String(x.id)===String(prefillBesoinId));
+    if(!b) return;
+    const pre=prefillFromBesoin(b,contacts,allProfiles,profile);
+    setF(v=>{
+      const nv={...v};
+      for(const k in pre){ if(pre[k]!=null && (nv[k]===''||nv[k]==null)) nv[k]=pre[k]; }
+      return nv;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[prefillBesoinId]);
 
   const save=async()=>{
     if(!f.contact_consultant_id){toast('Merci de sélectionner un consultant dans la liste.','error');return;}
@@ -2335,7 +2380,7 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, on
       footer={<><button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button><button onClick={save} disabled={saving||!f.contact_consultant_id} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon disabled:opacity-50 btn-brutal">{saving?'Enregistrement...':(isEdit?'Enregistrer':'Créer')}</button></>}>
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Consultant *"><ContactSearchField contacts={contacts||[]} value={f.contact_consultant_id} onChange={(id,name)=>setF(v=>{var nv={...v,contact_consultant_id:id,consultant:name||v.consultant};var c=(contacts||[]).find(x=>x.id===id);if(c&&c.cjm&&(!v.cjm||parseFloat(v.cjm)===0))nv.cjm=c.cjm;return nv;})} statuts={['Consultant CDI','Freelance','Prestataire']} placeholder="Rechercher consultant CDI/freelance/prestataire..."/></Field>
+          <Field label="Consultant *"><ContactSearchField contacts={contacts||[]} value={f.contact_consultant_id} onChange={(id,name)=>setF(v=>{var nv={...v,contact_consultant_id:id,consultant:name||v.consultant};var c=(contacts||[]).find(x=>x.id===id);if(c&&c.cjm&&(!v.cjm||parseFloat(v.cjm)===0))nv.cjm=c.cjm;return nv;})} statuts={MISSION_CONSULTANT_STATUTS} placeholder="Rechercher consultant CDI/freelance/prestataire..."/></Field>
           <Field label="Client"><CompteSearchField contacts={contacts||[]} value={f.client||''} onChange={client=>setF(v=>({...v,client}))}/></Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -2346,26 +2391,12 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, on
           <BesoinPicker besoins={(besoins||[]).filter(function(b){return b.statut==='Besoin Gagné';})} value={f.besoin_id} onChange={function(bid){
             if(!bid){setF(function(v){var nv={};for(var k in v)nv[k]=v[k];nv.besoin_id='';return nv;});return;}
             var b=(besoins||[]).find(function(x){return String(x.id)===String(bid);});
-            var contactRef=b&&b.contact_id?(contacts||[]).find(function(c){return c.id===b.contact_id;}):null;
+            // Pré-remplissage auto depuis le besoin gagné (source unique : prefillFromBesoin ;
+            // uniquement les champs encore vides pour ne pas écraser une saisie déjà faite)
+            var pre=b?prefillFromBesoin(b,contacts,allProfiles,profile):{};
             setF(function(v){
               var nv={};for(var k in v)nv[k]=v[k];nv.besoin_id=bid;
-              if(!b) return nv;
-              // Pré-remplissage auto depuis le besoin gagné (uniquement les champs encore vides)
-              if(contactRef&&!v.contact_referent_id){nv.contact_referent_id=contactRef.id;nv.referent=contactRef.prenom+' '+contactRef.nom;}
-              var consId=b.consultant_id||b.candidat_id;
-              if(consId&&!v.contact_consultant_id){var cons=(contacts||[]).find(function(c){return String(c.id)===String(consId);});if(cons){nv.contact_consultant_id=cons.id;nv.consultant=cons.prenom+' '+cons.nom;}}
-              if(b.compte&&!v.client)nv.client=b.compte;
-              if(b.compte_id&&!v.compte_id)nv.compte_id=b.compte_id;
-              if(b.titre&&!v.projet)nv.projet=b.titre;
-              if(b.responsable&&(!v.responsable||v.responsable===profile.nom))nv.responsable=b.responsable;
-              var tjmB=b.tjm_vente||b.budget_tjm;
-              if(tjmB&&!v.tjm)nv.tjm=tjmB;
-              if(b.cjm_achat&&!v.cjm)nv.cjm=b.cjm_achat;
-              var ddSrc=b.date_demarrage||b.budget_date_debut;var dd=ddSrc?extractDate(ddSrc):'';
-              if(dd&&!v.date_debut_mission)nv.date_debut_mission=dd;
-              if(dd&&!v.date_demarrage_initiale)nv.date_demarrage_initiale=dd;
-              var dfSrc=b.date_fin||b.budget_date_fin;var df=dfSrc?extractDate(dfSrc):'';
-              if(df&&!v.date_fin_mission)nv.date_fin_mission=df;
+              for(var k2 in pre){ if(pre[k2]!=null && (nv[k2]===''||nv[k2]==null || (k2==='responsable'&&nv[k2]===profile.nom))) nv[k2]=pre[k2]; }
               return nv;
             });
           }}/>
@@ -5268,7 +5299,8 @@ function ContactSearchField({ contacts, value, onChange, statuts, placeholder })
   const [q,setQ]=useState('');
   const pool=useMemo(()=>contacts.filter(c=>statuts.includes(c.statut)),[contacts,statuts]);
   const selected=value?(pool.find(c=>c.id===value||String(c.id)===String(value))||contacts.find(c=>c.id===value||String(c.id)===String(value))):null;
-  const filtered=useMemo(()=>{if(!q)return pool.slice(0,20);const s=q.toLowerCase();return pool.filter(c=>[c.prenom,c.nom,c.groupe].some(v=>(v||'').toLowerCase().includes(s))).slice(0,20);},[pool,q]);
+  const norm=v=>(v||'').toString().normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+  const filtered=useMemo(()=>{if(!q)return pool.slice(0,20);const s=norm(q);return pool.filter(c=>[c.prenom,c.nom,c.groupe].some(v=>norm(v).includes(s))).slice(0,20);},[pool,q]);
   if(selected) return (
     <div className="flex items-center gap-2">
       <span className="text-sm bg-azure-20 text-azure-100 px-2 py-1 rounded-lg">{selected.prenom} {selected.nom} <StatutBadge statut={selected.statut}/>{selected.groupe?<span className="text-xs text-neutral-300 ml-1">{selected.groupe}</span>:null}</span>
@@ -5457,6 +5489,7 @@ function BesoinDetail({ besoin, contacts, contactMap, comptes, compteMap, besoin
   const contact=contacts.find(c=>c.id===besoin.contact_id);
   const candidat=contacts.find(c=>c.id===besoin.candidat_id);
   const mesCandidats=(besoinCandidats||[]).filter(bc=>bc.besoin_id===besoin.id);
+  const missionLiee=(missions||[]).find(m=>String(m.besoin_id)===String(besoin.id));
   const besoinHist=historique.filter(h=>h.besoin_id===besoin.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const besoinTaches=taches.filter(t=>t.besoin_id===besoin.id&&t.statut!=='fait'&&t.statut!=='annule');
   // Indicateurs Besoin Gagné
@@ -5606,6 +5639,8 @@ function BesoinDetail({ besoin, contacts, contactMap, comptes, compteMap, besoin
     <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
       <BtnAction variant="primary" icon={ICONS.add} label="Action" onClick={()=>setModal('hist')}/>
       <BtnAction variant="task" icon={ICONS.check} label="Tâche" onClick={()=>setModal('tache')}/>
+      {isOwner && besoin.statut==='Besoin Gagné' && !missionLiee &&
+        <BtnAction variant="edit" icon={ICONS.add} label="Créer la mission" onClick={()=>setModal('createMission')}/>}
       {isOwner && <>
         {editing
           ? <BtnAction variant="task" icon={ICONS.close} label="Annuler" onClick={()=>setEditing(false)}/>
@@ -5669,7 +5704,7 @@ function BesoinDetail({ besoin, contacts, contactMap, comptes, compteMap, besoin
       {f.statut==='Besoin Gagné'&&(editing?(
         <div className="space-y-3 bg-jade-20 rounded-lg p-3">
           <div className="text-xs font-semibold text-jade-100 uppercase">Besoin Gagné — Mission</div>
-          <Field label="Consultant"><ContactSearchField contacts={contacts||[]} value={f.consultant_id} onChange={(id,name)=>setF(v=>({...v,consultant_id:id,consultant_name:name||''}))} statuts={['Consultant CDI','Freelance','Prestataire']} placeholder="Rechercher consultant CDI/freelance/prestataire..."/></Field>
+          <Field label="Consultant"><ContactSearchField contacts={contacts||[]} value={f.consultant_id} onChange={(id,name)=>setF(v=>({...v,consultant_id:id,consultant_name:name||''}))} statuts={MISSION_CONSULTANT_STATUTS} placeholder="Rechercher consultant CDI/freelance/prestataire..."/></Field>
           <div className="grid grid-cols-2 gap-2">
             <Field label="Date démarrage"><input type="date" value={f.date_demarrage||''} onChange={e=>setF(v=>({...v,date_demarrage:e.target.value}))} className={inputCls}/></Field>
             <Field label="Date fin"><input type="date" value={f.date_fin||''} onChange={e=>setF(v=>({...v,date_fin:e.target.value}))} className={inputCls}/></Field>
