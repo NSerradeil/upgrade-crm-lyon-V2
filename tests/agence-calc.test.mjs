@@ -159,3 +159,51 @@ test('intercoStats (logique TDB)', () => {
   assert.equal(Math.round(s.tauxAnn * 100) / 100, 11.67); assert.equal(s.idxAff, 1); assert.equal(s.fallbackM1, true); assert.equal(s.nbCourant, 1);
   assert.deepEqual(s.parMois(0), [{ contact_consultant_id: 1, jours: 10, cout: 4000 }]);
 });
+
+// ── Ancien collaborateur (SPEC_sortie_effectif_retour_candidat.md) ──────────────
+// À sa sortie des effectifs, un collaborateur repasse « Candidat » mais reste dans le
+// PÉRIMÈTRE HISTORIQUE de l'onglet Agence via `ancien_statut`.
+const ancienCdi = { id: 9, prenom: 'Alexine', nom: 'SEMENT', statut: 'Candidat', ancien_statut: 'Consultant CDI',
+  agence: 'Paris', date_entree: '2024-02-26', date_sortie: '2026-08-30' };
+
+test('estAncienCollab : Candidat + ancien_statut + date_sortie, et rien d\'autre', () => {
+  assert.equal(A.estAncienCollab(ancienCdi), true);
+  assert.equal(A.estAncienCollab({ ...ancienCdi, date_sortie: null }), false);   // pas encore sorti
+  assert.equal(A.estAncienCollab({ ...ancienCdi, ancien_statut: null }), false); // simple candidat du vivier
+  assert.equal(A.estAncienCollab(mk()), false);                                  // CDI en poste
+  assert.equal(A.estAncienCollab({ statut: 'Prospect' }), false);
+  assert.equal(A.estAncienCollab(null), false);
+});
+
+test('statutAgence : rend le statut d\'effectif d\'origine, sinon le statut courant', () => {
+  assert.equal(A.statutAgence(ancienCdi), 'Consultant CDI');
+  assert.equal(A.statutAgence({ ...ancienCdi, ancien_statut: 'Freelance' }), 'Freelance');
+  assert.equal(A.statutAgence(mk()), 'Consultant CDI');
+  assert.equal(A.statutAgence({ statut: 'Candidat' }), 'Candidat');  // candidat ordinaire : inchangé
+});
+
+test('un ancien CDI reste dans le périmètre Agence, marqué sorti', () => {
+  // le filtre de périmètre (index.html ~3449) le garde…
+  assert.equal(A.CONSULTANT_STATUTS_AGENCE.includes(A.statutAgence(ancienCdi)), true);
+  assert.equal(A.CDI_STATUTS.includes(A.statutAgence(ancienCdi)), true);
+  const k = A.computeCollab(ancienCdi, ctx());
+  assert.equal(k.isCdi, true);          // …et il compte comme CDI dans l'historique
+  assert.equal(k.typeLabel, 'CDI');
+  assert.equal(k.sorti, true);          // …tout en étant exclu des KPI du jour (act = !sorti)
+  // …mais il est hors EFFECTIF DU JOUR, qui lit le statut BRUT (badge d'onglet, nbCdi/nbSt)
+  assert.equal(A.CONSULTANT_STATUTS_AGENCE.includes(ancienCdi.statut), false);
+});
+
+test('la bascule Candidat ne casse ni les sorties du mois ni l\'interco historique', () => {
+  const collabs = [ancienCdi, mk({ id: 10, date_entree: '2026-01-15' })].map(c => A.computeCollab(c, ctx()));
+  // sortie d'août 2026 toujours comptée (c'était le piège : barre à 0 si le sorti quitte collabs)
+  const as = A.arriveesSortiesParMois(collabs, 2026, []);
+  assert.equal(as.sorties[7], 1);       // août = index 7
+  assert.equal(as.arrivees[0], 1);      // l'arrivée de janvier de l'autre CDI
+  // ses jours d'intercontrat passés restent au dénominateur
+  const jo = () => 20;
+  const s = A.intercoStats(collabs.filter(k => k.isCdi), [{ contact_consultant_id: 9, annee: 2026, mois: 3, jours: 5, cjm_snapshot: 400 }], 2026, 3, jo);
+  assert.equal(s.joursYTD, 5);
+  assert.equal(s.effectif(2), 2);       // mars : les deux présents, dont la future sortante
+  assert.equal(s.effectif(8), 1);       // septembre : elle est partie fin août
+});

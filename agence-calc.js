@@ -10,6 +10,22 @@
   const CDI_STATUTS = ['Consultant CDI'];
   const ST_STATUTS = ['Freelance', 'Prestataire'];
   const CONSULTANT_STATUTS_AGENCE = CDI_STATUTS.concat(ST_STATUTS);
+
+  // Ancien collaborateur (SPEC_sortie_effectif_retour_candidat.md, 15/09) : à sa sortie des
+  // effectifs, un collaborateur repasse au statut « Candidat » (il retourne au vivier), et son
+  // statut d'origine est mémorisé dans `ancien_statut`.
+  //
+  // ⚠️ Sans cette mémoire, la bascule casserait l'HISTORIQUE de l'onglet Agence, qui se filtre
+  // partout sur `statut` : le sorti disparaîtrait de `collabs`, donc de `intercoStats` (ses jours
+  // d'intercontrat déjà consommés s'effaceraient rétroactivement → taux annuel faux, cf. la note
+  // du même acabit sur `intercoStats` plus bas) et de `arriveesSortiesParMois` (sa sortie ne
+  // pourrait plus être comptée → barre du mois à 0).
+  //
+  // D'où la règle : `statutAgence()` répond « qu'est-ce que cette personne EST OU ÉTAIT pour
+  // l'agence ? » et sert à tous les filtres de PÉRIMÈTRE. Les compteurs d'EFFECTIF DU JOUR, eux,
+  // lisent le `statut` brut — un ancien collaborateur est « Candidat », donc naturellement exclu.
+  const estAncienCollab = (c) => !!c && c.statut === 'Candidat' && !!c.ancien_statut && !!c.date_sortie;
+  const statutAgence = (c) => (estAncienCollab(c) ? c.ancien_statut : (c || {}).statut);
   const COL = { vert: '#00C218', orange: '#F97316', rouge: '#FF3D2E', gris: '#E4E4E6', midnight: '#1C1F35', blanc: '#FFFFFF', mute: '#A4A6AB' };
 
   // Casquettes internes (contacts.responsabilite). null = salarié·e sans casquette.
@@ -58,7 +74,7 @@
     const aVenir = mine.filter((m) => m.statut === 'New' && d0(m.date_debut_mission) > todayISO)
       .sort((a, b) => d0(a.date_debut_mission).localeCompare(d0(b.date_debut_mission)));
     const missionEnCours = enCours[0] || aVenir[0] || null;
-    const isCdi = CDI_STATUTS.includes(c.statut);
+    const isCdi = CDI_STATUTS.includes(statutAgence(c));
     const joursAvantDispo = enCours[0] && enCours[0].date_fin_mission ? joursEntre(todayISO, enCours[0].date_fin_mission) : null;
     const tjm = missionEnCours && missionEnCours.tjm != null ? Number(missionEnCours.tjm) : null;
     const cjm = c.cjm != null && c.cjm !== '' ? Number(c.cjm) : (missionEnCours && missionEnCours.cjm != null ? Number(missionEnCours.cjm) : null);
@@ -73,7 +89,7 @@
     const sorti = !!(c.date_sortie && d0(c.date_sortie) <= todayISO);
     const pid = partnerIdByContact[c.id];
     const partnerNom = (pid && partnerNomById[pid]) || (partnerNomByTri || {})[c.manager_trigramme] || MANAGER_TRIGRAMMES[c.manager_trigramme] || c.manager_trigramme || '';
-    const typeLabel = isCdi ? 'CDI' : (c.statut === 'Prestataire' ? 'Sous-traitant' : 'Freelance');
+    const typeLabel = isCdi ? 'CDI' : (statutAgence(c) === 'Prestataire' ? 'Sous-traitant' : 'Freelance');
     return Object.assign({}, c, { missionEnCours, joursAvantDispo, tjm, cjm, marge, intercoAnnee, etat, sorti, partnerNom, typeLabel, isCdi, _annee: annee });
   }
 
@@ -248,7 +264,7 @@
     return { tauxM, tauxAnn, joursYTD, coutYTD, idxAff, fallbackM1: !courantRempli && idxAff !== curMonthIdx, nbCourant: parMois(idxAff).length, parMois, effectif };
   }
 
-  const AgenceCalc = { MANAGER_TRIGRAMMES, METIERS, RESPONSABILITES, EST_PARTNER, optionsPartners, seuilMarge, sousSeuil, CDI_STATUTS, ST_STATUTS, CONSULTANT_STATUTS_AGENCE, ALERTE_PREFIX, COL,
+  const AgenceCalc = { MANAGER_TRIGRAMMES, METIERS, RESPONSABILITES, EST_PARTNER, optionsPartners, seuilMarge, sousSeuil, CDI_STATUTS, ST_STATUTS, CONSULTANT_STATUTS_AGENCE, estAncienCollab, statutAgence, ALERTE_PREFIX, COL,
     cjmFromSalaire, joursEntre, fmtJJMM, fmtJJMMAAAA, fmtJ, computeCollab, etatDispo, margeStyle, computeKpis, prochainJourOuvre930, planAlertes,
     arriveesSortiesParMois, tranchesTjm, tranchesMarge, tjmMargeParMois, intercoStats };
   root.AgenceCalc = AgenceCalc;
