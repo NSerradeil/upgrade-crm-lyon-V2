@@ -158,19 +158,43 @@
   }
 
   // ── Détails des dalles KPI (spec §5.1) ─────────────────────────────────────
-  function arriveesSortiesParMois(collabs, annee) {
+  // `missions` (optionnel) : nécessaire pour les mouvements des sous-traitants/freelances
+  // (règle Nicolas 15/09) — un SST/free n'a pas de contrat d'effectif (pas de date_entree/
+  // date_sortie fiable), il « arrive » et « sort » au rythme de ses missions :
+  //   - arrivée = début de CHAQUE mission de l'année (un même SST peut arriver plusieurs
+  //     fois dans l'année s'il enchaîne les missions) ;
+  //   - sortie = fin d'une mission au statut 'Terminée' (mission réellement close).
+  //     Une mission encore 'En cours', même avec une date de fin prévisionnelle renseignée,
+  //     NE compte PAS comme une sortie tant qu'elle n'est pas clôturée.
+  // Les CDI/salariés gardent le comptage historique par date_entree/date_sortie, inchangé.
+  function arriveesSortiesParMois(collabs, annee, missions) {
     const arrivees = Array(12).fill(0), sorties = Array(12).fill(0), listeArrivees = Array.from({ length: 12 }, () => []);
+    const missionsParContact = {};
+    (missions || []).forEach((m) => { (missionsParContact[m.contact_consultant_id] = missionsParContact[m.contact_consultant_id] || []).push(m); });
     collabs.forEach((k) => {
-      const e = d0(k.date_entree), s = d0(k.date_sortie);
-      if (e && +e.slice(0, 4) === annee) { const i = +e.slice(5, 7) - 1; arrivees[i]++; listeArrivees[i].push(k); }
-      if (s && +s.slice(0, 4) === annee) sorties[+s.slice(5, 7) - 1]++;
+      if (k.isCdi) {
+        const e = d0(k.date_entree), s = d0(k.date_sortie);
+        if (e && +e.slice(0, 4) === annee) { const i = +e.slice(5, 7) - 1; arrivees[i]++; listeArrivees[i].push(k); }
+        if (s && +s.slice(0, 4) === annee) sorties[+s.slice(5, 7) - 1]++;
+      } else {
+        (missionsParContact[k.id] || []).forEach((m) => {
+          const db = d0(m.date_debut_mission);
+          if (db && +db.slice(0, 4) === annee) { const i = +db.slice(5, 7) - 1; arrivees[i]++; listeArrivees[i].push(k); }
+          if (m.statut === 'Terminée') {
+            const df = d0(m.date_fin_mission);
+            if (df && +df.slice(0, 4) === annee) sorties[+df.slice(5, 7) - 1]++;
+          }
+        });
+      }
     });
     // effectif en fin de mois : présents entrés avant la fin du mois et non sortis avant la fin du mois
+    // (CDI : date_entree/date_sortie ; SST/free : NON traité ici — hors périmètre de ce correctif,
+    // reste sur l'ancien calcul « toujours présent si pas de date » — cf. ticket mouvements SST)
     const cumul = Array.from({ length: 12 }, (_, i) => {
       const fin = `${annee}-${String(i + 1).padStart(2, '0')}-31`;
       return collabs.filter((k) => (!k.date_entree || d0(k.date_entree) <= fin) && (!k.date_sortie || d0(k.date_sortie) > fin)).length;
     });
-    listeArrivees.forEach((l) => l.sort((a, b) => d0(a.date_entree).localeCompare(d0(b.date_entree))));
+    listeArrivees.forEach((l) => l.sort((a, b) => (d0(a.date_entree) || '').localeCompare(d0(b.date_entree) || '')));
     return { arrivees, sorties, cumul, listeArrivees };
   }
   function tranchesTjm(collabs) {

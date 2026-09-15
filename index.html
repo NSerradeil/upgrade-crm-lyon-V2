@@ -3125,7 +3125,7 @@ function Tranches({ tranches, sel, onSel, fmtCount=n=>`${n}` }) {
     <span style={{width:40,textAlign:'right',fontSize:13,fontWeight:800}}>{fmtCount(t.items.length)}</span></div>)}</div>;
 }
 // Les 4 dalles + zone détail (spec §5.1). collabs = périmètre filtré ; cdiIds pour l'interco ; missions du périmètre pour TJM/marge par mois.
-function AgenceKpiDalles({ collabs, mode, missions, intercos, contactMap, horsEffectif, cdisPourInterco, onPick, onNavToContact }) {
+function AgenceKpiDalles({ collabs, mode, missions, missionsMouvements, intercos, contactMap, horsEffectif, cdisPourInterco, onPick, onNavToContact }) {
   const [active,setActive]=useState(null);
   const [moisSel,setMoisSel]=useState(null);
   const [trancheSel,setTrancheSel]=useState(null);
@@ -3147,7 +3147,7 @@ function AgenceKpiDalles({ collabs, mode, missions, intercos, contactMap, horsEf
     {id:'marge',color:'#FF66FF',value:k.margeMoyenne==null?'—':Math.round(k.margeMoyenne*100)+' %',label:'MARGE MOYENNE',sub:`${mode==='cdi'?'seuil 30 %':(mode==='st'?'seuil 20 %':'seuil 30 % CDI · 20 % free/ST')} · ${act.filter(AgenceCalc.sousSeuil).length} sous le seuil`,badge:k.margeMoyenne!=null&&k.margeMoyenne<(mode==='st'?0.20:0.30)?'Sous seuil':null,badgeColor:'#F97316'},
   ];
   const color=cards.find(c=>c.id===active)?.color||'#E4E4E6';
-  const as=active==='effectif'?AgenceCalc.arriveesSortiesParMois(collabs,annee):null;
+  const as=active==='effectif'?AgenceCalc.arriveesSortiesParMois(collabs,annee,missionsMouvements||missions):null;
   const tm=active==='tjm'||active==='marge'?AgenceCalc.tjmMargeParMois(missions,annee):null;
   const tr=active==='tjm'?AgenceCalc.tranchesTjm(act):active==='marge'?AgenceCalc.tranchesMarge(act):null;
   const pick=k=>onPick(k);
@@ -3510,12 +3510,19 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
   // pour la distinguer d'un simple filtre, même langage brutaliste que « Mes contacts » dans Comptes & Contacts.
   const chip=(id,label,reveal)=><button key={id} onClick={()=>toggleEtat(id)} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:etats.has(id)?'0':(reveal?'2px dashed #A4A6AB':'2px solid #E4E4E6'),background:etats.has(id)?'#1C1F35':'#fff',color:etats.has(id)?'#fff':(reveal?'#565861':'#1C1F35'),cursor:'pointer',borderRadius:0,textTransform:'uppercase',boxShadow:etats.has(id)?'3px 3px 0 #FFE500':'none',transition:'all 120ms'}}>{label}</button>;
   const idsMissionActive=useMemo(()=>new Set((missions||[]).filter(m=>m.statut==='En cours'||m.statut==='New').map(m=>m.contact_consultant_id)),[missions]);
-  const nbSortis=useMemo(()=>collabs.filter(k=>k.sorti&&(!filterAgence||k.agence===filterAgence)&&(!filterResp||(k.isCdi?k.partnerNom:k.responsable)===filterResp)).length,[collabs,filterAgence,filterResp,mode]);
   // Périmètre pour le graphe « Effectif et mouvements » : mêmes filtres agence/responsable que
-  // le badge « Sorti·es (n) » ci-dessus (nbSortis), mais SANS l'exclusion par défaut des sorti·es
+  // le badge « Sorti·es (n) » ci-dessous, mais SANS l'exclusion par défaut des sorti·es
   // de filteredSorted (ligne ~3462) — sinon les mouvements de l'année perdent tous ceux qui sont
   // déjà partis et le graphe ne peut jamais afficher leurs sorties (barres à 0, total faux).
   const collabsMouvements=useMemo(()=>collabs.filter(k=>(!filterAgence||k.agence===filterAgence)&&(!filterResp||(k.isCdi?k.partnerNom:k.responsable)===filterResp)),[collabs,filterAgence,filterResp]);
+  // Missions du même périmètre (nécessaire pour les mouvements SST/free : arrivée = début de
+  // mission, sortie = mission Terminée — cf. AgenceCalc.arriveesSortiesParMois, règle 15/09).
+  const missionsMouvements=useMemo(()=>{const ids=new Set(collabsMouvements.map(k=>k.id));return missions.filter(m=>ids.has(m.contact_consultant_id));},[missions,collabsMouvements]);
+  // Total annuel de sorties (CDI + SST/free) — SOURCE UNIQUE partagée avec le graphe :
+  // le badge « Sorti·es (n) » ci-dessous et le résumé du graphe doivent toujours tomber
+  // d'accord puisqu'ils lisent tous les deux arriveesSortiesParMois sur le même périmètre.
+  const annee=new Date().getFullYear();
+  const nbSortis=useMemo(()=>AgenceCalc.arriveesSortiesParMois(collabsMouvements,annee,missionsMouvements).sorties.reduce((a,b)=>a+b,0),[collabsMouvements,missionsMouvements,annee]);
   const nbCdi=contacts.filter(c=>AgenceCalc.CDI_STATUTS.includes(c.statut)&&!(c.date_sortie&&c.date_sortie<=TODAY)).length;
   const nbSt=contacts.filter(c=>AgenceCalc.ST_STATUTS.includes(c.statut)&&!(c.date_sortie&&c.date_sortie<=TODAY)&&idsMissionActive.has(c.id)).length;
   const missionLabel=k=>k.missionEnCours?<><div className="font-medium text-midnight">{k.missionEnCours.client||'—'}</div>{k.missionEnCours.date_fin_mission&&<div className="text-xs text-neutral-300">fin {AgenceCalc.fmtJJMM(k.missionEnCours.date_fin_mission)}</div>}</>:<span className="text-neutral-300">—</span>;
@@ -3543,7 +3550,7 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
         <span className="w-px h-5 bg-neutral-200 mx-0.5 hidden sm:block"/>
         {chip('sortis',`Sorti·es (${nbSortis})`,true)}
       </div>
-      <AgenceKpiDalles collabs={collabsMouvements} mode={mode} missions={missionsFiltrees} intercos={intercos} contactMap={Object.fromEntries(contacts.map(c=>[c.id,c]))} horsEffectif={horsEffectif} cdisPourInterco={cdisPourInterco} onPick={k=>setSelected(k)} onNavToContact={onNavToContact}/>
+      <AgenceKpiDalles collabs={collabsMouvements} mode={mode} missions={missionsFiltrees} missionsMouvements={missionsMouvements} intercos={intercos} contactMap={Object.fromEntries(contacts.map(c=>[c.id,c]))} horsEffectif={horsEffectif} cdisPourInterco={cdisPourInterco} onPick={k=>setSelected(k)} onNavToContact={onNavToContact}/>
       <div className="text-xs text-neutral-300 mb-2">{filteredSorted.length} collaborateur{filteredSorted.length>1?'s':''}</div>
       {/* Cartes mobile */}
       <div className="md:hidden space-y-2">
