@@ -1,4 +1,4 @@
--- db/21_dir_agence_partners.sql — « Directeur d'agence » : peut changer le partner d'un consultant.
+ -- db/21_dir_agence_partners.sql — « Directeur d'agence » : peut changer le partner d'un consultant.
 -- À coller dans le SQL Editor Supabase. Idempotent.
 -- Contexte : Nicolas et Pierre sont déjà `admin`. Anne-Claire Decker est `commercial` mais dirige
 -- l'agence Bordeaux/Ouest : on lui donne ce droit précis sans lui ouvrir tous les droits admin.
