@@ -3262,7 +3262,7 @@ function AgenceKpiDalles({ collabs, mode, missions, missionsMouvements, intercos
   const ic=mode!=='st'?AgenceCalc.intercoStats(cdisInterco,intercos||[],annee,cur,joursOuvresMois):null;
   const nomsInter=ic?ic.parMois(ic.idxAff).map(r=>{const c=contactMap[r.contact_consultant_id];return c?(c.prenom||c.nom||'').split(' ')[0]:'';}).filter(Boolean):[];
   const cards=[
-    {id:'effectif',color:'#0BA600',value:k.effectif,label:mode==='cdi'?'CONSULTANTS':(mode==='st'?'SOUS-TRAITANTS':'COLLABORATEURS'),sub:mode==='cdi'?`${enMission} en mission · ${dispo} en interco`:`${enMission} en mission · ${(horsEffectif||[]).length} hors effectif`},
+    {id:'effectif',color:'#823DE8',value:k.effectif,label:mode==='cdi'?'CONSULTANTS':(mode==='st'?'SOUS-TRAITANTS':'COLLABORATEURS'),sub:mode==='cdi'?`${enMission} en mission · ${dispo} en interco`:`${enMission} en mission · ${(horsEffectif||[]).length} hors effectif`},
     mode!=='st'
       ?{id:'inter',color:ic.nbCourant>0?'#FFE500':'#ccc',value:ic.nbCourant,label:'INTERCONTRAT',sub:ic.nbCourant>0?`${ic.fallbackM1?`${MOIS_LBL_AG[ic.idxAff].toLowerCase()} (M-1) · `:''}${AgenceCalc.fmtJ(ic.joursYTD)}j YTD · ${fmtK(ic.coutYTD)} · ${nomsInter.join(', ')}`:'Aucun',badge:ic.tauxAnn>=5?'Au-dessus de l\u2019objectif':null,badgeColor:'#92400e'}
       :{id:'inter',color:'#A4A6AB',value:(horsEffectif||[]).length,label:'HORS EFFECTIF',sub:(horsEffectif||[]).length>0?'free / ST sans mission — non comptés':'Aucun'},
