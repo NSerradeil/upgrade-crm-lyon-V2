@@ -1,2 +1,5 @@
 .claude/
 node_modules/
+
+# scratch/tooling local (non versionné)
+.superpowers/

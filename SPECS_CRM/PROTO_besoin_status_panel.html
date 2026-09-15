@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proto — Status-first BesoinPanel (pattern révisé)</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Outfit', sans-serif; background: #F2F2F4; display: flex; flex-direction: column; min-height: 100vh; }
+
+  /* DEMO BANNER */
+  .demo-banner {
+    background: #1C1F35; border-bottom: 2px solid #FF3D2E; padding: 8px 20px;
+    font-size: 11px; font-weight: 900; color: white;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .demo-tag { background: #FF3D2E; color: white; padding: 2px 8px; font-size: 10px; font-weight: 900; }
+  .demo-legend { display: flex; gap: 12px; margin-left: auto; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 700; color: #aaa; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 0; flex-shrink: 0; }
+
+  /* LAYOUT */
+  .app { display: flex; flex: 1; overflow: hidden; }
+
+  /* LEFT — card list */
+  .card-list { width: 320px; min-width: 320px; background: white; border-right: 2px solid #1C1F35; padding: 16px; overflow-y: auto; }
+  .list-title { font-size: 10px; font-weight: 900; color: #999; letter-spacing: 1px; margin-bottom: 12px; text-transform: uppercase; }
+  .pipe-card {
+    border: 2px solid #E4E4E6; padding: 12px; margin-bottom: 8px; cursor: pointer;
+    transition: none; position: relative;
+  }
+  .pipe-card:hover { border-color: #1C1F35; box-shadow: 3px 3px 0 #1C1F35; transform: translate(-1px,-1px); }
+  .pipe-card.selected { border-color: #1C1F35; box-shadow: 4px 4px 0 #4A7FE5; transform: translate(-2px,-2px); }
+  .card-title { font-size: 13px; font-weight: 900; color: #1C1F35; }
+  .card-sub { font-size: 11px; color: #888; margin-top: 2px; }
+  .card-statut { display: inline-block; font-size: 10px; font-weight: 900; padding: 2px 7px; margin-top: 6px; border: 1.5px solid currentColor; text-transform: uppercase; }
+
+  /* RIGHT — Side Panel */
+  .side-panel { flex: 1; background: white; display: flex; flex-direction: column; overflow: hidden; }
+
+  .panel-header { padding: 16px 20px 14px; border-bottom: 2px solid #E4E4E6; position: relative; }
+  .panel-close { position: absolute; top: 14px; right: 16px; cursor: pointer; font-size: 18px; color: #999; font-weight: 700; }
+  .panel-close:hover { color: #1C1F35; }
+  .panel-title { font-size: 18px; font-weight: 900; color: #1C1F35; padding-right: 30px; }
+  .panel-account { font-size: 12px; color: #888; margin-top: 3px; }
+
+  /* CTAs */
+  .panel-ctas { display: flex; gap: 8px; padding: 10px 20px; border-bottom: 2px solid #E4E4E6; flex-wrap: wrap; align-items: center; }
+  .btn { font-family: 'Outfit', sans-serif; font-size: 11px; font-weight: 900; padding: 7px 14px; cursor: pointer; border: 2px solid #1C1F35; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 0; }
+  .btn-action { background: #1C1F35; color: white; }
+  .btn-action:hover { background: #FF3D2E; border-color: #FF3D2E; }
+  .btn-tache { background: white; color: #1C1F35; }
+  .btn-tache:hover { background: #00C218; border-color: #00C218; color: white; }
+  .btn-cancel { background: white; color: #FF3D2E; border-color: #FF3D2E; }
+  .btn-cancel:hover { background: #FF3D2E; color: white; }
+  .btn-modifier { background: white; color: #555; border-color: #ddd; font-size: 10px; padding: 5px 10px; margin-left: auto; }
+  .btn-modifier:hover { border-color: #1C1F35; color: #1C1F35; }
+
+  /* STATUS ZONE */
+  .status-zone { padding: 14px 20px 10px; border-bottom: 2px solid #E4E4E6; }
+  .status-zone-label { font-size: 10px; font-weight: 900; color: #999; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+  .status-chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+
+  .chip {
+    font-family: 'Outfit', sans-serif; font-size: 10px; font-weight: 900; padding: 5px 10px;
+    border: 1.5px solid #E4E4E6; color: #bbb; text-transform: uppercase; letter-spacing: 0.5px;
+    border-radius: 0; background: white; display: inline-flex; align-items: center; gap: 4px;
+    white-space: nowrap; position: relative;
+  }
+  .chip.clickable { cursor: pointer; }
+  .chip.clickable:hover { border-color: #1C1F35; color: #1C1F35; background: #f8f8f8; }
+  .chip-done { color: #ccc !important; border-color: #eee !important; cursor: default !important; }
+  .chip-done .chip-check { color: #00C218; font-size: 11px; }
+  .chip-active { background: #1C1F35 !important; color: white !important; border-color: #1C1F35 !important; cursor: default !important; }
+  .chip-perdu { color: #FF3D2E !important; border-color: #FFB8B3 !important; }
+  .chip-perdu:hover { background: #FF3D2E !important; color: white !important; border-color: #FF3D2E !important; }
+
+  /* Type badges on chip hover */
+  .chip-type-badge {
+    display: none; position: absolute; bottom: calc(100% + 5px); left: 50%; transform: translateX(-50%);
+    font-size: 9px; font-weight: 900; padding: 2px 6px; white-space: nowrap; z-index: 10;
+    pointer-events: none;
+  }
+  .chip.clickable:hover .chip-type-badge { display: block; }
+  .badge-simple { background: #1C1F35; color: white; }
+  .badge-contextuel { background: #4A7FE5; color: white; }
+
+  .chip-arrow { color: #ddd; font-size: 12px; padding: 0 1px; }
+
+  /* MODIFIER OVERLAY (simule l'ouverture du panneau Modifier existant) */
+  .modifier-overlay {
+    position: fixed; inset: 0; background: rgba(28,31,53,0.6); z-index: 100;
+    display: none; justify-content: flex-end;
+  }
+  .modifier-overlay.show { display: flex; }
+  .modifier-panel {
+    width: 480px; background: white; border-left: 2px solid #1C1F35; display: flex; flex-direction: column;
+    transform: translateX(100%); transition: transform 0.2s ease;
+    overflow-y: auto;
+  }
+  .modifier-overlay.show .modifier-panel { transform: translateX(0); }
+  .modifier-header { padding: 16px 20px; border-bottom: 2px solid #E4E4E6; display: flex; align-items: center; justify-content: space-between; }
+  .modifier-title { font-size: 14px; font-weight: 900; color: #1C1F35; }
+  .modifier-close { cursor: pointer; font-size: 18px; color: #999; font-weight: 700; line-height: 1; }
+  .modifier-close:hover { color: #1C1F35; }
+
+  /* Context notice in modifier */
+  .context-notice {
+    margin: 14px 20px 0; padding: 10px 12px;
+    background: #F0F4FF; border-left: 3px solid #4A7FE5;
+    font-size: 11px; color: #4A7FE5; font-weight: 700;
+  }
+
+  /* Statut selector inside modifier */
+  .statut-selector { padding: 14px 20px; border-bottom: 2px solid #E4E4E6; }
+  .statut-selector-label { font-size: 10px; font-weight: 900; color: #999; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .statut-pills { display: flex; flex-wrap: wrap; gap: 5px; }
+  .statut-pill {
+    font-family: 'Outfit', sans-serif; font-size: 10px; font-weight: 900; padding: 4px 10px;
+    border: 1.5px solid #E4E4E6; color: #999; cursor: pointer; border-radius: 0;
+    background: white; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .statut-pill:hover { border-color: #1C1F35; color: #1C1F35; }
+  .statut-pill.selected { background: #1C1F35; color: white; border-color: #1C1F35; }
+
+  /* Contextual fields zone */
+  .contextual-fields { padding: 14px 20px; border-bottom: 2px solid #E4E4E6; background: #FAFAFA; }
+  .ctx-title { font-size: 11px; font-weight: 900; color: #1C1F35; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+  .ctx-icon { background: #1C1F35; color: white; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0; }
+  .ctx-separator { font-size: 10px; color: #aaa; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 10px 20px 0; }
+
+  /* Form fields */
+  .modifier-form { padding: 14px 20px; }
+  .field-group { margin-bottom: 14px; }
+  .field-row { display: flex; gap: 10px; margin-bottom: 12px; }
+  .field { flex: 1; }
+  .field label { display: block; font-size: 10px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .field label .req { color: #FF3D2E; }
+  .field input, .field select, .field textarea {
+    width: 100%; font-family: 'Outfit', sans-serif; font-size: 12px; font-weight: 700; color: #1C1F35;
+    border: 2px solid #E4E4E6; padding: 7px 9px; border-radius: 0; background: white; outline: none;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: #1C1F35; }
+  .field textarea { resize: vertical; min-height: 64px; }
+
+  .modifier-actions { padding: 14px 20px; border-top: 2px solid #E4E4E6; display: flex; gap: 8px; background: white; }
+  .btn-save { font-family: 'Outfit', sans-serif; font-size: 12px; font-weight: 900; padding: 10px 20px; background: #1C1F35; color: white; border: 2px solid #1C1F35; cursor: pointer; border-radius: 0; text-transform: uppercase; }
+  .btn-save:hover { background: #FF3D2E; border-color: #FF3D2E; }
+  .btn-save-cancel { font-family: 'Outfit', sans-serif; font-size: 12px; font-weight: 900; padding: 10px 16px; background: white; color: #1C1F35; border: 2px solid #1C1F35; cursor: pointer; border-radius: 0; text-transform: uppercase; }
+
+  /* PANEL INFO */
+  .panel-info { padding: 14px 20px; flex: 1; overflow-y: auto; }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+  .info-block .info-label { font-size: 10px; font-weight: 900; color: #999; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 3px; }
+  .info-block .info-value { font-size: 13px; font-weight: 700; color: #1C1F35; }
+  .info-contexte { font-size: 12px; font-weight: 400; color: #555; line-height: 1.6; }
+
+  /* TOAST */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(60px);
+    background: #1C1F35; color: white; font-family: 'Outfit', sans-serif; font-size: 12px; font-weight: 700;
+    padding: 10px 18px; border: 2px solid #1C1F35; display: flex; align-items: center; gap: 12px;
+    z-index: 200; white-space: nowrap; transition: transform 0.2s ease;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast-undo { background: none; border: none; color: #FFE500; font-family: 'Outfit', sans-serif; font-size: 11px; font-weight: 900; cursor: pointer; text-transform: uppercase; padding: 0; text-decoration: underline; }
+  .toast-bar { position: absolute; bottom: 0; left: 0; height: 2px; background: #4A7FE5; transition: width linear; }
+</style>
+</head>
+<body>
+
+<div class="demo-banner">
+  <span class="demo-tag">PROTOTYPE</span>
+  <span>Status-first BesoinPanel — pattern révisé</span>
+  <div class="demo-legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#00C218"></div> 1 clic (appel Supabase direct)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#4A7FE5"></div> Ouvre Modifier existant pré-positionné</div>
+  </div>
+</div>
+
+<div class="app">
+
+  <!-- CARD LIST -->
+  <div class="card-list">
+    <div class="list-title">Pipe · Besoins actifs</div>
+    <div class="pipe-card selected" onclick="selectCard(0)">
+      <div class="card-title">DA Senior — Enedis</div>
+      <div class="card-sub">Sabrina VOISIN · Lyon · 14/03/2026</div>
+      <span class="card-statut" id="card-statut-0" style="color:#4A7FE5;border-color:#4A7FE5">Profil proposé</span>
+    </div>
+    <div class="pipe-card" onclick="selectCard(1)">
+      <div class="card-title">Lead UX — Adecco</div>
+      <div class="card-sub">Gwendoline CHANTELAT · Lyon · 02/03/2026</div>
+      <span class="card-statut" id="card-statut-1" style="color:#FF3D2E;border-color:#FF3D2E">Besoin ouvert</span>
+    </div>
+    <div class="pipe-card" onclick="selectCard(2)">
+      <div class="card-title">Product Manager — Engie</div>
+      <div class="card-sub">Marie RENAUD · Paris · 20/02/2026</div>
+      <span class="card-statut" id="card-statut-2" style="color:#4A7FE5;border-color:#4A7FE5">Entretien programmé</span>
+    </div>
+  </div>
+
+  <!-- SIDE PANEL -->
+  <div class="side-panel">
+    <div class="panel-header">
+      <span class="panel-close">×</span>
+      <div class="panel-title" id="panel-title">DA Senior — Enedis</div>
+      <div class="panel-account" id="panel-account">Sabrina VOISIN · Enedis · Resp. Nicolas Serradeil · Créé le 14/03/2026</div>
+    </div>
+
+    <div class="panel-ctas">
+      <button class="btn btn-action">+ Action</button>
+      <button class="btn btn-tache">✓ Tâche</button>
+      <button class="btn btn-cancel">× Annuler besoin</button>
+      <button class="btn btn-modifier" onclick="openModifierComplet()">✏ Modifier (complet)</button>
+    </div>
+
+    <!-- STATUS ZONE -->
+    <div class="status-zone">
+      <div class="status-zone-label">Statut · cliquez pour avancer</div>
+      <div class="status-chips" id="status-chips"></div>
+    </div>
+
+    <!-- PANEL INFO -->
+    <div class="panel-info">
+      <div class="info-grid">
+        <div class="info-block"><div class="info-label">Poste</div><div class="info-value" id="info-poste">DA Senior</div></div>
+        <div class="info-block"><div class="info-label">Compte</div><div class="info-value" id="info-compte">Enedis</div></div>
+        <div class="info-block"><div class="info-label">Localisation</div><div class="info-value">Lyon</div></div>
+        <div class="info-block"><div class="info-label">TJM budget</div><div class="info-value">650 €</div></div>
+      </div>
+      <div class="info-block">
+        <div class="info-label">Contexte</div>
+        <div class="info-contexte">Recherche DA senior pour refonte de leur espace client. Budget validé, CODIR OK. Contact : Sabrina VOISIN (Procurement). RDV qualif fait le 10/03.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODIFIER OVERLAY (simule le panneau Modifier existant) -->
+<div class="modifier-overlay" id="modifier-overlay">
+  <div class="modifier-panel" id="modifier-panel">
+    <div class="modifier-header">
+      <div class="modifier-title">✏ Modifier le besoin</div>
+      <span class="modifier-close" onclick="closeModifier()">×</span>
+    </div>
+
+    <div class="context-notice" id="modifier-context-notice" style="display:none"></div>
+
+    <!-- Statut selector -->
+    <div class="statut-selector">
+      <div class="statut-selector-label">Statut</div>
+      <div class="statut-pills" id="modifier-statut-pills"></div>
+    </div>
+
+    <!-- Contextual fields (visible selon statut sélectionné) -->
+    <div id="contextual-zone"></div>
+
+    <!-- Champs standard -->
+    <div class="ctx-separator" style="padding: 12px 20px 0">INFORMATIONS</div>
+    <div class="modifier-form">
+      <div class="field-row">
+        <div class="field"><label>Poste <span class="req">*</span></label><input type="text" value="DA Senior" /></div>
+        <div class="field"><label>Compte <span class="req">*</span></label><input type="text" value="Enedis" /></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Localisation</label><input type="text" value="Lyon" /></div>
+        <div class="field"><label>TJM budget (€)</label><input type="number" value="650" /></div>
+      </div>
+      <div class="field-row">
+        <div class="field" style="flex: 1 1 100%"><label>Contexte / Description</label><textarea rows="3">Recherche DA senior pour refonte de leur espace client. Budget validé, CODIR OK.</textarea></div>
+      </div>
+    </div>
+
+    <div class="modifier-actions">
+      <button class="btn-save" onclick="saveModifier()">ENREGISTRER</button>
+      <button class="btn-save-cancel" onclick="closeModifier()">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast">
+  <span id="toast-text">Statut mis à jour</span>
+  <div class="toast-bar" id="toast-bar"></div>
+  <button class="toast-undo" onclick="undoStatus()">↩ Annuler</button>
+</div>
+
+<script>
+const C = { midnight: '#1C1F35', red: '#FF3D2E', blue: '#4A7FE5', green: '#00C218', yellow: '#FFE500', mid: '#888', border: '#E4E4E6' };
+
+const STATUTS = [
+  { id: 'opportunite',      label: 'Opportunité',         type: 'simple',     color: C.mid   },
+  { id: 'push',             label: 'Push opportuniste',   type: 'simple',     color: C.mid   },
+  { id: 'ouvert',           label: 'Besoin ouvert',       type: 'simple',     color: C.red   },
+  { id: 'profil_propose',   label: 'Profil proposé',      type: 'simple',     color: C.blue  },
+  { id: 'entretien_prog',   label: 'Entretien programmé', type: 'contextuel', color: C.blue,  icon: '📅' },
+  { id: 'entretien_passe',  label: 'Entretien passé',     type: 'contextuel', color: C.blue,  icon: '✅' },
+  { id: 'gagne',            label: 'Besoin Gagné',        type: 'contextuel', color: C.green, icon: '🏆' },
+  { id: 'perdu',            label: 'Besoin Perdu',        type: 'contextuel', color: C.red,   icon: '✗'  },
+];
+
+const CONTEXTUAL_FIELDS = {
+  entretien_prog: {
+    notice: '📅 Statut pré-sélectionné : Entretien programmé — renseignez la date ci-dessous',
+    title: '📅 Infos entretien',
+    fields: [
+      { id: 'date_entretien', label: "Date de l'entretien", type: 'datetime-local', required: true, full: false },
+      { id: 'type_entretien', label: 'Format', type: 'select', options: ['Visio', 'Présentiel', 'Téléphone'], required: false, full: false },
+      { id: 'interlocuteur', label: 'Interlocuteur client', type: 'text', placeholder: 'Prénom NOM, titre', required: false, full: true },
+    ]
+  },
+  entretien_passe: {
+    notice: '✅ Statut pré-sélectionné : Entretien passé — documentez le résultat',
+    title: '✅ Compte-rendu entretien',
+    fields: [
+      { id: 'cr_entretien', label: 'Compte-rendu', type: 'textarea', placeholder: 'Points clés, décisions, prochaine étape...', required: true, full: true },
+      { id: 'resultat', label: 'Résultat', type: 'select', options: ['Positif — à suivre', 'En attente retour client', 'Négatif'], required: true, full: false },
+    ]
+  },
+  gagne: {
+    notice: '🏆 Besoin Gagné — renseignez les informations de démarrage',
+    title: '🏆 Infos de démarrage',
+    fields: [
+      { id: 'date_demarrage', label: 'Date de démarrage', type: 'date', required: true, full: false },
+      { id: 'duree', label: 'Durée estimée', type: 'text', placeholder: 'ex : 3 mois, indéfini', required: false, full: false },
+      { id: 'tjm_negocie', label: 'TJM négocié (€)', type: 'number', placeholder: '', required: false, full: false },
+    ]
+  },
+  perdu: {
+    notice: '✗ Besoin Perdu — indiquez le motif pour capitaliser',
+    title: '✗ Motif de perte',
+    fields: [
+      { id: 'motif', label: 'Motif', type: 'select', options: ['Budget insuffisant', 'Choix concurrent', 'Besoin annulé', 'Perdu de vue', 'Autre'], required: true, full: false },
+      { id: 'commentaire', label: 'Commentaire', type: 'textarea', placeholder: 'Contexte, apprentissage...', required: false, full: true },
+    ]
+  },
+};
+
+const CARDS = [
+  { title: 'DA Senior — Enedis', account: 'Sabrina VOISIN · Enedis · Resp. Nicolas Serradeil · Créé le 14/03/2026', statut: 'profil_propose', poste: 'DA Senior', compte: 'Enedis' },
+  { title: 'Lead UX — Adecco', account: 'Gwendoline CHANTELAT · Adecco · Resp. Nicolas Serradeil · Créé le 02/03/2026', statut: 'ouvert', poste: 'Lead UX', compte: 'Adecco' },
+  { title: 'Product Manager — Engie', account: 'Marie RENAUD · Engie · Resp. Nicolas Serradeil · Créé le 20/02/2026', statut: 'entretien_prog', poste: 'Product Manager', compte: 'Engie' },
+];
+
+let currentCardIdx = 0;
+let currentStatutId = 'profil_propose';
+let previousStatutId = null;
+let toastTimer = null;
+let modifierCurrentStatut = null;
+
+function getStatutIdx(id) { return STATUTS.findIndex(s => s.id === id); }
+
+function renderChips() {
+  const container = document.getElementById('status-chips');
+  const currentIdx = getStatutIdx(currentStatutId);
+  container.innerHTML = '';
+
+  const pipeline = STATUTS.filter(s => s.id !== 'perdu');
+
+  pipeline.forEach((statut, i) => {
+    const idx = getStatutIdx(statut.id);
+    const isPast = idx < currentIdx;
+    const isActive = statut.id === currentStatutId;
+    const isFuture = idx > currentIdx;
+
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    if (isPast) chip.classList.add('chip-done');
+    if (isActive) chip.classList.add('chip-active');
+    if (isFuture) chip.classList.add('clickable');
+
+    if (isActive) chip.style.boxShadow = `3px 3px 0 ${statut.color}`;
+
+    // Type badge on hover (only for future clickable chips)
+    if (isFuture) {
+      const badge = document.createElement('span');
+      badge.className = 'chip-type-badge ' + (statut.type === 'simple' ? 'badge-simple' : 'badge-contextuel');
+      badge.textContent = statut.type === 'simple' ? '⚡ 1 clic' : '📝 Ouvre Modifier';
+      chip.appendChild(badge);
+    }
+
+    // Chip content
+    const content = document.createElement('span');
+    if (isPast) content.innerHTML = `<span class="chip-check">✓</span> ${statut.label}`;
+    else content.textContent = (statut.icon && isFuture ? statut.icon + ' ' : '') + statut.label;
+    chip.appendChild(content);
+
+    if (isFuture) {
+      chip.title = statut.type === 'simple'
+        ? `⚡ Avancer vers "${statut.label}" — 1 clic, mise à jour immédiate`
+        : `📝 Ouvre le Modifier pour "${statut.label}" — renseignez les champs requis`;
+      chip.addEventListener('click', () => handleStatusClick(statut));
+    }
+
+    container.appendChild(chip);
+
+    if (i < pipeline.length - 1) {
+      const arrow = document.createElement('span');
+      arrow.className = 'chip-arrow';
+      arrow.textContent = '›';
+      container.appendChild(arrow);
+    }
+  });
+
+  // Separator
+  const sep = document.createElement('span');
+  sep.style.cssText = 'color:#ddd; font-size:16px; padding: 0 4px; line-height:1;';
+  sep.textContent = '|';
+  container.appendChild(sep);
+
+  // Besoin Perdu
+  const perdu = STATUTS.find(s => s.id === 'perdu');
+  const perduChip = document.createElement('span');
+  const isPerduActive = currentStatutId === 'perdu';
+  perduChip.className = 'chip' + (isPerduActive ? ' chip-active' : ' clickable chip-perdu');
+  if (isPerduActive) perduChip.style.boxShadow = `3px 3px 0 ${C.red}`;
+
+  if (!isPerduActive) {
+    const badge = document.createElement('span');
+    badge.className = 'chip-type-badge badge-contextuel';
+    badge.textContent = '📝 Ouvre Modifier';
+    perduChip.appendChild(badge);
+  }
+  const perduContent = document.createElement('span');
+  perduContent.textContent = '✗ Besoin Perdu';
+  perduChip.appendChild(perduContent);
+
+  if (!isPerduActive) {
+    perduChip.title = '📝 Ouvre le Modifier pour renseigner le motif de perte';
+    perduChip.addEventListener('click', () => handleStatusClick(perdu));
+  }
+  container.appendChild(perduChip);
+}
+
+function handleStatusClick(statut) {
+  if (statut.id === currentStatutId) return;
+
+  if (statut.type === 'simple') {
+    // 1 clic — update direct (simule l'appel Supabase)
+    previousStatutId = currentStatutId;
+    currentStatutId = statut.id;
+    CARDS[currentCardIdx].statut = statut.id;
+    updateCardBadge(currentCardIdx, statut);
+    renderChips();
+    showToast(`⚡ Statut → ${statut.label}`);
+  } else {
+    // Contextuel — ouvre Modifier pré-positionné
+    openModifier(statut.id);
+  }
+}
+
+function openModifier(preSelectStatutId) {
+  modifierCurrentStatut = preSelectStatutId || currentStatutId;
+
+  // Context notice
+  const notice = document.getElementById('modifier-context-notice');
+  if (preSelectStatutId && CONTEXTUAL_FIELDS[preSelectStatutId]) {
+    notice.textContent = CONTEXTUAL_FIELDS[preSelectStatutId].notice;
+    notice.style.display = 'block';
+  } else {
+    notice.style.display = 'none';
+  }
+
+  // Render statut pills
+  renderModifierStatutPills(modifierCurrentStatut);
+
+  // Render contextual zone
+  renderContextualZone(modifierCurrentStatut);
+
+  const overlay = document.getElementById('modifier-overlay');
+  overlay.style.display = 'flex';
+  setTimeout(() => overlay.classList.add('show'), 10);
+}
+
+function openModifierComplet() {
+  openModifier(null);
+}
+
+function closeModifier() {
+  const overlay = document.getElementById('modifier-overlay');
+  overlay.classList.remove('show');
+  setTimeout(() => overlay.style.display = 'none', 200);
+}
+
+function renderModifierStatutPills(selectedId) {
+  const container = document.getElementById('modifier-statut-pills');
+  container.innerHTML = '';
+  STATUTS.forEach(s => {
+    const pill = document.createElement('button');
+    pill.className = 'statut-pill' + (s.id === selectedId ? ' selected' : '');
+    pill.textContent = s.label;
+    pill.addEventListener('click', () => {
+      modifierCurrentStatut = s.id;
+      renderModifierStatutPills(s.id);
+      renderContextualZone(s.id);
+      // Update notice
+      const notice = document.getElementById('modifier-context-notice');
+      if (CONTEXTUAL_FIELDS[s.id]) {
+        notice.textContent = CONTEXTUAL_FIELDS[s.id].notice;
+        notice.style.display = 'block';
+      } else {
+        notice.style.display = 'none';
+      }
+    });
+    container.appendChild(pill);
+  });
+}
+
+function renderContextualZone(statutId) {
+  const zone = document.getElementById('contextual-zone');
+  const def = CONTEXTUAL_FIELDS[statutId];
+  if (!def) { zone.innerHTML = ''; return; }
+
+  let fieldsHTML = '';
+  def.fields.forEach(f => {
+    let input = '';
+    if (f.type === 'select') {
+      input = `<select id="mf_${f.id}">${f.options.map(o => `<option>${o}</option>`).join('')}</select>`;
+    } else if (f.type === 'textarea') {
+      input = `<textarea id="mf_${f.id}" placeholder="${f.placeholder || ''}" rows="3"></textarea>`;
+    } else {
+      input = `<input id="mf_${f.id}" type="${f.type}" placeholder="${f.placeholder || ''}" />`;
+    }
+    fieldsHTML += `<div class="field" style="flex: ${f.full ? '1 1 100%' : '1 1 140px'}">
+      <label for="mf_${f.id}">${f.label} ${f.required ? '<span class="req">*</span>' : ''}</label>
+      ${input}
+    </div>`;
+  });
+
+  zone.innerHTML = `
+    <div class="contextual-fields">
+      <div class="ctx-title"><span class="ctx-icon">${def.title[0]}</span> ${def.title.substring(2)}</div>
+      <div class="field-row" style="flex-wrap:wrap">${fieldsHTML}</div>
+    </div>`;
+}
+
+function saveModifier() {
+  const newStatut = STATUTS.find(s => s.id === modifierCurrentStatut);
+  if (!newStatut) return;
+
+  // Validate required fields
+  const def = CONTEXTUAL_FIELDS[modifierCurrentStatut];
+  if (def) {
+    for (const f of def.fields) {
+      if (f.required) {
+        const el = document.getElementById('mf_' + f.id);
+        if (el && !el.value.trim()) {
+          el.style.borderColor = '#FF3D2E';
+          el.focus();
+          setTimeout(() => el.style.borderColor = '#E4E4E6', 1500);
+          return;
+        }
+      }
+    }
+  }
+
+  previousStatutId = currentStatutId;
+  currentStatutId = modifierCurrentStatut;
+  CARDS[currentCardIdx].statut = modifierCurrentStatut;
+  updateCardBadge(currentCardIdx, newStatut);
+  renderChips();
+  closeModifier();
+  showToast(`📝 Besoin mis à jour → ${newStatut.label}`);
+}
+
+function updateCardBadge(idx, statut) {
+  const el = document.getElementById('card-statut-' + idx);
+  if (el) {
+    el.textContent = statut.label;
+    el.style.color = statut.color;
+    el.style.borderColor = statut.color;
+  }
+}
+
+function selectCard(idx) {
+  currentCardIdx = idx;
+  currentStatutId = CARDS[idx].statut;
+  document.querySelectorAll('.pipe-card').forEach((el, i) => el.classList.toggle('selected', i === idx));
+  document.getElementById('panel-title').textContent = CARDS[idx].title;
+  document.getElementById('panel-account').textContent = CARDS[idx].account;
+  document.getElementById('info-poste').textContent = CARDS[idx].poste;
+  document.getElementById('info-compte').textContent = CARDS[idx].compte;
+  renderChips();
+}
+
+let toastBarTimer = null;
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  const bar = document.getElementById('toast-bar');
+  document.getElementById('toast-text').textContent = msg;
+  toast.classList.add('show');
+  bar.style.transition = 'none';
+  bar.style.width = '100%';
+  setTimeout(() => { bar.style.transition = 'width 5s linear'; bar.style.width = '0%'; }, 50);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.classList.remove('show'); previousStatutId = null; }, 5000);
+}
+
+function undoStatus() {
+  if (!previousStatutId) return;
+  const prev = STATUTS.find(s => s.id === previousStatutId);
+  currentStatutId = previousStatutId;
+  previousStatutId = null;
+  CARDS[currentCardIdx].statut = currentStatutId;
+  updateCardBadge(currentCardIdx, prev);
+  renderChips();
+  clearTimeout(toastTimer);
+  document.getElementById('toast').classList.remove('show');
+}
+
+// Init
+renderChips();
+</script>
+</body>
+</html>

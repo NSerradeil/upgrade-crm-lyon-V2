@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prototype Prospection — CRM Upgrade</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{ box-sizing:border-box; margin:0; padding:0; border-radius:0 !important; }
+body{ font-family:'Outfit',sans-serif; background:#F0F0F0; font-size:14px; color:#1C1F35; }
+input,select,textarea,button{ font-family:'Outfit',sans-serif; }
+::-webkit-scrollbar{ width:6px; } ::-webkit-scrollbar-thumb{ background:#ccc; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useCallback, useRef, useEffect } = React;
+
+// ── Brand tokens ─────────────────────────────────────────────────────────────
+const C = {
+  midnight:'#1C1F35', snow:'#fff', red:'#FF3D2E',
+  blue:'#4A7FE5', green:'#00C218', yellow:'#FFE500',
+  pink:'#FF66FF', border:'#E4E4E6', bg:'#F5F5F5',
+};
+
+// ── Mock data ─────────────────────────────────────────────────────────────────
+const MOCK_CRM_CONTACTS = [
+  { id:1,  nom:'Sophie MARTIN',   entreprise:'Decathlon Digital',   poste:'Head of Product',    tel:'06 12 34 56 78', email:'s.martin@decathlon.com',  linkedin:'linkedin.com/in/sophiemartin',  dernier:'12 fév. 2026', agence:'Lyon' },
+  { id:2,  nom:'Thomas DURAND',   entreprise:'Sanofi UX Lab',       poste:'VP Design',           tel:'',               email:'t.durand@sanofi.com',      linkedin:'',                              dernier:'28 jan. 2026', agence:'Lyon' },
+  { id:3,  nom:'Claire LEFÈVRE',  entreprise:'MAIF Digital Factory', poste:'Directrice Produit', tel:'07 11 22 33 44', email:'c.lefevre@maif.fr',        linkedin:'',                              dernier:'5 jan. 2026',  agence:'Lyon' },
+  { id:4,  nom:'Antoine MOREAU',  entreprise:'Engie Digital',       poste:'Product Owner Lead',  tel:'06 55 44 33 22', email:'a.moreau@engie.com',       linkedin:'linkedin.com/in/antoinemoreau', dernier:'20 déc. 2025', agence:'Paris' },
+  { id:5,  nom:'Julie PETIT',     entreprise:'BNP Paribas CIB',     poste:'Head of UX',          tel:'06 77 88 99 00', email:'j.petit@bnpparibas.com',   linkedin:'linkedin.com/in/juliepetit',    dernier:'15 déc. 2025', agence:'Lyon' },
+  { id:6,  nom:'Marc LEROY',      entreprise:'Axa Tech',            poste:'CTO Digital',         tel:'',               email:'',                          linkedin:'linkedin.com/in/marcleroy',     dernier:'3 déc. 2025',  agence:'Lyon' },
+  { id:7,  nom:'Isabelle DUPONT', entreprise:'Orange Business',     poste:'Head of UX Design',   tel:'06 33 22 11 00', email:'i.dupont@orange.fr',       linkedin:'',                              dernier:'1 déc. 2025',  agence:'Lyon' },
+];
+
+const PAST_SESSIONS = [
+  { id:'s1', nom:'Rappels janvier 2026', date:'15 jan. 2026', nb:12, interesses:3, relances:5, statut:'done' },
+  { id:'s2', nom:'Grands comptes Lyon Q4', date:'10 déc. 2025', nb:8, interesses:2, relances:3, statut:'done' },
+];
+
+const STATUS_CFG = {
+  none:         { label:'À appeler',      color:C.border,  bg:'#f9f9f9',  icon:'📞' },
+  called:       { label:'Appelé',         color:C.blue,    bg:'#EEF3FF',  icon:'✅' },
+  interested:   { label:'Intéressé !',    color:C.green,   bg:'#EDFFF1',  icon:'🎯' },
+  unreachable:  { label:'Pas joignable',  color:'#999',    bg:'#f5f5f5',  icon:'📵' },
+  not_interested:{ label:'Pas intéressé', color:C.red,     bg:'#FFF0EF',  icon:'⛔' },
+};
+
+const PRESETS = [
+  { label:'Demain',   days:1  },
+  { label:'3 jours',  days:3  },
+  { label:'1 semaine',days:7  },
+];
+
+function addDays(n){ const d=new Date(); d.setDate(d.getDate()+n); return d; }
+function fmt(d){ return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'}); }
+function fmtISO(d){ return d.toISOString().slice(0,10); }
+
+// ── Petit bouton brutal ───────────────────────────────────────────────────────
+function Btn({ label, color='#1C1F35', textColor='#fff', shadow, onClick, active, size='sm', disabled }){
+  const pad = size==='sm' ? '5px 12px' : '8px 18px';
+  const fs  = size==='sm' ? 11 : 13;
+  const [hov,setHov] = useState(false);
+  return (
+    <button onClick={onClick} disabled={disabled} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)} style={{
+      background: active ? color : disabled ? '#E4E4E6' : '#fff',
+      color:      active ? textColor : disabled ? '#aaa' : color,
+      border: `2px solid ${disabled ? '#E4E4E6' : color}`,
+      borderLeft: `4px solid ${disabled ? '#E4E4E6' : color}`,
+      padding: pad, fontSize: fs, fontWeight:800,
+      textTransform:'uppercase', letterSpacing:'0.04em',
+      cursor: disabled ? 'not-allowed' : 'pointer',
+      boxShadow: (hov && !disabled && !active) ? `3px 3px 0 ${shadow||color}` : active ? `3px 3px 0 ${shadow||color}` : 'none',
+      transform: (hov && !disabled) ? 'translate(-1px,-1px)' : 'none',
+      transition:'all 80ms ease',
+    }}>{label}</button>
+  );
+}
+
+// ── Chip de statut ────────────────────────────────────────────────────────────
+function StatBadge({ statut }){
+  const s = STATUS_CFG[statut] || STATUS_CFG.none;
+  return <span style={{ fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.06em', background:s.bg, color:s.color, border:`2px solid ${s.color}`, padding:'2px 8px' }}>{s.icon} {s.label}</span>;
+}
+
+// ── App principale ────────────────────────────────────────────────────────────
+function App(){
+  const [tab,setTab] = useState('prospection');
+  const [screen,setScreen] = useState('list'); // list | new | session
+  const [activeSession,setActiveSession] = useState(null);
+
+  const TABS = [
+    { id:'taches',       label:'Tâches (67)',    dot:'#FF3D2E' },
+    { id:'contacts',     label:'Contacts (716)'               },
+    { id:'prospection',  label:'Prosp. (2)',      dot:'#FFE500' },
+    { id:'besoins',      label:'Besoins (65)'                  },
+    { id:'pipe',         label:'Pipe (54)'                     },
+    { id:'missions',     label:'Missions (28)'                 },
+  ];
+
+  return (
+    <div style={{ minHeight:'100vh', background:C.bg }}>
+      {/* Header CRM */}
+      <div style={{ background:C.midnight, padding:'0 24px', display:'flex', alignItems:'center', gap:16, height:44 }}>
+        <span style={{ color:'#fff', fontWeight:900, fontSize:15, letterSpacing:'0.04em' }}>
+          <span style={{ color:C.red }}>▮</span> upgrade
+        </span>
+        <span style={{ fontSize:10, color:'#555', background:'#2a2e4a', padding:'2px 8px', fontWeight:700, letterSpacing:'0.08em' }}>ADMIN</span>
+        <div style={{ flex:1 }}/>
+        <span style={{ fontSize:11, color:'#888' }}>Nicolas Serradeil · Lyon</span>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ background:C.snow, borderBottom:`2px solid ${C.border}`, padding:'0 24px', display:'flex', gap:0 }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={()=>{ setTab(t.id); setScreen('list'); }} style={{
+            padding:'10px 16px', fontSize:12, fontWeight:700, letterSpacing:'0.04em',
+            border:'none', background:'none', cursor:'pointer', position:'relative',
+            color: tab===t.id ? C.midnight : '#aaa',
+            borderBottom: tab===t.id ? `3px solid ${C.red}` : '3px solid transparent',
+            textTransform:'uppercase',
+          }}>
+            {t.dot && <span style={{ display:'inline-block', width:6, height:6, background:t.dot, marginRight:5, verticalAlign:'middle' }}/>}
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Contenu */}
+      <div style={{ padding:24 }}>
+        {tab !== 'prospection' && (
+          <div style={{ background:C.snow, border:`2px solid ${C.border}`, padding:40, textAlign:'center', color:'#ccc', fontSize:13, fontWeight:700 }}>
+            [Onglet {tab} — contenu CRM existant]
+          </div>
+        )}
+        {tab === 'prospection' && (
+          screen === 'list'    ? <SessionList    onNew={()=>setScreen('new')} onOpen={s=>{setActiveSession(s);setScreen('session');}} /> :
+          screen === 'new'     ? <NewSession     onStart={s=>{setActiveSession(s);setScreen('session');}} onBack={()=>setScreen('list')} /> :
+          screen === 'session' ? <SessionActive  session={activeSession} onDone={()=>setScreen('list')} onBack={()=>setScreen('list')} /> :
+          null
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Écran 1 : liste des sessions ──────────────────────────────────────────────
+function SessionList({ onNew, onOpen }){
+  return (
+    <div>
+      {/* Header section */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+        <div>
+          <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.1em', color:'#999', marginBottom:4 }}>
+            ▥ Prospection
+          </div>
+          <div style={{ fontSize:20, fontWeight:900, color:C.midnight }}>Sessions d'appels</div>
+        </div>
+        <Btn label="+ Nouvelle session" color={C.midnight} shadow={C.red} size="md" onClick={onNew} />
+      </div>
+
+      {/* KPIs rapides */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, marginBottom:20 }}>
+        {[
+          { label:'Sessions', val:2, color:C.blue },
+          { label:'Contacts appelés', val:20, color:C.midnight },
+          { label:'Intéressés', val:5, color:C.green },
+          { label:'Relances créées', val:8, color:C.yellow },
+        ].map(k => (
+          <div key={k.label} style={{ background:C.snow, border:`2px solid ${C.border}`, borderLeft:`5px solid ${k.color}`, padding:'14px 16px' }}>
+            <div style={{ fontSize:28, fontWeight:900, color:C.midnight, lineHeight:1 }}>{k.val}</div>
+            <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'#999', marginTop:4 }}>{k.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Sessions passées */}
+      <div style={{ background:C.snow, border:`2px solid ${C.midnight}`, padding:0 }}>
+        <div style={{ background:C.midnight, padding:'10px 18px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <span style={{ color:C.snow, fontWeight:800, fontSize:12, textTransform:'uppercase', letterSpacing:'0.08em' }}>Historique des sessions</span>
+        </div>
+        {PAST_SESSIONS.map(s => (
+          <div key={s.id} style={{ padding:'14px 18px', borderBottom:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <div>
+              <div style={{ fontWeight:800, fontSize:14 }}>{s.nom}</div>
+              <div style={{ fontSize:11, color:'#999', marginTop:2 }}>{s.date} · {s.nb} contacts</div>
+            </div>
+            <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+              <span style={{ fontSize:11, fontWeight:700, color:C.green }}>🎯 {s.interesses} intéressés</span>
+              <span style={{ fontSize:11, fontWeight:700, color:C.yellow }}>🔄 {s.relances} relances</span>
+              <Btn label="Voir" size="sm" color={C.blue} onClick={()=>onOpen(s)} />
+            </div>
+          </div>
+        ))}
+        {PAST_SESSIONS.length === 0 && (
+          <div style={{ padding:40, textAlign:'center', color:'#ccc', fontSize:13, fontWeight:700 }}>
+            Aucune session pour l'instant — lance ta première !
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Écran 2 : création de session ─────────────────────────────────────────────
+function NewSession({ onStart, onBack }){
+  const [nom, setNom]           = useState('');
+  const [agence, setAgence]     = useState('Lyon');
+  const [delai, setDelai]       = useState(30);
+  const [selected, setSelected] = useState(new Set());
+  const [searchQ, setSearchQ]   = useState('');
+
+  const filtered = MOCK_CRM_CONTACTS.filter(c =>
+    (agence === 'Tous' || c.agence === agence) &&
+    c.nom.toLowerCase().includes(searchQ.toLowerCase())
+  );
+
+  const toggle = id => {
+    const s = new Set(selected);
+    s.has(id) ? s.delete(id) : s.add(id);
+    setSelected(s);
+  };
+  const toggleAll = () => {
+    if (selected.size === filtered.length) setSelected(new Set());
+    else setSelected(new Set(filtered.map(c=>c.id)));
+  };
+
+  const handleStart = () => {
+    const contacts = MOCK_CRM_CONTACTS.filter(c => selected.has(c.id)).map(c => ({
+      ...c, status:'none', notes:'', wantRelance:false, relanceDate:null, relanceNote:'', editTel:c.tel||'', editEmail:c.email||'', editLinkedin:c.linkedin||'',
+    }));
+    onStart({ nom: nom || `Session ${new Date().toLocaleDateString('fr-FR')}`, contacts, date: new Date().toLocaleDateString('fr-FR') });
+  };
+
+  return (
+    <div style={{ maxWidth:720 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
+        <button onClick={onBack} style={{ fontSize:12, color:'#999', background:'none', border:'none', cursor:'pointer', fontWeight:700 }}>← Retour</button>
+        <div style={{ fontSize:18, fontWeight:900, color:C.midnight }}>Nouvelle session de prospection</div>
+      </div>
+
+      {/* Paramètres */}
+      <div style={{ background:C.snow, border:`2px solid ${C.midnight}`, marginBottom:16 }}>
+        <div style={{ background:C.midnight, padding:'8px 16px' }}>
+          <span style={{ color:C.snow, fontWeight:800, fontSize:11, textTransform:'uppercase', letterSpacing:'0.08em' }}>1 — Paramètres</span>
+        </div>
+        <div style={{ padding:16, display:'flex', flexDirection:'column', gap:12 }}>
+          <div>
+            <label style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:'#999', display:'block', marginBottom:4 }}>Nom de la session</label>
+            <input value={nom} onChange={e=>setNom(e.target.value)} placeholder="ex: Rappels mars 2026 — Grands comptes Lyon"
+              style={{ width:'100%', padding:'8px 12px', border:`2px solid ${C.border}`, fontSize:13, color:C.midnight, outline:'none' }}/>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+            <div>
+              <label style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:'#999', display:'block', marginBottom:4 }}>Agence</label>
+              <select value={agence} onChange={e=>setAgence(e.target.value)} style={{ width:'100%', padding:'8px 12px', border:`2px solid ${C.border}`, fontSize:13 }}>
+                {['Tous','Lyon','Paris','Bordeaux'].map(a=><option key={a}>{a}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:'#999', display:'block', marginBottom:4 }}>Dernier contact &gt;</label>
+              <select value={delai} onChange={e=>setDelai(+e.target.value)} style={{ width:'100%', padding:'8px 12px', border:`2px solid ${C.border}`, fontSize:13 }}>
+                {[14,30,60,90].map(d=><option key={d} value={d}>{d} jours</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Sélection des contacts */}
+      <div style={{ background:C.snow, border:`2px solid ${C.midnight}`, marginBottom:16 }}>
+        <div style={{ background:C.midnight, padding:'8px 16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <span style={{ color:C.snow, fontWeight:800, fontSize:11, textTransform:'uppercase', letterSpacing:'0.08em' }}>2 — Contacts à appeler</span>
+          <span style={{ fontSize:11, color:C.yellow, fontWeight:700 }}>{selected.size} sélectionné{selected.size>1?'s':''}</span>
+        </div>
+        <div style={{ padding:'10px 14px', borderBottom:`1px solid ${C.border}`, display:'flex', gap:8, alignItems:'center' }}>
+          <input value={searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="Rechercher un contact..."
+            style={{ flex:1, padding:'6px 10px', border:`2px solid ${C.border}`, fontSize:12, outline:'none' }}/>
+          <button onClick={toggleAll} style={{ fontSize:11, fontWeight:700, color:C.blue, background:'none', border:`2px solid ${C.blue}`, padding:'5px 12px', cursor:'pointer', textTransform:'uppercase' }}>
+            {selected.size === filtered.length ? 'Désélect. tout' : 'Tout sélect.'}
+          </button>
+        </div>
+        {filtered.map(c => (
+          <div key={c.id} onClick={()=>toggle(c.id)} style={{
+            padding:'10px 14px', borderBottom:`1px solid ${C.border}`,
+            display:'flex', alignItems:'center', gap:10, cursor:'pointer',
+            background: selected.has(c.id) ? '#F0F4FF' : C.snow,
+            borderLeft: selected.has(c.id) ? `4px solid ${C.blue}` : '4px solid transparent',
+          }}>
+            <span style={{
+              width:16, height:16, border:`2px solid ${selected.has(c.id)?C.blue:C.border}`,
+              background: selected.has(c.id) ? C.blue : 'transparent',
+              display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
+            }}>
+              {selected.has(c.id) && <span style={{ color:'#fff', fontSize:10, fontWeight:900 }}>✓</span>}
+            </span>
+            <div style={{ flex:1 }}>
+              <div style={{ fontWeight:700, fontSize:13 }}>{c.nom}</div>
+              <div style={{ fontSize:11, color:'#888' }}>{c.entreprise} · {c.poste}</div>
+            </div>
+            <div style={{ textAlign:'right', fontSize:10, color:'#bbb' }}>
+              <div>{c.agence}</div>
+              <div>dernier : {c.dernier}</div>
+            </div>
+            <div style={{ display:'flex', gap:4 }}>
+              {!c.tel     && <span style={{ fontSize:9, fontWeight:800, background:'#FFF3CD', color:'#92400e', padding:'1px 5px', border:'1px solid #FFE500' }}>📞?</span>}
+              {!c.email   && <span style={{ fontSize:9, fontWeight:800, background:'#FFF3CD', color:'#92400e', padding:'1px 5px', border:'1px solid #FFE500' }}>✉?</span>}
+              {!c.linkedin&& <span style={{ fontSize:9, fontWeight:800, background:'#FFF3CD', color:'#92400e', padding:'1px 5px', border:'1px solid #FFE500' }}>in?</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+        <Btn label="Annuler" color="#999" onClick={onBack} />
+        <Btn label={`▶ Lancer la session (${selected.size} contacts)`} color={C.midnight} shadow={C.green} size="md" onClick={handleStart} disabled={selected.size===0} />
+      </div>
+    </div>
+  );
+}
+
+// ── Écran 3 : session active ──────────────────────────────────────────────────
+function SessionActive({ session, onDone, onBack }){
+  const [contacts, setContacts] = useState(session.contacts);
+  const [view, setView]         = useState('list'); // list | focus | done
+  const [focusIdx, setFocusIdx] = useState(0);
+  const [saving, setSaving]     = useState(false);
+  const [saved, setSaved]       = useState(false);
+
+  const update = useCallback((id, u) => {
+    setContacts(prev => prev.map(c => c.id===id ? {...c,...u} : c));
+  }, []);
+
+  const stats = {
+    total:     contacts.length,
+    done:      contacts.filter(c=>c.status!=='none').length,
+    interested:contacts.filter(c=>c.status==='interested').length,
+    relances:  contacts.filter(c=>c.wantRelance&&c.relanceDate).length,
+  };
+  const pct = stats.total>0 ? Math.round((stats.done/stats.total)*100) : 0;
+
+  // Simule l'envoi vers le CRM via MCP
+  const handleFinalize = () => {
+    setSaving(true);
+    setTimeout(() => {
+      setSaving(false); setSaved(true);
+    }, 1800);
+  };
+
+  if (saved) return <SavedScreen session={session} contacts={contacts} stats={stats} onDone={onDone} />;
+
+  return (
+    <div style={{ maxWidth:720 }}>
+      {/* Header session */}
+      <div style={{ background:C.midnight, padding:'14px 20px', marginBottom:0, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <div>
+          <button onClick={onBack} style={{ fontSize:10, color:'#555', background:'none', border:'none', cursor:'pointer', fontWeight:700, marginBottom:4 }}>← Sessions</button>
+          <div style={{ color:C.snow, fontWeight:900, fontSize:15 }}>{session.nom}</div>
+          <div style={{ fontSize:10, color:'#888', marginTop:2 }}>{session.date} · {stats.total} contacts</div>
+        </div>
+        <div style={{ textAlign:'right' }}>
+          <div style={{ fontSize:28, fontWeight:900, color:C.yellow, lineHeight:1 }}>{pct}%</div>
+          <div style={{ fontSize:10, color:'#888' }}>{stats.done}/{stats.total} traités</div>
+        </div>
+      </div>
+
+      {/* Barre de progression */}
+      <div style={{ height:6, background:'#2a2e4a' }}>
+        <div style={{ height:'100%', background:`linear-gradient(90deg,${C.blue},${C.green})`, width:`${pct}%`, transition:'width 0.4s' }}/>
+      </div>
+
+      {/* Mini stats + nav */}
+      <div style={{ background:C.snow, border:`2px solid ${C.midnight}`, borderTop:'none', padding:'10px 16px', display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+        <div style={{ display:'flex', gap:16 }}>
+          {[
+            { v:stats.interested, label:'Intéressés', color:C.green  },
+            { v:stats.relances,   label:'Relances',   color:C.yellow  },
+            { v:contacts.filter(c=>c.status==='unreachable').length, label:'Injoignables', color:'#999' },
+          ].map(s => (
+            <div key={s.label} style={{ textAlign:'center' }}>
+              <div style={{ fontSize:20, fontWeight:900, color:s.color }}>{s.v}</div>
+              <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', color:'#bbb', letterSpacing:'0.06em' }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display:'flex', gap:6 }}>
+          {[['list','📋 Liste'],['focus','🎯 Un / un']].map(([v,l])=>(
+            <button key={v} onClick={()=>setView(v)} style={{
+              fontSize:11, fontWeight:800, textTransform:'uppercase', padding:'5px 12px',
+              background: view===v ? C.midnight : C.snow,
+              color: view===v ? C.snow : '#999',
+              border: `2px solid ${view===v ? C.midnight : C.border}`,
+              cursor:'pointer',
+            }}>{l}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Vue liste */}
+      {view==='list' && contacts.map(c => (
+        <ContactCard key={c.id} contact={c} update={update} />
+      ))}
+
+      {/* Vue focus */}
+      {view==='focus' && (
+        <div>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+            <button disabled={focusIdx===0} onClick={()=>setFocusIdx(i=>i-1)} style={{
+              padding:'8px 20px', fontWeight:800, fontSize:11, textTransform:'uppercase',
+              background: focusIdx===0?C.border:C.midnight, color: focusIdx===0?'#aaa':'#fff',
+              border:'none', cursor: focusIdx===0?'default':'pointer',
+            }}>← Précédent</button>
+            <span style={{ fontSize:12, color:'#999', fontWeight:700 }}>{focusIdx+1} / {contacts.length}</span>
+            <button disabled={focusIdx===contacts.length-1} onClick={()=>setFocusIdx(i=>i+1)} style={{
+              padding:'8px 20px', fontWeight:800, fontSize:11, textTransform:'uppercase',
+              background: focusIdx===contacts.length-1?C.border:C.midnight, color: focusIdx===contacts.length-1?'#aaa':'#fff',
+              border:'none', cursor: focusIdx===contacts.length-1?'default':'pointer',
+            }}>Suivant →</button>
+          </div>
+          <ContactCard contact={contacts[focusIdx]} update={update} />
+        </div>
+      )}
+
+      {/* Bouton finaliser */}
+      <div style={{ marginTop:16, background:C.snow, border:`2px solid ${C.midnight}`, padding:'14px 18px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <div style={{ fontSize:12, color:'#999' }}>
+          <strong style={{ color:C.midnight }}>{stats.done}</strong> contact{stats.done>1?'s':''} traité{stats.done>1?'s':''} · <strong style={{ color:C.green }}>{stats.interested}</strong> intéressé{stats.interested>1?'s':''} · <strong style={{ color:C.yellow }}>{stats.relances}</strong> relance{stats.relances>1?'s':''}
+        </div>
+        <button onClick={handleFinalize} disabled={saving||stats.done===0} style={{
+          background: (saving||stats.done===0) ? C.border : C.midnight,
+          color: (saving||stats.done===0) ? '#aaa' : C.snow,
+          border: `2px solid ${(saving||stats.done===0)?C.border:C.midnight}`,
+          borderLeft: `5px solid ${(saving||stats.done===0)?C.border:C.green}`,
+          boxShadow: (saving||stats.done===0) ? 'none' : `4px 4px 0 ${C.green}`,
+          padding:'10px 20px', fontWeight:900, fontSize:12, textTransform:'uppercase',
+          letterSpacing:'0.06em', cursor:(saving||stats.done===0)?'not-allowed':'pointer',
+          transition:'all 80ms',
+        }}>
+          {saving ? '⏳ Envoi au CRM...' : '✓ Finaliser → CRM'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Carte contact ─────────────────────────────────────────────────────────────
+function ContactCard({ contact: c, update }){
+  const cfg = STATUS_CFG[c.status];
+  const presets = PRESETS.map(p=>({...p, date:addDays(p.days)}));
+  const isPreset = d => c.relanceDate && fmtISO(c.relanceDate)===fmtISO(d);
+  const isCustom = c.relanceDate && !presets.some(p=>fmtISO(p.date)===fmtISO(c.relanceDate));
+
+  return (
+    <div style={{ background:C.snow, border:`2px solid ${C.border}`, borderLeft:`5px solid ${cfg.color}`, marginBottom:10, padding:16 }}>
+      {/* Header contact */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:10 }}>
+        <div>
+          <div style={{ fontWeight:900, fontSize:15, color:C.midnight }}>{c.nom}</div>
+          <div style={{ fontSize:12, color:C.blue, fontWeight:700 }}>{c.entreprise}</div>
+          <div style={{ fontSize:11, color:'#888', marginTop:1 }}>{c.poste}</div>
+          <div style={{ fontSize:10, color:'#bbb', marginTop:2 }}>Dernier contact : {c.dernier}</div>
+        </div>
+        <StatBadge statut={c.status} />
+      </div>
+
+      {/* Coordonnées */}
+      <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:12, alignItems:'center' }}>
+        {c.tel
+          ? <a href={`tel:${c.tel}`} style={{ fontSize:12, color:C.blue, textDecoration:'none', fontWeight:600 }}>📞 {c.tel}</a>
+          : <CoordInput value={c.editTel} onChange={v=>update(c.id,{editTel:v})} placeholder="Ajouter tél" />
+        }
+        {c.email
+          ? <a href={`mailto:${c.email}`} style={{ fontSize:12, color:C.blue, textDecoration:'none', fontWeight:600 }}>✉ {c.email}</a>
+          : <CoordInput value={c.editEmail} onChange={v=>update(c.id,{editEmail:v})} placeholder="Ajouter email" />
+        }
+        {c.linkedin
+          ? <a href={`https://${c.linkedin}`} target="_blank" style={{ fontSize:12, color:C.blue, textDecoration:'none', fontWeight:600 }}>in/{c.linkedin.split('/').pop()}</a>
+          : <CoordInput value={c.editLinkedin} onChange={v=>update(c.id,{editLinkedin:v})} placeholder="Ajouter LinkedIn" />
+        }
+      </div>
+
+      {/* Statuts d'appel */}
+      <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:12 }}>
+        {Object.entries(STATUS_CFG).filter(([k])=>k!=='none').map(([key,cfg])=>(
+          <button key={key} onClick={()=>update(c.id,{status:c.status===key?'none':key})} style={{
+            padding:'5px 12px', fontSize:11, fontWeight:800, textTransform:'uppercase',
+            cursor:'pointer', transition:'all 80ms',
+            background: c.status===key ? cfg.color : C.snow,
+            color:       c.status===key ? '#fff'    : '#aaa',
+            border:      `2px solid ${c.status===key ? cfg.color : C.border}`,
+          }}>{cfg.icon} {cfg.label}</button>
+        ))}
+      </div>
+
+      {/* Notes */}
+      <textarea
+        value={c.notes} onChange={e=>update(c.id,{notes:e.target.value})}
+        placeholder="Notes d'appel..."
+        style={{ width:'100%', minHeight:52, padding:'8px 10px', border:`2px solid ${C.border}`, fontSize:12, resize:'vertical', outline:'none', color:C.midnight, marginBottom: c.status!=='none'?10:0 }}
+      />
+
+      {/* Bloc relance */}
+      {c.status !== 'none' && (
+        <div style={{ background:'#FFFBF0', border:`2px solid ${C.yellow}`, borderLeft:`5px solid ${C.yellow}`, padding:'10px 14px' }}>
+          <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontWeight:800, fontSize:12, textTransform:'uppercase', letterSpacing:'0.04em', color:'#92400e' }}>
+            <input type="checkbox" checked={c.wantRelance}
+              onChange={e=>update(c.id,{wantRelance:e.target.checked, ...(e.target.checked?{}:{relanceDate:null,relanceNote:''})})}
+              style={{ width:16,height:16,accentColor:C.yellow,cursor:'pointer' }}/>
+            ✓ Créer une tâche de relance
+          </label>
+          {c.wantRelance && (
+            <div style={{ marginTop:10 }}>
+              <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8 }}>
+                {presets.map(p=>(
+                  <button key={p.days} onClick={()=>update(c.id,{relanceDate:isPreset(p.date)?null:p.date})} style={{
+                    padding:'4px 12px', fontSize:11, fontWeight:700, textTransform:'uppercase',
+                    background: isPreset(p.date)?C.midnight:C.snow,
+                    color:      isPreset(p.date)?C.yellow:'#999',
+                    border:     `2px solid ${isPreset(p.date)?C.midnight:C.border}`,
+                    cursor:'pointer',
+                  }}>{p.label} ({fmt(p.date)})</button>
+                ))}
+                <input type="date" style={{ padding:'4px 8px', border:`2px solid ${C.border}`, fontSize:11, outline:'none' }}
+                  value={c.relanceDate?fmtISO(c.relanceDate):''}
+                  onChange={e=>{ if(e.target.value){ const[y,m,d]=e.target.value.split('-').map(Number); update(c.id,{relanceDate:new Date(y,m-1,d)}); }}}/>
+              </div>
+              <textarea value={c.relanceNote} onChange={e=>update(c.id,{relanceNote:e.target.value})}
+                placeholder="Note pour la relance (optionnel)..."
+                style={{ width:'100%', minHeight:44, padding:'6px 8px', border:`2px solid ${C.border}`, fontSize:11, resize:'vertical', outline:'none' }}/>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Input coordonnée avec validation ─────────────────────────────────────────
+function CoordInput({ value, onChange, placeholder }){
+  const [local, setLocal] = useState(value||'');
+  const [focus, setFocus] = useState(false);
+  useEffect(()=>{ if(!focus) setLocal(value||''); },[value,focus]);
+  const empty = !local.trim();
+  const border = empty ? `2px solid ${C.yellow}` : `2px solid ${C.green}`;
+  return (
+    <input value={local} placeholder={placeholder}
+      onFocus={()=>setFocus(true)}
+      onBlur={()=>{ setFocus(false); onChange(local); }}
+      onChange={e=>setLocal(e.target.value)}
+      style={{ fontSize:11, padding:'4px 8px', width:150, border, background: empty?'#FFFDE7':'#EDFFF1', outline:'none', color:C.midnight, fontFamily:'Outfit,sans-serif' }}/>
+  );
+}
+
+// ── Écran confirmation sauvegarde ─────────────────────────────────────────────
+function SavedScreen({ session, contacts, stats, onDone }){
+  return (
+    <div style={{ maxWidth:720 }}>
+      <div style={{ background:C.midnight, padding:'20px 24px', marginBottom:16, textAlign:'center' }}>
+        <div style={{ fontSize:36, marginBottom:6 }}>✅</div>
+        <div style={{ color:C.snow, fontWeight:900, fontSize:18 }}>Session finalisée !</div>
+        <div style={{ color:'#888', fontSize:12, marginTop:4 }}>{session.nom}</div>
+      </div>
+
+      {/* Stats */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, marginBottom:16 }}>
+        {[
+          { val:stats.done,       label:'Contacts traités', color:C.blue  },
+          { val:stats.interested, label:'Intéressés',       color:C.green },
+          { val:stats.relances,   label:'Tâches créées',    color:C.yellow},
+        ].map(s=>(
+          <div key={s.label} style={{ background:C.snow, border:`2px solid ${C.border}`, borderLeft:`5px solid ${s.color}`, padding:'14px 16px', textAlign:'center' }}>
+            <div style={{ fontSize:32, fontWeight:900, color:s.color }}>{s.val}</div>
+            <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', color:'#999', letterSpacing:'0.06em', marginTop:4 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Actions loguées */}
+      <div style={{ background:C.snow, border:`2px solid ${C.midnight}`, marginBottom:16 }}>
+        <div style={{ background:C.midnight, padding:'8px 16px' }}>
+          <span style={{ color:C.snow, fontWeight:800, fontSize:11, textTransform:'uppercase', letterSpacing:'0.08em' }}>
+            ✓ Actions loguées dans le CRM
+          </span>
+        </div>
+        {contacts.filter(c=>c.status!=='none').map(c=>(
+          <div key={c.id} style={{ padding:'10px 16px', borderBottom:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <div>
+              <div style={{ fontWeight:700, fontSize:13 }}>{c.nom} — {c.entreprise}</div>
+              {c.notes && <div style={{ fontSize:11, color:'#888', marginTop:2, fontStyle:'italic' }}>« {c.notes} »</div>}
+            </div>
+            <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+              <StatBadge statut={c.status} />
+              {c.wantRelance&&c.relanceDate && (
+                <span style={{ fontSize:10, fontWeight:700, color:C.yellow }}>🔄 {fmt(c.relanceDate)}</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+        <Btn label="← Retour aux sessions" color={C.midnight} shadow={C.blue} size="md" onClick={onDone} />
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

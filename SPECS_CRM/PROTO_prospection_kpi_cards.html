@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Proto KPI Prospection — Upgrade CRM</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{ box-sizing:border-box; margin:0; padding:0; border-radius:0 !important; }
+body{ font-family:'Outfit',sans-serif; background:#F0F0F0; color:#1C1F35; }
+</style>
+</head>
+<body><div id="root"></div>
+<script type="text/babel">
+const { useState } = React;
+const PREVIEW_N = 4; // items affichés avant "Voir tout"
+
+const C = { mid:'#1C1F35', red:'#FF3D2E', blue:'#4A7FE5', green:'#00C218', yellow:'#FFE500', pink:'#FF66FF', border:'#E4E4E6', bg:'#F5F5F5', snow:'#fff' };
+
+// ── Mock data ─────────────────────────────────────────────────────────────────
+const INTERESSES = [
+  { id:1, nom:'Sophie MARTIN',   co:'Decathlon Digital', poste:'Head of Product', session:'Rappels jan. 2026', date:'15 jan.',  notes:'Cherche un Product Designer senior pour Q2. Budget ~600€/j. Rappeler fin mars.' },
+  { id:2, nom:'Claire LEFÈVRE',  co:'MAIF Digital',      poste:'Directrice Produit', session:'Rappels jan. 2026', date:'15 jan.', notes:'Ouverture de poste UX Lead prévue avril. Envoyer profils avant le 30 mars.' },
+  { id:3, nom:'Paul HANNECART',  co:'EDF Digital',       poste:'VP Engineering', session:'Grands comptes Q4', date:'10 déc.',  notes:'Besoin DA UX confirmé pour une squad de 3 personnes. Contact chaud.' },
+];
+
+const RELANCES = [
+  { id:1, nom:'Thomas DURAND',   co:'Sanofi UX Lab',    date:'2026-03-24', retard:false, aujourd_hui:true,  session:'Rappels jan.', notes:'A demandé à réfléchir — relancer sur le besoin UX senior', statut:'a_faire' },
+  { id:2, nom:'Antoine MOREAU',  co:'Engie Digital',    date:'2026-03-21', retard:true,  aujourd_hui:false, session:'Rappels jan.', notes:'Pas joignable 2x — essayer en début de matinée', statut:'a_faire' },
+  { id:3, nom:'Julie PETIT',     co:'BNP Paribas CIB',  date:'2026-03-28', retard:false, aujourd_hui:false, session:'Grands comptes Q4', notes:'Suivi envoi profils — confirmer rendez-vous', statut:'a_faire' },
+  { id:4, nom:'Marc LEROY',      co:'Axa Tech',         date:'2026-03-19', retard:true,  aujourd_hui:false, session:'Grands comptes Q4', notes:'Pas répondu au mail. Tenter LinkedIn.', statut:'a_faire' },
+];
+
+const SESSIONS = [
+  { id:'s1', nom:'Rappels jan. 2026',     date:'15 jan.', appelé:12, interested:3, unreachable:4, not_int:5 },
+  { id:'s2', nom:'Grands comptes Lyon Q4',date:'10 déc.', appelé:8,  interested:2, unreachable:2, not_int:4 },
+  { id:'s3', nom:'Relances automne',      date:'15 nov.', appelé:15, interested:1, unreachable:6, not_int:8 },
+];
+
+const INJOIGNABLES = [
+  { id:1, nom:'Isabelle DUPONT', co:'Orange Business', dernierEssai:'20 mar.', nb:2, session:'Rappels jan.' },
+  { id:2, nom:'Romain CARRE',    co:'Société Générale', dernierEssai:'15 jan.', nb:3, session:'Grands comptes Q4' },
+  { id:3, nom:'Nathalie SIMON',  co:'Michelin Digital', dernierEssai:'10 déc.', nb:1, session:'Relances automne' },
+];
+
+// ── App ───────────────────────────────────────────────────────────────────────
+function App() {
+  const [active, setActive] = useState('interesses');
+  const [toast,  setToast]  = useState(null);
+  const openPanel = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2200); };
+
+  const CARDS = [
+    { id:'interesses',  label:'Intéressés',          val:INTERESSES.length,  color:C.green,  sub:'à convertir en besoins' },
+    { id:'relances',    label:'Relances en attente',  val:RELANCES.length,    color:C.yellow, sub:`${RELANCES.filter(r=>r.retard).length} en retard` },
+    { id:'sessions',    label:'Sessions',             val:SESSIONS.length,    color:C.blue,   sub:'historique complet' },
+    { id:'injoignables',label:'Injoignables',         val:INJOIGNABLES.length,color:'#999',   sub:'à re-tenter' },
+  ];
+
+  return (
+    <div style={{ maxWidth:1100, margin:'0 auto', padding:24 }}>
+      <div style={{ fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.1em', color:'#999', marginBottom:4 }}>▥ Prospection</div>
+      <div style={{ fontSize:18, fontWeight:900, color:C.mid, marginBottom:20 }}>Sessions d'appels</div>
+
+      {/* KPI Cards */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, marginBottom:16 }}>
+        {CARDS.map(c => {
+          const on = active === c.id;
+          return (
+            <div key={c.id} onClick={() => setActive(active===c.id ? null : c.id)} style={{
+              cursor:'pointer',
+              background: on ? C.mid : C.snow,
+              borderTop:    `2px solid ${C.border}`,
+              borderRight:  `2px solid ${C.border}`,
+              borderBottom: `2px solid ${C.border}`,
+              borderLeft:   `5px solid ${c.color}`,
+              boxShadow: on ? `4px 4px 0 ${c.color}` : 'none',
+              transform: on ? 'translate(-2px,-2px)' : 'none',
+              padding:'16px 14px',
+              transition:'all 100ms ease',
+            }}>
+              <div style={{ fontSize:32, fontWeight:900, color: on ? C.snow : C.mid, lineHeight:1 }}>{c.val}</div>
+              <div style={{ fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em', color: on ? c.color : '#aaa', marginTop:6 }}>{c.label}</div>
+              <div style={{ fontSize:11, color: on ? '#777' : '#ccc', marginTop:3 }}>{c.sub}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Grande carte contextuelle */}
+      {active && (
+        <div style={{ background:C.snow, border:`2px solid ${C.mid}`, borderLeft:`5px solid ${CARDS.find(c=>c.id===active)?.color}`, marginBottom:16 }}>
+          {active==='interesses'  && <CardInteresses  onOpen={openPanel} />}
+          {active==='relances'    && <CardRelances     onOpen={openPanel} />}
+          {active==='sessions'    && <CardSessions />}
+          {active==='injoignables'&& <CardInjoignables onOpen={openPanel} />}
+        </div>
+      )}
+      <Toast msg={toast} />
+
+      {/* Hint */}
+      <div style={{ textAlign:'right', fontSize:11, color:'#bbb' }}>↑ Cliquer sur une carte pour afficher le détail</div>
+    </div>
+  );
+}
+
+// ── Header commun grande carte ────────────────────────────────────────────────
+function CardHeader({ color, title, count, hint, onVoirTout, totalItems }) {
+  return (
+    <div style={{ background:C.mid, padding:'10px 18px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+        <span style={{ width:8, height:8, background:color, display:'inline-block', flexShrink:0 }}/>
+        <span style={{ color:C.snow, fontWeight:800, fontSize:12, textTransform:'uppercase', letterSpacing:'0.08em' }}>{title}</span>
+        <span style={{ fontSize:11, color:'#555', marginLeft:4 }}>{hint}</span>
+      </div>
+      <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0, marginLeft:8 }}>
+        <span style={{ fontSize:11, fontWeight:700, color:color }}>{count}</span>
+        {totalItems > PREVIEW_N && onVoirTout && (
+          <button onClick={onVoirTout} style={{
+            fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.05em',
+            color:C.mid, background:color, border:'none', padding:'3px 10px', cursor:'pointer',
+          }}>Voir tout →</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Footer "Voir tout" en bas de carte si liste tronquée ──────────────────────
+function VoirToutFooter({ shown, total, color, onVoirTout }) {
+  if (shown >= total) return null;
+  return (
+    <div onClick={onVoirTout} style={{
+      padding:'12px 18px', borderTop:`2px solid ${C.border}`,
+      display:'flex', justifyContent:'space-between', alignItems:'center',
+      background:'#f9f9f9', cursor:'pointer',
+    }}
+    onMouseEnter={e=>e.currentTarget.style.background='#f0f0f0'}
+    onMouseLeave={e=>e.currentTarget.style.background='#f9f9f9'}
+    >
+      <span style={{ fontSize:12, fontWeight:700, color:'#888' }}>
+        + {total - shown} autre{total - shown > 1 ? 's' : ''} non affichés
+      </span>
+      <span style={{ fontSize:11, fontWeight:800, color:color, textTransform:'uppercase', letterSpacing:'0.06em' }}>
+        Voir tout →
+      </span>
+    </div>
+  );
+}
+
+// ── SidePanel "Voir tout" (simule le composant SidePanel du CRM) ──────────────
+function VoirToutPanel({ title, color, children, onClose }) {
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(28,31,53,0.75)', zIndex:999, display:'flex', justifyContent:'flex-end' }}
+         onClick={onClose}>
+      <div style={{
+        width:'100%', maxWidth:480, background:C.snow, height:'100%',
+        overflowY:'auto', borderLeft:`2px solid ${C.mid}`,
+        animation:'slideIn 200ms ease-out',
+      }} onClick={e=>e.stopPropagation()}>
+        <style>{`@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
+        {/* Header panel */}
+        <div style={{ background:C.mid, padding:'14px 20px', display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, zIndex:1 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <span style={{ width:8, height:8, background:color, display:'inline-block' }}/>
+            <span style={{ color:C.snow, fontWeight:800, fontSize:13, textTransform:'uppercase', letterSpacing:'0.06em' }}>{title}</span>
+          </div>
+          <button onClick={onClose} style={{ color:C.yellow, background:'none', border:'none', fontSize:20, cursor:'pointer', lineHeight:1 }}>✕</button>
+        </div>
+        <div>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Toast notification (proto — simule la navigation CRM) ─────────────────────
+function Toast({ msg }) {
+  if (!msg) return null;
+  return (
+    <div style={{
+      position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)',
+      background:C.mid, color:C.snow, padding:'10px 20px',
+      fontSize:12, fontWeight:700, zIndex:9999,
+      borderLeft:`4px solid ${C.yellow}`, boxShadow:`4px 4px 0 ${C.yellow}`,
+      whiteSpace:'nowrap',
+    }}>
+      → {msg}
+    </div>
+  );
+}
+
+// ── Row intéressé — read-only, click-through ──────────────────────────────────
+function InterRow({ c, onOpen }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <div
+      onClick={() => onOpen(`ContactDetail · ${c.nom}`)}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        padding:'12px 18px', borderBottom:`1px solid ${C.border}`,
+        display:'flex', gap:12, alignItems:'flex-start',
+        cursor:'pointer', background: hov ? '#f5faf5' : C.snow,
+        transition:'background 80ms',
+      }}
+    >
+      <div style={{ width:3, background:C.green, alignSelf:'stretch', flexShrink:0 }}/>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8, flexWrap:'wrap' }}>
+          <div>
+            <div style={{ fontWeight:800, fontSize:13 }}>{c.nom}</div>
+            <div style={{ fontSize:11, color:C.blue, fontWeight:700 }}>{c.co} · {c.poste}</div>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+            <div style={{ fontSize:10, color:'#bbb', textAlign:'right' }}>
+              <div>{c.session}</div>
+              <div>{c.date}</div>
+            </div>
+            <span style={{ fontSize:14, color:'#ccc' }}>›</span>
+          </div>
+        </div>
+        <div style={{ fontSize:11, color:'#888', marginTop:5, fontStyle:'italic', borderLeft:`2px solid ${C.green}`, paddingLeft:8, lineHeight:1.5 }}>
+          {c.notes}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 1. Intéressés ─────────────────────────────────────────────────────────────
+function CardInteresses({ onOpen }) {
+  const [panel, setPanel] = useState(false);
+  const shown = INTERESSES.slice(0, PREVIEW_N);
+  return (
+    <>
+      <CardHeader color={C.green} title="Intéressés" count={`${INTERESSES.length} contact${INTERESSES.length>1?'s':''}`}
+        hint="· ouvrir le contact pour créer un besoin" totalItems={INTERESSES.length} onVoirTout={() => setPanel(true)} />
+      {shown.map(c => <InterRow key={c.id} c={c} onOpen={onOpen} />)}
+      {INTERESSES.length === 0 && (
+        <div style={{ padding:'24px 18px', textAlign:'center', fontSize:12, color:'#bbb', fontWeight:700 }}>Aucun contact intéressé pour l'instant.</div>
+      )}
+      <VoirToutFooter shown={shown.length} total={INTERESSES.length} color={C.green} onVoirTout={() => setPanel(true)} />
+      {panel && (
+        <VoirToutPanel title="Tous les intéressés" color={C.green} onClose={() => setPanel(false)}>
+          {INTERESSES.map(c => <InterRow key={c.id} c={c} onOpen={s => { setPanel(false); onOpen(s); }} />)}
+        </VoirToutPanel>
+      )}
+    </>
+  );
+}
+
+// ── Row relance — read-only, click-through ────────────────────────────────────
+function RelanceRow({ r, onOpen }) {
+  const [hov, setHov] = useState(false);
+  const urgColor = r.retard ? C.red : r.aujourd_hui ? C.yellow : '#aaa';
+  const urgLabel = r.retard ? 'En retard' : r.aujourd_hui ? "Aujourd'hui" : new Date(r.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});
+  const urgBg    = r.retard ? '#FFF5F5'  : r.aujourd_hui ? '#FFFBF0' : C.snow;
+  return (
+    <div
+      onClick={() => onOpen(`TacheDetailPanel · Relance ${r.nom}`)}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        padding:'12px 18px', borderBottom:`1px solid ${C.border}`,
+        display:'flex', gap:10, alignItems:'center', flexWrap:'wrap',
+        cursor:'pointer',
+        background: hov ? (r.retard ? '#ffe8e8' : r.aujourd_hui ? '#fff5d6' : '#f9f9f9') : urgBg,
+        transition:'background 80ms',
+      }}
+    >
+      <div style={{ width:3, background:urgColor, alignSelf:'stretch', flexShrink:0 }}/>
+      {/* Badge urgence */}
+      <div style={{ flexShrink:0, minWidth:64 }}>
+        <div style={{ fontSize:9, fontWeight:900, textTransform:'uppercase', color:urgColor, letterSpacing:'0.05em' }}>{urgLabel}</div>
+        {r.retard && <div style={{ fontSize:8, color:C.red, fontWeight:800, marginTop:1 }}>⚠ RETARD</div>}
+      </div>
+      {/* Contenu */}
+      <div style={{ flex:1, minWidth:100 }}>
+        <div style={{ fontWeight:800, fontSize:13 }}>{r.nom} <span style={{ fontWeight:400, color:'#999' }}>— {r.co}</span></div>
+        <div style={{ fontSize:11, color:'#888', marginTop:2 }}>{r.notes}</div>
+      </div>
+      <span style={{ fontSize:14, color:'#ccc', flexShrink:0 }}>›</span>
+    </div>
+  );
+}
+
+// ── 2. Relances ───────────────────────────────────────────────────────────────
+function CardRelances({ onOpen }) {
+  const [panel, setPanel] = useState(false);
+  const sorted  = [...RELANCES].sort((a,b) => (b.retard?2:b.aujourd_hui?1:0)-(a.retard?2:a.aujourd_hui?1:0));
+  const shown   = sorted.slice(0, PREVIEW_N);
+  const nRetard = RELANCES.filter(r => r.retard).length;
+  return (
+    <>
+      <CardHeader color={C.yellow} title="Relances" count={`${RELANCES.length} à faire`}
+        hint={nRetard > 0 ? `· ${nRetard} en retard` : '· ouvrir la tâche pour la compléter'} totalItems={sorted.length} onVoirTout={() => setPanel(true)} />
+      {shown.map(r => <RelanceRow key={r.id} r={r} onOpen={onOpen} />)}
+      <VoirToutFooter shown={shown.length} total={sorted.length} color={C.yellow} onVoirTout={() => setPanel(true)} />
+      {panel && (
+        <VoirToutPanel title="Toutes les relances" color={C.yellow} onClose={() => setPanel(false)}>
+          {sorted.map(r => <RelanceRow key={r.id} r={r} onOpen={s => { setPanel(false); onOpen(s); }} />)}
+        </VoirToutPanel>
+      )}
+    </>
+  );
+}
+
+// ── Mock data mensuelle sessions 2026 ─────────────────────────────────────────
+// Champs : m=mois, n=nb sessions, int=intéressés, inj=injoignables, pas=pas intéressés, tot=total appelés
+const SESSIONS_PAR_MOIS = [
+  { m:'Jan', n:2, int:5,  inj:6,  pas:9,  tot:20 },
+  { m:'Fév', n:1, int:2,  inj:4,  pas:6,  tot:12 },
+  { m:'Mar', n:3, int:8,  inj:10, pas:17, tot:35 },
+  { m:'Avr', n:0, int:0,  inj:0,  pas:0,  tot:0  },
+  { m:'Mai', n:0, int:0,  inj:0,  pas:0,  tot:0  },
+  { m:'Jun', n:0, int:0,  inj:0,  pas:0,  tot:0  },
+  { m:'Jul', n:0, int:0,  inj:0,  pas:0,  tot:0  },
+  { m:'Aoû', n:0, int:0,  inj:0,  pas:0,  tot:0  },
+  { m:'Sep', n:0, int:0,  inj:0,  pas:0,  tot:0  },
+  { m:'Oct', n:0, int:0,  inj:0,  pas:0,  tot:0  },
+  { m:'Nov', n:0, int:0,  inj:0,  pas:0,  tot:0  },
+  { m:'Déc', n:0, int:0,  inj:0,  pas:0,  tot:0  },
+];
+const CHS = { TOTAL:170, TOP:26, BOT:22, H:122 }; // coordinate system chart sessions
+const SEG_DEFS = [
+  { key:'int', color:C.green,   label:'Intéressés'     },
+  { key:'inj', color:'#bbb',    label:'Injoignables'   },
+  { key:'pas', color:'#e8e8e8', label:'Pas intéressés' },
+];
+const CURRENT_MONTH = 2; // mars (0-indexed) — en prod : new Date().getMonth()
+
+// ── [LEGACY Row session — conservé pour référence, non utilisé] ───────────────
+function SessionRow({ s, onSessionClick }) {
+  const [hov, setHov] = useState(false);
+  const total    = s.appelé || 1;
+  const pct      = k => Math.round((s[k] / total) * 100);
+  const tauxInt  = pct('interested');
+  const urgColor = tauxInt >= 25 ? C.green : tauxInt >= 10 ? C.yellow : C.red;
+  const bars = [
+    { k:'interested', color:C.green, label:'Intéressés'     },
+    { k:'unreachable',color:'#bbb',  label:'Injoignables'   },
+    { k:'not_int',    color:'#eee',  label:'Pas intéressés' },
+  ];
+  return (
+    <div
+      onClick={() => onSessionClick && onSessionClick(s)}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        padding:'14px 18px', borderBottom:`1px solid ${C.border}`,
+        cursor:'pointer', background: hov ? '#f9f9f9' : C.snow,
+        transition:'background 80ms',
+      }}
+    >
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8, flexWrap:'wrap', gap:4 }}>
+        <div>
+          <div style={{ fontWeight:800, fontSize:13 }}>{s.nom}</div>
+          <div style={{ fontSize:10, color:'#bbb', marginTop:1 }}>{s.date} · {s.appelé} contacts appelés</div>
+        </div>
+        <div style={{ textAlign:'right', display:'flex', alignItems:'center', gap:12 }}>
+          <div>
+            <div style={{ fontSize:22, fontWeight:900, color:urgColor }}>{tauxInt}%</div>
+            <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', color:'#bbb', letterSpacing:'0.06em' }}>taux d'intérêt</div>
+          </div>
+          <span style={{ fontSize:12, color:'#ccc', fontWeight:700 }}>›</span>
+        </div>
+      </div>
+      <div style={{ display:'flex', height:14, gap:2 }}>
+        {bars.map(b => { const w=pct(b.k); return w>0?<div key={b.k} style={{ width:`${w}%`,background:b.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,color:b.color==='#eee'?'#999':'#fff',overflow:'hidden' }}>{w>8?`${w}%`:''}</div>:null; })}
+        {100-pct('interested')-pct('unreachable')-pct('not_int')>0&&<div style={{ flex:1,background:'#f5f5f5',border:`1px solid ${C.border}` }}/>}
+      </div>
+      <div style={{ display:'flex', gap:10, marginTop:5, flexWrap:'wrap' }}>
+        {bars.map(b => <div key={b.k} style={{ display:'flex',alignItems:'center',gap:4 }}><span style={{ width:8,height:8,background:b.color,border:`1px solid ${C.border}`,display:'inline-block' }}/><span style={{ fontSize:10,color:'#999' }}>{s[b.k]} {b.label}</span></div>)}
+      </div>
+    </div>
+  );
+}
+
+// ── SessionDetailMiniPanel — simulation volet droit (proto) ───────────────────
+function SessionDetailMiniPanel({ s, onClose }) {
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(28,31,53,0.75)', zIndex:999, display:'flex', justifyContent:'flex-end' }}
+         onClick={onClose}>
+      <div style={{ width:'100%', maxWidth:420, background:C.snow, height:'100%', overflowY:'auto', borderLeft:`2px solid ${C.mid}`, animation:'slideIn 200ms ease-out' }}
+           onClick={e=>e.stopPropagation()}>
+        <div style={{ background:C.mid, padding:'14px 20px', display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0 }}>
+          <div>
+            <div style={{ color:C.snow, fontWeight:800, fontSize:13 }}>{s.nom}</div>
+            <div style={{ color:'#999', fontSize:10, marginTop:2 }}>{s.date}</div>
+          </div>
+          <button onClick={onClose} style={{ color:C.yellow, background:'none', border:'none', fontSize:20, cursor:'pointer' }}>✕</button>
+        </div>
+        <div style={{ padding:'20px 20px' }}>
+          {/* Résumé chiffré */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:20 }}>
+            {[
+              { v:s.appelé,        label:'Appelés',     color:C.mid   },
+              { v:s.interested,    label:'Intéressés',  color:C.green },
+              { v:s.unreachable,   label:'Injoignables',color:'#bbb'  },
+            ].map(stat => (
+              <div key={stat.label} style={{ background:'#f9f9f9', border:`1px solid ${C.border}`, padding:'10px 8px', textAlign:'center' }}>
+                <div style={{ fontSize:24, fontWeight:900, color:stat.color }}>{stat.v}</div>
+                <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', color:'#bbb', letterSpacing:'0.06em', marginTop:2 }}>{stat.label}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize:11, color:'#999', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:8 }}>Contacts traités</div>
+          <div style={{ fontSize:12, color:'#bbb', fontStyle:'italic', padding:'16px', background:'#f9f9f9', border:`1px solid ${C.border}` }}>
+            → Dans le CRM réel, liste les contacts de la session avec leur statut (Intéressé, Injoignable, Pas intéressé, Relance) via <code>session_prospection_contacts</code>.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 3. Sessions — chart annuel ────────────────────────────────────────────────
+function CardSessions() {
+  const [selectedMonth, setSelectedMonth] = useState(null);
+
+  const maxTot        = Math.max(...SESSIONS_PAR_MOIS.map(m => m.tot), 1);
+  const totalSessions = SESSIONS_PAR_MOIS.reduce((a, m) => a + m.n,   0);
+  const totalContacts = SESSIONS_PAR_MOIS.reduce((a, m) => a + m.tot, 0);
+  const totalInt      = SESSIONS_PAR_MOIS.reduce((a, m) => a + m.int, 0);
+  const tauxGlobal    = totalContacts > 0 ? Math.round((totalInt / totalContacts) * 100) : 0;
+
+  return (
+    <>
+      {/* Header */}
+      <div style={{ background:C.mid, padding:'10px 18px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ width:8, height:8, background:C.blue, display:'inline-block' }}/>
+          <span style={{ color:C.snow, fontWeight:800, fontSize:12, textTransform:'uppercase', letterSpacing:'0.08em' }}>Sessions 2026</span>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+          <span style={{ fontSize:11, color:'#888' }}>{totalSessions} sessions · {totalContacts} contacts</span>
+          <span style={{ fontSize:12, fontWeight:900,
+            color: tauxGlobal >= 25 ? C.green : tauxGlobal >= 10 ? C.yellow : C.red }}>
+            {tauxGlobal}% intéressés
+          </span>
+        </div>
+      </div>
+
+      {/* Légende */}
+      <div style={{ padding:'8px 18px', display:'flex', gap:14, flexWrap:'wrap', borderBottom:`1px solid ${C.border}`, background:'#fafafa' }}>
+        {SEG_DEFS.map(s => (
+          <div key={s.key} style={{ display:'flex', alignItems:'center', gap:5 }}>
+            <span style={{ width:10, height:10, background:s.color, border:`1px solid ${C.border}`, display:'inline-block' }}/>
+            <span style={{ fontSize:10, color:'#888', fontWeight:700 }}>{s.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Chart barres empilées */}
+      <div style={{ padding:'0 18px', paddingTop:8 }}>
+        <div style={{ position:'relative', height:CHS.TOTAL, display:'flex' }}>
+          {SESSIONS_PAR_MOIS.map((m, i) => {
+            const isCurrent  = i === CURRENT_MONTH;
+            const isFuture   = i > CURRENT_MONTH;
+            const isSelected = selectedMonth === i;
+            const hasData    = m.tot > 0;
+
+            // Calcul positions absolues segments (empilés bas → haut)
+            let cumH = 0;
+            const segs = SEG_DEFS.map(seg => {
+              const h   = (m[seg.key] / maxTot) * CHS.H;
+              const bot = CHS.BOT + cumH;
+              cumH += h;
+              return { ...seg, h, bot };
+            });
+            const totalBarH = (m.tot / maxTot) * CHS.H;
+            const tauxInt   = hasData ? Math.round((m.int / m.tot) * 100) : null;
+            const tauxColor = tauxInt >= 25 ? C.green : tauxInt >= 10 ? C.yellow : C.red;
+
+            return (
+              <div key={m.m}
+                onClick={() => hasData && setSelectedMonth(isSelected ? null : i)}
+                style={{ flex:1, position:'relative', height:'100%', cursor: hasData ? 'pointer' : 'default' }}
+              >
+                {/* Segments empilés */}
+                {hasData && segs.map(seg => seg.h > 0.5 && (
+                  <div key={seg.key} style={{
+                    position:'absolute', bottom:seg.bot, left:2, right:2,
+                    height: seg.h, background: seg.color,
+                    outline: isSelected ? `1px solid ${C.blue}` : 'none',
+                    transition:'opacity 80ms',
+                    opacity: isFuture ? 0.2 : isSelected ? 1 : 0.82,
+                  }} />
+                ))}
+
+                {/* Taux d'intérêt au dessus de la barre */}
+                {hasData && (
+                  <div style={{
+                    position:'absolute',
+                    bottom: CHS.BOT + totalBarH + 3,
+                    left:0, right:0, textAlign:'center',
+                    fontSize:8, fontWeight:900, color:tauxColor,
+                    lineHeight:1,
+                  }}>{tauxInt}%</div>
+                )}
+
+                {/* Nb sessions (petit badge grisé) */}
+                {hasData && (
+                  <div style={{
+                    position:'absolute',
+                    bottom: CHS.BOT + totalBarH + 13,
+                    left:0, right:0, textAlign:'center',
+                    fontSize:8, fontWeight:700,
+                    color: isCurrent ? C.blue : '#bbb',
+                    lineHeight:1,
+                  }}>{m.n}s</div>
+                )}
+
+                {/* Étiquette mois */}
+                <div style={{
+                  position:'absolute', bottom:4, left:0, right:0,
+                  textAlign:'center', fontSize:9,
+                  fontWeight: isCurrent ? 900 : 600,
+                  color: isCurrent ? C.blue : isFuture ? '#ddd' : '#999',
+                }}>{m.m}</div>
+
+                {/* Indicateur mois courant */}
+                {isCurrent && (
+                  <div style={{
+                    position:'absolute', bottom: CHS.BOT - 5,
+                    left:'50%', transform:'translateX(-50%)',
+                    width:4, height:4, background:C.blue,
+                  }} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Détail mois sélectionné */}
+      {selectedMonth !== null && SESSIONS_PAR_MOIS[selectedMonth].tot > 0 && (() => {
+        const m = SESSIONS_PAR_MOIS[selectedMonth];
+        return (
+          <div style={{
+            margin:'0 18px 16px', padding:'12px 14px',
+            borderTop:`3px solid ${C.blue}`, background:'#f5f8ff',
+          }}>
+            <div style={{ fontWeight:800, fontSize:12, color:C.mid, marginBottom:10 }}>
+              {m.m} — {m.n} session{m.n>1?'s':''} · {m.tot} contacts appelés
+            </div>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+              {SEG_DEFS.map(seg => {
+                const val = m[seg.key];
+                const pct = Math.round((val / m.tot) * 100);
+                return (
+                  <div key={seg.key} style={{
+                    display:'flex', alignItems:'center', gap:8,
+                    background:C.snow, border:`1px solid ${C.border}`,
+                    borderLeft:`4px solid ${seg.color}`,
+                    padding:'8px 12px', minWidth:90,
+                  }}>
+                    <div>
+                      <div style={{ fontSize:20, fontWeight:900, color: seg.color === '#e8e8e8' ? '#bbb' : seg.color, lineHeight:1 }}>{val}</div>
+                      <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', color:'#bbb', letterSpacing:'0.05em', marginTop:2 }}>{seg.label}</div>
+                      <div style={{ fontSize:9, color:'#ccc', marginTop:1 }}>{pct}%</div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{
+                display:'flex', alignItems:'center', gap:8,
+                background:C.snow, border:`1px solid ${C.border}`,
+                borderLeft:`4px solid ${C.mid}`,
+                padding:'8px 12px', minWidth:90,
+              }}>
+                <div>
+                  <div style={{ fontSize:20, fontWeight:900, color:C.mid, lineHeight:1 }}>{m.tot}</div>
+                  <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', color:'#bbb', letterSpacing:'0.05em', marginTop:2 }}>Total appelés</div>
+                  <div style={{ fontSize:9, color:C.green, fontWeight:800, marginTop:1 }}>
+                    {Math.round((m.int/m.tot)*100)}% intérêt
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+    </>
+  );
+}
+
+// ── Row injoignable — read-only, click-through ────────────────────────────────
+function InjRow({ c, onOpen }) {
+  const [hov, setHov] = useState(false);
+  // Badge nb tentatives : rouge ≥ 3, jaune = 2, gris = 1
+  const nbColor = c.nb >= 3 ? C.red : c.nb === 2 ? C.yellow : '#bbb';
+  return (
+    <div
+      onClick={() => onOpen(`ContactDetail · ${c.nom}`)}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        padding:'12px 18px', borderBottom:`1px solid ${C.border}`,
+        display:'flex', gap:10, alignItems:'center',
+        cursor:'pointer', background: hov ? '#f9f9f9' : C.snow,
+        transition:'background 80ms',
+      }}
+    >
+      <div style={{ width:3, background:'#ccc', alignSelf:'stretch', flexShrink:0 }}/>
+      {/* Badge tentatives */}
+      <div style={{ flexShrink:0, textAlign:'center', minWidth:28 }}>
+        <div style={{ fontSize:16, fontWeight:900, color:nbColor, lineHeight:1 }}>{c.nb}</div>
+        <div style={{ fontSize:8, fontWeight:700, textTransform:'uppercase', color:'#ccc', letterSpacing:'0.04em' }}>essai{c.nb>1?'s':''}</div>
+      </div>
+      {/* Contenu */}
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontWeight:800, fontSize:13 }}>{c.nom} <span style={{ fontWeight:400, color:'#999' }}>— {c.co}</span></div>
+        <div style={{ fontSize:10, color:'#bbb', marginTop:2 }}>Dernier essai : {c.dernierEssai} · {c.session}</div>
+      </div>
+      <span style={{ fontSize:14, color:'#ccc', flexShrink:0 }}>›</span>
+    </div>
+  );
+}
+
+// ── 4. Injoignables ───────────────────────────────────────────────────────────
+function CardInjoignables({ onOpen }) {
+  const [panel, setPanel] = useState(false);
+  const shown = INJOIGNABLES.slice(0, PREVIEW_N);
+  return (
+    <>
+      <CardHeader color='#999' title="Injoignables" count={`${INJOIGNABLES.length} contact${INJOIGNABLES.length>1?'s':''}`}
+        hint="· ouvrir le contact pour rappeler" totalItems={INJOIGNABLES.length} onVoirTout={() => setPanel(true)} />
+      {shown.map(c => <InjRow key={c.id} c={c} onOpen={onOpen} />)}
+      {INJOIGNABLES.length === 0 && (
+        <div style={{ padding:'24px 18px', textAlign:'center', fontSize:12, color:'#bbb', fontWeight:700 }}>
+          Aucun injoignable pour l'instant.
+        </div>
+      )}
+      <VoirToutFooter shown={shown.length} total={INJOIGNABLES.length} color='#999' onVoirTout={() => setPanel(true)} />
+      {panel && (
+        <VoirToutPanel title="Tous les injoignables" color='#999' onClose={() => setPanel(false)}>
+          {INJOIGNABLES.map(c => <InjRow key={c.id} c={c} onOpen={s => { setPanel(false); onOpen(s); }} />)}
+        </VoirToutPanel>
+      )}
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
