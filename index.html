@@ -2280,6 +2280,10 @@ const MISSION_CONTRATS=['CDI','Freelance','Prestataire','CDD','Alternance'];
 // 'Candidat' inclus : un besoin peut être passé à Gagné avant que le contact
 // n'ait été formellement re-statutué Consultant CDI/Freelance/Prestataire.
 const MISSION_CONSULTANT_STATUTS=['Consultant CDI','Freelance','Prestataire','Candidat'];
+// Mapping type_contrat mission → statut contact, pour l'auto-promotion d'un candidat
+// posé comme consultant. CDD/Alternance/vide n'ont pas d'équivalent statut consultant
+// dédié → défaut Consultant CDI (règle Nicolas).
+const MISSION_CONTRAT_TO_CONTACT_STATUT={'CDI':'Consultant CDI','Freelance':'Freelance','Prestataire':'Prestataire'};
 
 // Construit les champs de pré-remplissage d'une mission à partir d'un besoin (Gagné).
 // Source de vérité unique : utilisée à la fois par le bouton "Créer la mission depuis
@@ -2371,6 +2375,16 @@ function MissionFormModal({ mission, profile, allProfiles, contacts, besoins, on
       const ref=(contacts||[]).find(c=>c.id===f.contact_referent_id);
       if(ref&&ref.statut!=='Client'){
         await sb.from('contacts').update({statut:'Client',updated_at:new Date().toISOString()}).eq('id',ref.id);
+      }
+    }
+    // Auto-promotion du consultant : un contact encore 'Candidat' posé sur une mission
+    // (création ou modification) devient Consultant CDI/Freelance/Prestataire — jamais
+    // l'inverse, et jamais si un statut consultant est déjà posé (Freelance/Prestataire/CDI).
+    if(f.contact_consultant_id){
+      const cons=(contacts||[]).find(c=>c.id===f.contact_consultant_id);
+      if(cons&&cons.statut==='Candidat'){
+        const newStatut=MISSION_CONTRAT_TO_CONTACT_STATUT[f.type_contrat]||'Consultant CDI';
+        await sb.from('contacts').update({statut:newStatut,updated_at:new Date().toISOString()}).eq('id',cons.id);
       }
     }
     toast(isEdit?'Mission modifiée':'Mission créée');onSaved();
