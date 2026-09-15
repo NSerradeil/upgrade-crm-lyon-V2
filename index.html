@@ -726,6 +726,7 @@ function BtnAction({ onClick, icon, label, variant='primary', disabled=false }) 
     primary: {background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #FF3D2E'},
     task:    {background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #FFE500'},
     edit:    {background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #4A7FE5'},
+    mission: {background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #823DE8'},
     danger:  {background:'#fff',color:'#FF3D2E',border:'2px solid #FF3D2E',boxShadow:'4px 4px 0 #FF3D2E'},
     success: {background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #00C218'},
     close:   {background:'#1C1F35',color:'#E4E4E6',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #E4E4E6'},
@@ -3261,7 +3262,7 @@ function AgenceKpiDalles({ collabs, mode, missions, missionsMouvements, intercos
   const ic=mode!=='st'?AgenceCalc.intercoStats(cdisInterco,intercos||[],annee,cur,joursOuvresMois):null;
   const nomsInter=ic?ic.parMois(ic.idxAff).map(r=>{const c=contactMap[r.contact_consultant_id];return c?(c.prenom||c.nom||'').split(' ')[0]:'';}).filter(Boolean):[];
   const cards=[
-    {id:'effectif',color:'#00C218',value:k.effectif,label:mode==='cdi'?'CONSULTANTS':(mode==='st'?'SOUS-TRAITANTS':'COLLABORATEURS'),sub:mode==='cdi'?`${enMission} en mission · ${dispo} en interco`:`${enMission} en mission · ${(horsEffectif||[]).length} hors effectif`},
+    {id:'effectif',color:'#0BA600',value:k.effectif,label:mode==='cdi'?'CONSULTANTS':(mode==='st'?'SOUS-TRAITANTS':'COLLABORATEURS'),sub:mode==='cdi'?`${enMission} en mission · ${dispo} en interco`:`${enMission} en mission · ${(horsEffectif||[]).length} hors effectif`},
     mode!=='st'
       ?{id:'inter',color:ic.nbCourant>0?'#FFE500':'#ccc',value:ic.nbCourant,label:'INTERCONTRAT',sub:ic.nbCourant>0?`${ic.fallbackM1?`${MOIS_LBL_AG[ic.idxAff].toLowerCase()} (M-1) · `:''}${AgenceCalc.fmtJ(ic.joursYTD)}j YTD · ${fmtK(ic.coutYTD)} · ${nomsInter.join(', ')}`:'Aucun',badge:ic.tauxAnn>=5?'Au-dessus de l\u2019objectif':null,badgeColor:'#92400e'}
       :{id:'inter',color:'#A4A6AB',value:(horsEffectif||[]).length,label:'HORS EFFECTIF',sub:(horsEffectif||[]).length>0?'free / ST sans mission — non comptés':'Aucun'},
@@ -5654,7 +5655,7 @@ function BesoinDetail({ besoin, contacts, contactMap, comptes, compteMap, besoin
       <BtnAction variant="primary" icon={ICONS.add} label="Action" onClick={()=>setModal('hist')}/>
       <BtnAction variant="task" icon={ICONS.check} label="Tâche" onClick={()=>setModal('tache')}/>
       {isOwner && besoin.statut==='Besoin Gagné' && !missionLiee &&
-        <BtnAction variant="edit" icon={ICONS.add} label="Créer la mission" onClick={()=>setModal('createMission')}/>}
+        <BtnAction variant="mission" icon={ICONS.add} label="Créer la mission" onClick={()=>setModal('createMission')}/>}
       {isOwner && <>
         {editing
           ? <BtnAction variant="task" icon={ICONS.close} label="Annuler" onClick={()=>setEditing(false)}/>
