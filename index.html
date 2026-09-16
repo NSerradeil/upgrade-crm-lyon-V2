@@ -3262,7 +3262,7 @@ function AgenceKpiDalles({ collabs, mode, missions, missionsMouvements, intercos
   const ic=mode!=='st'?AgenceCalc.intercoStats(cdisInterco,intercos||[],annee,cur,joursOuvresMois):null;
   const nomsInter=ic?ic.parMois(ic.idxAff).map(r=>{const c=contactMap[r.contact_consultant_id];return c?(c.prenom||c.nom||'').split(' ')[0]:'';}).filter(Boolean):[];
   const cards=[
-    {id:'effectif',color:'#823DE8',value:k.effectif,label:mode==='cdi'?'CONSULTANTS':(mode==='st'?'SOUS-TRAITANTS':'COLLABORATEURS'),sub:mode==='cdi'?`${enMission} en mission · ${dispo} en interco`:`${enMission} en mission · ${(horsEffectif||[]).length} hors effectif`},
+    {id:'effectif',color:'#1D202D',solid:true,value:k.effectif,label:mode==='cdi'?'CONSULTANTS':(mode==='st'?'SOUS-TRAITANTS':'COLLABORATEURS'),sub:mode==='cdi'?`${enMission} en mission · ${dispo} en interco`:`${enMission} en mission · ${(horsEffectif||[]).length} hors effectif`},
     mode!=='st'
       ?{id:'inter',color:ic.nbCourant>0?'#FFE500':'#ccc',value:ic.nbCourant,label:'INTERCONTRAT',sub:ic.nbCourant>0?`${ic.fallbackM1?`${MOIS_LBL_AG[ic.idxAff].toLowerCase()} (M-1) · `:''}${AgenceCalc.fmtJ(ic.joursYTD)}j YTD · ${fmtK(ic.coutYTD)} · ${nomsInter.join(', ')}`:'Aucun',badge:ic.tauxAnn>=5?'Au-dessus de l\u2019objectif':null,badgeColor:'#92400e'}
       :{id:'inter',color:'#A4A6AB',value:(horsEffectif||[]).length,label:'HORS EFFECTIF',sub:(horsEffectif||[]).length>0?'free / ST sans mission — non comptés':'Aucun'},
@@ -6794,14 +6794,14 @@ function EditableJoursGridCell({ mission, moisKey, moisIdx, onUpdate }) {
 // Cartes KPI cliquables « dalle » — partagées TDB (Missions) et Agence. cards: [{id,color,value,label,sub,badge?,badgeColor?}]
 function KpiCards({ cards, active, onSelect }) {
   return <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:12}}>
-    {cards.map(c=>{ const on=active===c.id; return (
+    {cards.map(c=>{ const on=active===c.id; const dark=c.solid||on; return (
       <div key={c.id} className="kpi-hover" data-active={on?'true':undefined} onClick={()=>onSelect(c.id)}
         onMouseEnter={e=>{if(!on)e.currentTarget.style.boxShadow='0 4px 12px '+c.color+'40';}}
         onMouseLeave={e=>{if(!on)e.currentTarget.style.boxShadow='none';}}
-        style={{cursor:'pointer',position:'relative',background:on?'#1C1F35':'#fff',borderTop:on?'0':'2px solid #E4E4E6',borderRight:on?'0':'2px solid #E4E4E6',borderBottom:on?'0':'2px solid #E4E4E6',borderLeft:on?'0':`5px solid ${c.color}`,padding:'16px 14px',borderRadius:0,boxShadow:on?`4px 4px 0 ${c.color}`:'none',transform:on?'translate(-2px,-2px)':'none'}}>
-        <div style={{fontSize:28,fontWeight:900,color:on?'#fff':'#1C1F35',fontFamily:'Outfit,sans-serif',lineHeight:1}}>{c.value}</div>
-        <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',color:on?c.color:'#999',marginTop:4}}>{c.label}</div>
-        <div style={{fontSize:11,color:on?'#777':'#ccc',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.sub}</div>
+        style={{cursor:'pointer',position:'relative',background:dark?'#1D202D':'#fff',borderTop:dark?'0':'2px solid #E4E4E6',borderRight:dark?'0':'2px solid #E4E4E6',borderBottom:dark?'0':'2px solid #E4E4E6',borderLeft:dark?'0':`5px solid ${c.color}`,padding:'16px 14px',borderRadius:0,boxShadow:on?`4px 4px 0 ${c.color}`:'none',transform:on?'translate(-2px,-2px)':'none'}}>
+        <div style={{fontSize:28,fontWeight:900,color:dark?'#fff':'#1C1F35',fontFamily:'Outfit,sans-serif',lineHeight:1}}>{c.value}</div>
+        <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',color:on?c.color:(c.solid?'#fff':'#999'),marginTop:4}}>{c.label}</div>
+        <div style={{fontSize:11,color:dark?'#999':'#ccc',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.sub}</div>
         {c.badge&&<div style={{fontSize:10,fontWeight:800,color:c.badgeColor,marginTop:4,textTransform:'uppercase'}}>{c.badge}</div>}
       </div>); })}
   </div>;
