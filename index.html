@@ -5280,7 +5280,7 @@ function BesoinCandidatsList({ besoinId, candidats, contacts, contactMap, profil
                     {bc.date_entretien&&<span style={{fontSize:10,color:'#0BA600',fontWeight:700}}>Sauvegardé</span>}
                   </div>
                 )}
-                {bc.statut==='entretien'&&readOnly&&bc.date_entretien&&(
+                {((bc.statut==='entretien'&&readOnly)||bc.statut==='retenu'||bc.statut==='refuse')&&bc.date_entretien&&(
                   <div style={{marginLeft:16,padding:'4px 0',fontSize:11,color:'#92400e',fontWeight:700}}>
                     Entretien : {new Date(bc.date_entretien).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
                   </div>
