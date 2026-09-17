@@ -12,6 +12,9 @@ constaté qu'aucune doc n'existait).
 | **App web** (`index.html`, PWA mono-fichier) | GitHub Pages | **Push sur `main`** → workflow `pages-build-deployment` rebuild auto. URL : https://nserradeil.github.io/upgrade-crm-lyon-V2/ |
 | **Serveur MCP** (`../upgrade-crm-mcp-src/server/index.mjs`) | Local, **PAS un dépôt git** | Sauver le fichier ; le process MCP le charge au (re)démarrage de la session Claude. Rien à pousser. |
 
+### Notes de version — Serveur MCP
+- **8.18.0 (17/09/2026)** : outils MCP `agent_*` (noyau d'état Jules) — fichier `server/agent-tools.mjs`.
+
 ### Migrations à appliquer (en ordre)
 - `db/20_agence.sql` — onglet Agence : colonnes collaborateur sur `contacts` (date_entree, date_sortie, salaire_annuel, cjm_manuel, statut_rh, statut_rh_depuis, type_presta, manager_trigramme), `profiles.partner_lead`, `is_my_consultant()` élargi. **À appliquer AVANT de pousser l'app** (le `select` de `fetchAll` référence les nouvelles colonnes → 400 sinon).
 - ⚠️ `agence-calc.js` doit être poussé AVEC `index.html` (dépendance dure du shell : 404 = écran blanc).
