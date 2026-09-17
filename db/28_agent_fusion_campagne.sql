@@ -39,10 +39,15 @@ create unique index if not exists agent_sequences_mission_target_uidx
   on public.agent_sequences (mission_id, target_kind, target_ref);
 
 -- 4) agent_campaigns disparaît (vérifiée vide) -------------------------------
+-- to_regclass : au rejeu, la table n'existe déjà plus (droppée au 1er passage) —
+-- un `select count(*) from public.agent_campaigns` échouerait alors avec
+-- "relation agent_campaigns does not exist" et casserait toute la transaction.
 do $$
 begin
-  if (select count(*) from public.agent_campaigns) > 0 then
-    raise exception 'agent_campaigns non vide (%) : ne pas dropper, migrer les données d''abord', (select count(*) from public.agent_campaigns);
+  if to_regclass('public.agent_campaigns') is not null then
+    if (select count(*) from public.agent_campaigns) > 0 then
+      raise exception 'agent_campaigns non vide (%) : ne pas dropper, migrer les données d''abord', (select count(*) from public.agent_campaigns);
+    end if;
   end if;
 end $$;
 drop table if exists public.agent_campaigns;
