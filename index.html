@@ -7606,6 +7606,61 @@ function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
   );
 }
 
+// Les quatre gestes autorisés depuis l'écran. Le reste continue par Slack (spec §2).
+// Aucune mise à jour optimiste : on écrit, on vérifie, on relit. Si l'écriture échoue,
+// l'écran reste exactement dans l'état précédent et un message explicite le dit.
+// ⚠️ Un update PostgREST qui ne touche AUCUNE ligne ne renvoie pas d'erreur : sans .select()
+// et sans compter les lignes, une entrée déjà tranchée ailleurs passerait pour un succès.
+// Un silence n'est pas une confirmation.
+const julesActions = {
+  async accorder(a) {
+    const { data, error } = await sb.from('agent_approvals')
+      .update({statut:'approved', decision:'oui', decided_at:new Date().toISOString()})
+      .eq('id', a.id).eq('statut','pending').select('id');
+    if(error) throw new Error('Accord non enregistré : '+error.message);
+    if(!data||!data.length) throw new Error('Cette demande n\'était plus en attente — rien n\'a été écrit.');
+    // Une entrée nature='go' débloque sa tâche : elle repart en 'due', l'ordonnanceur la reprendra.
+    if(a.task_id) {
+      const { error:e2 } = await sb.from('agent_tasks').update({statut:'due'})
+        .eq('id', a.task_id).eq('statut','waiting_go');
+      if(e2) throw new Error('Approbation écrite mais tâche non relancée : '+e2.message);
+    }
+    await sb.from('agent_events').insert({actor:'crm', kind:'approval.approved',
+      task_id:a.task_id||null, message:a.titre});
+  },
+  async refuser(a) {
+    const { data, error } = await sb.from('agent_approvals')
+      .update({statut:'rejected', decision:'non', decided_at:new Date().toISOString()})
+      .eq('id', a.id).eq('statut','pending').select('id');
+    if(error) throw new Error('Refus non enregistré : '+error.message);
+    if(!data||!data.length) throw new Error('Cette demande n\'était plus en attente — rien n\'a été écrit.');
+    if(a.task_id) {
+      const { error:e2 } = await sb.from('agent_tasks').update({statut:'cancelled'})
+        .eq('id', a.task_id).in('statut',['waiting_go','due','claimed']);
+      if(e2) throw new Error('Refus écrit mais tâche non annulée : '+e2.message);
+    }
+    await sb.from('agent_events').insert({actor:'crm', kind:'approval.rejected',
+      task_id:a.task_id||null, message:a.titre});
+  },
+  async basculerPause(m) {
+    const cible = m.statut==='paused' ? 'active' : 'paused';
+    const { data, error } = await sb.from('agent_missions').update({statut:cible})
+      .eq('id', m.id).eq('statut', m.statut).select('id');
+    if(error) throw new Error('Changement d\'état refusé : '+error.message);
+    if(!data||!data.length) throw new Error('La mission n\'était plus dans l\'état affiché — rien n\'a été écrit.');
+    await sb.from('agent_events').insert({actor:'crm',
+      kind:cible==='paused'?'mission.paused':'mission.resumed', mission_id:m.id, message:m.titre});
+  },
+  async arreterSuivi(s) {
+    const { data, error } = await sb.from('agent_sequences')
+      .update({statut:'stopped', next_due_at:null}).eq('id', s.id).eq('statut','active').select('id');
+    if(error) throw new Error('Arrêt non enregistré : '+error.message);
+    if(!data||!data.length) throw new Error('Ce suivi n\'était plus actif — rien n\'a été écrit.');
+    await sb.from('agent_events').insert({actor:'crm', kind:'sequence.stopped',
+      sequence_id:s.id, mission_id:s.mission_id, message:s.target_label});
+  },
+};
+
 const JULES_TASK_STATUT_STYLE = {
   due:        { bg:JULES_GRIS,   color:JULES_NOIR },
   claimed:    { bg:JULES_VERT,   color:JULES_NOIR },
@@ -7720,6 +7775,15 @@ function JulesDetail({ missionId, data, onClose, actions, occupe }) {
 function TabJules({ profile, prefs }) {
   const J = useJulesData();
   const [detailId,setDetailId] = useState(null);
+  const [occupe,setOccupe] = useState(null);      // id de l'objet en cours d'écriture
+  const [aRefuser,setARefuser] = useState(null);  // entrée du parapheur en attente de confirmation
+  const recharger = J.rechargerMaintenant;
+  const agir = useCallback(async (cle, fn) => {
+    setOccupe(cle);
+    try { await fn(); await recharger(); toast('C\'est fait.'); }
+    catch(e){ toast(e.message, 'error'); }        // l'état affiché n'a pas bougé
+    finally { setOccupe(null); }
+  },[recharger]);
   // Sous 768 px, seul le parapheur est déployé (spec §6) : les deux autres bandeaux partent repliés.
   const [replie,setReplie] = useState(()=> window.innerWidth<768 ? {encours:true,missions:true} : {});
   const bascule = (k) => setReplie(r=>({...r,[k]:!r[k]}));
@@ -7757,9 +7821,9 @@ function TabJules({ profile, prefs }) {
       )}
       <JulesBandeau titre="Ce qui t'attend" compteur={J.data.parapheur.length} repliable={false}>
         <JulesParapheur entrees={J.data.parapheur}
-          onAccorder={a=>toast('Accorder : branché à la tâche 6')}
-          onRefuser={a=>toast('Refuser : branché à la tâche 6')}
-          actionEnCours={null}/>
+          onAccorder={a=>agir(a.id,()=>julesActions.accorder(a))}
+          onRefuser={a=>setARefuser(a)}
+          actionEnCours={occupe}/>
       </JulesBandeau>
       <JulesBandeau titre="Ce qui tourne" compteur={J.data.encours.length}
         ouvert={!replie.encours} onToggle={()=>bascule('encours')}>
@@ -7771,9 +7835,21 @@ function TabJules({ profile, prefs }) {
           missions={J.data.missions} onOuvrir={m=>setDetailId(m.id)}/>
       </JulesBandeau>
       {detailId&&<JulesDetail missionId={detailId} data={J.data} onClose={()=>setDetailId(null)}
-        occupe={null}
-        actions={{basculerPause:()=>toast('Pause : branchée à la tâche 6'),
-                  arreterSuivi:()=>toast('Arrêt : branché à la tâche 6')}}/>}
+        occupe={occupe}
+        actions={{basculerPause:m=>agir(m.id,()=>julesActions.basculerPause(m)),
+                  arreterSuivi:s=>agir(s.id,()=>julesActions.arreterSuivi(s))}}/>}
+      {aRefuser&&(
+        <Modal title="Refuser cette demande ?" onClose={()=>setARefuser(null)}
+          footer={<ModalFooter onClose={()=>setARefuser(null)} label="Oui, refuser"
+            saving={occupe===aRefuser.id}
+            onSave={()=>{ const a=aRefuser; setARefuser(null); agir(a.id,()=>julesActions.refuser(a)); }}/>}>
+          <div style={{fontSize:14, fontWeight:700, color:JULES_NOIR, marginBottom:6}}>{aRefuser.titre}</div>
+          <div style={{fontSize:13, color:'#565861'}}>
+            Refuser <strong>annule la tâche liée</strong> : Jules ne la reprendra pas.
+            Il faudra la recréer pour revenir en arrière.
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
