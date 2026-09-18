@@ -7329,6 +7329,86 @@ const JULES_VIOLET = '#823DE8';
 const JULES_GRIS   = '#E4E4E6';
 const JULES_GRIS_F = '#A4A6AB';
 
+// Lecture des données Jules. Deux états distincts et volontaires :
+//   data    — ce qui est AFFICHÉ, ne change que sur geste de Nicolas
+//   pending — ce qui vient d'être lu, en attente d'être appliqué
+// La page ne se réordonne jamais toute seule (spec §4) : une liste qui bouge sous le doigt
+// produit des validations accidentelles, et sur un parapheur c'est une tâche annulée par erreur.
+function useJulesData() {
+  const [data,setData]=useState(null);
+  const [pending,setPending]=useState(null);
+  const [erreur,setErreur]=useState('');
+  const [chargement,setChargement]=useState(true);
+  const [dernierEssai,setDernierEssai]=useState('');
+
+  const lire = useCallback(async () => {
+    const r = await Promise.all([
+      sb.from('agent_v_parapheur').select('*'),
+      sb.from('agent_v_encours').select('*'),
+      sb.from('agent_v_due_today').select('*').order('due'),
+      sb.from('agent_v_backlog').select('*'),
+      sb.from('agent_v_campagnes').select('*'),
+      sb.from('agent_missions').select('*').in('statut',['active','paused']).order('updated_at',{ascending:false}),
+      sb.from('agent_sequences').select('*').order('next_due_at',{ascending:true,nullsFirst:false}),
+      sb.from('agent_events').select('*').order('at',{ascending:false}).limit(200),
+    ]);
+    const ko = r.find(x=>x.error);
+    if(ko) throw new Error(ko.error.message);
+    return {parapheur:r[0].data||[], encours:r[1].data||[], dueToday:r[2].data||[],
+            backlog:r[3].data||[], campagnes:r[4].data||[], missions:r[5].data||[],
+            sequences:r[6].data||[], events:r[7].data||[]};
+  },[]);
+
+  // Empreinte : ce qui, en changeant, mérite d'annoncer une nouveauté. On ne compte
+  // ni updated_at ni heartbeat (ils bougent en permanence et crieraient au loup).
+  const empreinte = (d) => !d ? '' : JSON.stringify({
+    ap: d.parapheur.map(a=>a.id).sort(),
+    en: d.encours.map(t=>t.id).sort(),
+    du: d.dueToday.map(t=>String(t.kind)+t.id).sort(),
+    ba: d.backlog.map(m=>[m.id,m.statut,m.nb_due,m.nb_claimed,m.nb_waiting_go,m.nb_failed].join(':')).sort(),
+    ca: d.campagnes.map(m=>[m.id,m.statut,m.nb_active,m.nb_replied,m.nb_due_today].join(':')).sort(),
+  });
+
+  const rechargerMaintenant = useCallback(async () => {
+    setChargement(true);
+    try { const d=await lire(); setData(d); setPending(null); setErreur(''); }
+    catch(e){ setErreur(e.message); }            // data reste en place : on n'efface jamais l'écran
+    finally { setChargement(false); setDernierEssai(new Date().toLocaleTimeString('fr-FR')); }
+  },[lire]);
+
+  useEffect(()=>{ rechargerMaintenant(); },[rechargerMaintenant]);
+
+  useEffect(()=>{
+    let vivant=true;
+    const tick=async()=>{
+      if(document.hidden) return;                 // onglet en arrière-plan : on ne sonde pas
+      try {
+        const d=await lire();
+        if(!vivant) return;
+        setErreur('');
+        setDernierEssai(new Date().toLocaleTimeString('fr-FR'));
+        setData(prev=>{ if(!prev){ setPending(null); return d; }
+                        if(empreinte(prev)!==empreinte(d)) setPending(d); else setPending(null);
+                        return prev; });
+      } catch(e){ if(vivant) setErreur(e.message); }
+    };
+    const id=setInterval(tick,30000);
+    return ()=>{ vivant=false; clearInterval(id); };
+  },[lire]);
+
+  const nbNouveautes = useMemo(()=>{
+    if(!pending||!data) return 0;
+    const av=new Set(data.parapheur.map(a=>a.id)), ap=new Set(data.encours.map(t=>t.id));
+    let n=pending.parapheur.filter(a=>!av.has(a.id)).length + pending.encours.filter(t=>!ap.has(t.id)).length;
+    if(n===0) n=1;                                 // un changement d'état sans nouvelle ligne compte pour un
+    return n;
+  },[pending,data]);
+
+  const appliquer = useCallback(()=>{ setPending(p=>{ if(p) setData(p); return null; }); },[]);
+
+  return {data,pending,nbNouveautes,appliquer,rechargerMaintenant,erreur,chargement,dernierEssai};
+}
+
 // Titre de bandeau : bordure basse de 4 px, majuscules, interlettrage. Repliable sur mobile.
 function JulesBandeau({ titre, compteur, ouvert, onToggle, repliable=true, children }) {
   return (
@@ -7350,15 +7430,51 @@ function JulesBandeau({ titre, compteur, ouvert, onToggle, repliable=true, child
 }
 
 function TabJules({ profile, prefs }) {
+  const J = useJulesData();
+  // Sous 768 px, seul le parapheur est déployé (spec §6) : les deux autres bandeaux partent repliés.
+  const [replie,setReplie] = useState(()=> window.innerWidth<768 ? {encours:true,missions:true} : {});
+  const bascule = (k) => setReplie(r=>({...r,[k]:!r[k]}));
+  if(!J.data&&J.chargement) return <Loader label="Lecture de l'état de Jules…"/>;
+  if(!J.data) return (
+    <div className="tab-content">
+      <div style={{border:'2px solid '+JULES_ROUGE, boxShadow:'4px 4px 0 '+JULES_ROUGE, background:'#fff', padding:14}}>
+        <div style={{fontSize:13, fontWeight:700, color:JULES_ROUGE, marginBottom:8}}>Lecture impossible : {J.erreur}</div>
+        <BtnAction onClick={J.rechargerMaintenant} icon={ICONS.refresh} label="Réessayer" variant="danger"/>
+      </div>
+    </div>
+  );
   return (
     <div className="tab-content">
-      <JulesBandeau titre="Ce qui t'attend" repliable={false}>
+      {J.erreur&&(
+        <div style={{border:'2px solid '+JULES_ROUGE, boxShadow:'4px 4px 0 '+JULES_ROUGE, background:'#fff',
+                     padding:'10px 14px', marginBottom:12, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
+          <Icon d={ICONS.warning} size={16}/>
+          <span style={{fontSize:12, fontWeight:700, color:JULES_ROUGE, textTransform:'uppercase', letterSpacing:'0.06em'}}>
+            Base injoignable — affichage de la dernière lecture{J.dernierEssai?' ('+J.dernierEssai+')':''}
+          </span>
+          <BtnAction onClick={J.rechargerMaintenant} icon={ICONS.refresh} label="Réessayer" variant="danger"/>
+        </div>
+      )}
+      {J.nbNouveautes>0&&(
+        <button onClick={J.appliquer}
+          style={{width:'100%', minHeight:44, marginBottom:12, background:JULES_JAUNE, color:JULES_NOIR,
+                  border:'2px solid '+JULES_NOIR, boxShadow:'4px 4px 0 '+JULES_NOIR, fontFamily:'Outfit,sans-serif',
+                  fontSize:12, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em', cursor:'pointer',
+                  transition:'transform 80ms ease'}}
+          onMouseEnter={e=>e.currentTarget.style.transform='translate(-2px,-2px)'}
+          onMouseLeave={e=>e.currentTarget.style.transform='none'}>
+          {J.nbNouveautes} nouveauté{J.nbNouveautes>1?'s':''} — toucher pour actualiser
+        </button>
+      )}
+      <JulesBandeau titre="Ce qui t'attend" compteur={J.data.parapheur.length} repliable={false}>
         <div style={{fontSize:13, color:'#565861'}}>Rien pour le moment.</div>
       </JulesBandeau>
-      <JulesBandeau titre="Ce qui tourne" repliable={false}>
+      <JulesBandeau titre="Ce qui tourne" compteur={J.data.encours.length}
+        ouvert={!replie.encours} onToggle={()=>bascule('encours')}>
         <div style={{fontSize:13, color:'#565861'}}>Rien ne tourne.</div>
       </JulesBandeau>
-      <JulesBandeau titre="Missions" repliable={false}>
+      <JulesBandeau titre="Missions" compteur={J.data.backlog.length}
+        ouvert={!replie.missions} onToggle={()=>bascule('missions')}>
         <div style={{fontSize:13, color:'#565861'}}>Aucune mission.</div>
       </JulesBandeau>
     </div>
