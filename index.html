@@ -932,6 +932,9 @@ function MissionStatutBadge({ statut }) {
 
 const Icon = ({d, size=16, className=''}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 -960 960 960" className={className} style={{display:'inline-block',verticalAlign:'middle',fill:'currentColor'}}><path d={d}/></svg>;
 const ICONS = {
+  // Robot : réservé à l'onglet Jules. Silhouette pleine (antenne, tête, oreilles) et le visage
+  // évidé — les creux sont tracés en sens inverse de la coque pour que le remplissage les perce.
+  robot: 'M440-800h80v56h140q42 0 71 29t29 71v104h50q21 0 35.5 14.5T860-490v140q0 21-14.5 35.5T810-300h-50v20q0 42-29 71t-71 29H300q-42 0-71-29t-29-71v-20h-50q-21 0-35.5-14.5T100-350v-140q0-21 14.5-35.5T150-540h50v-104q0-42 29-71t71-29h140v-56Zm40 56q-17 0-28.5-11.5T440-784q0-17 11.5-28.5T480-824q17 0 28.5 11.5T520-784q0 17-11.5 28.5T480-744ZM360-500q-25 0-42.5 17.5T300-440q0 25 17.5 42.5T360-380q25 0 42.5-17.5T420-440q0-25-17.5-42.5T360-500Zm240 0q-25 0-42.5 17.5T540-440q0 25 17.5 42.5T600-380q25 0 42.5-17.5T660-440q0-25-17.5-42.5T600-500ZM360-300v60h240v-60H360Z',
   check: 'M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z',
   close: 'm256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z',
   add: 'M440-440H200v-80h240v-240h80v240h240v80H520v240h-80v-240Z',
@@ -7438,6 +7441,67 @@ const JULES_NATURE_STYLE = {
   decision: { bg:JULES_JAUNE,  color:JULES_NOIR, label:'Décision' },
   go:       { bg:JULES_BLEU,   color:'#FFFFFF', label:'Accord attendu' },
 };
+// Les titres viennent de sources variées (backlog migré, workers, scheduler) et portent
+// souvent du markdown brut : **gras**, `code`, [lien](url). Affiché tel quel, ça fait sale.
+// On nettoie à l'affichage, jamais en base — le texte d'origine reste intact.
+function julesTitre(t) {
+  if(!t) return '';
+  return String(t)
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')   // [libellé](url) → libellé
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^[\s*#>-]+/, '')                 // puces et titres en début de ligne
+    .replace(/\s+/g, ' ')                      // un paragraphe redevient une ligne
+    .trim();
+}
+// Une seule ligne, coupée proprement : un titre de trois phrases ne doit pas pousser la carte.
+const JULES_UNE_LIGNE = {overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'};
+
+// Le contexte d'une mission est du markdown écrit par un worker ou repris du backlog.
+// Affiché brut, on lit des astérisques et des crochets. On le rend : les puces deviennent
+// des puces, le gras du gras, le code du code. On ne réécrit rien en base.
+function julesInline(texte, cle) {
+  const out = []; let reste = String(texte||''); let i = 0;
+  const motifs = [
+    {re:/^\*\*([^*]+)\*\*/,        rendu:(m,k)=><strong key={k} style={{color:JULES_NOIR}}>{m[1]}</strong>},
+    {re:/^__([^_]+)__/,            rendu:(m,k)=><strong key={k} style={{color:JULES_NOIR}}>{m[1]}</strong>},
+    {re:/^`([^`]+)`/,              rendu:(m,k)=><code key={k} style={{background:'#F4F4F5', padding:'1px 4px', fontSize:11}}>{m[1]}</code>},
+    {re:/^\[\[([^\]]+)\]\]/,       rendu:(m,k)=><span key={k} style={{color:JULES_BLEU}}>{m[1]}</span>},
+    {re:/^\[([^\]]+)\]\(([^)]*)\)/,rendu:(m,k)=><a key={k} href={m[2]} target="_blank" rel="noopener noreferrer" style={{color:JULES_BLEU, textDecoration:'underline'}}>{m[1]}</a>},
+  ];
+  let tampon = '';
+  while(reste.length) {
+    let touche = null;
+    for(const p of motifs){ const m = p.re.exec(reste); if(m){ touche = {p,m}; break; } }
+    if(touche){
+      if(tampon){ out.push(<span key={cle+'-t'+(i++)}>{tampon}</span>); tampon=''; }
+      out.push(touche.p.rendu(touche.m, cle+'-m'+(i++)));
+      reste = reste.slice(touche.m[0].length);
+    } else { tampon += reste[0]; reste = reste.slice(1); }
+  }
+  if(tampon) out.push(<span key={cle+'-t'+(i++)}>{tampon}</span>);
+  return out;
+}
+function JulesTexteRiche({ texte }) {
+  const lignes = String(texte||'').split('\n').filter(l=>l.trim()!=='');
+  if(!lignes.length) return null;
+  return (
+    <div style={{display:'flex', flexDirection:'column', gap:4}}>
+      {lignes.map((l,n)=>{
+        const puce = /^\s*[-*•]\s+/.test(l);
+        const corps = l.replace(/^\s*[-*•]\s+/,'').replace(/^\s*#+\s*/,'');
+        return (
+          <div key={n} style={{display:'flex', gap:7, alignItems:'baseline'}}>
+            {puce&&<span style={{color:JULES_GRIS_F, flexShrink:0}}>·</span>}
+            <span style={{minWidth:0, wordBreak:'break-word'}}>{julesInline(corps, 'l'+n)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function julesAge(iso) {
   if(!iso) return '';
   const min = Math.max(0, Math.round((Date.now()-new Date(iso).getTime())/60000));
@@ -7446,7 +7510,7 @@ function julesAge(iso) {
   return Math.round(min/1440)+' j';
 }
 
-function JulesParapheur({ entrees, onAccorder, onRefuser, actionEnCours }) {
+function JulesParapheur({ entrees, onAccorder, onRefuser, onRepondre, actionEnCours }) {
   if(!entrees.length) return <div style={{fontSize:13, color:'#565861'}}>Rien n'attend ta décision.</div>;
   return (
     <div style={{display:'flex', flexDirection:'column', gap:10}}>
@@ -7458,18 +7522,29 @@ function JulesParapheur({ entrees, onAccorder, onRefuser, actionEnCours }) {
                                   boxShadow:'4px 4px 0 '+n.bg}}>
             <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:6}}>
               <ColorBadge label={n.label} bg={n.bg} color={n.color}/>
-              <span style={{fontSize:11, fontWeight:700, color:JULES_GRIS_F, textTransform:'uppercase',
+              <span style={{fontSize:11, fontWeight:700, color:'#565861', textTransform:'uppercase',
                             letterSpacing:'0.06em'}}>depuis {julesAge(a.created_at)}</span>
             </div>
-            <div style={{fontSize:14, fontWeight:700, color:JULES_NOIR, marginBottom:4}}>{a.titre}</div>
-            {a.detail&&<div style={{fontSize:12, color:'#565861', whiteSpace:'pre-wrap', marginBottom:8}}>{a.detail}</div>}
+            <div style={{fontSize:14, fontWeight:700, color:JULES_NOIR, marginBottom:4}}>{julesTitre(a.titre)}</div>
+            {a.detail&&<div style={{fontSize:12, color:'#565861', marginBottom:10}}><JulesTexteRiche texte={a.detail}/></div>}
+            {/* Les gestes dépendent de la nature. Un blocage n'attend pas un « oui », il
+                attend l'information qui manque ; une décision attend un arbitrage, pas un accord. */}
             <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+              {a.nature==='go' ? (
+                <span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
+                  <BtnAction onClick={()=>onAccorder(a)} icon={ICONS.check} label="Accorder"
+                             variant="success" disabled={occupe}/>
+                </span>
+              ) : (
+                <span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
+                  <BtnAction onClick={()=>onRepondre(a)} icon={ICONS.edit}
+                             label={a.nature==='bloque'?'Donner l\'info':'Trancher'}
+                             variant="primary" disabled={occupe}/>
+                </span>
+              )}
               <span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
-                <BtnAction onClick={()=>onAccorder(a)} icon={ICONS.check} label="Accorder"
-                           variant="success" disabled={occupe}/>
-              </span>
-              <span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
-                <BtnAction onClick={()=>onRefuser(a)} icon={ICONS.close} label="Refuser"
+                <BtnAction onClick={()=>onRefuser(a)} icon={ICONS.close}
+                           label={a.nature==='go'?'Refuser':'Abandonner'}
                            variant="danger" disabled={occupe}/>
               </span>
             </div>
@@ -7490,7 +7565,7 @@ function JulesEncours({ encours, dueToday }) {
                                 boxShadow:'4px 4px 0 '+JULES_VERT, display:'flex', alignItems:'center', gap:10}}>
           <span className="jules-pouls" style={{width:10, height:10, background:JULES_VERT, flexShrink:0}}/>
           <div style={{minWidth:0, flex:1}}>
-            <div style={{fontSize:13, fontWeight:700, color:JULES_NOIR}}>{t.titre}</div>
+            <div title={julesTitre(t.titre)} style={{fontSize:13, fontWeight:700, color:JULES_NOIR, ...JULES_UNE_LIGNE}}>{julesTitre(t.titre)}</div>
             <div style={{fontSize:11, color:'#565861', textTransform:'uppercase', letterSpacing:'0.06em'}}>
               {t.mission_titre||'sans mission'} · depuis {julesAge(t.heartbeat_at)}
               {t.heartbeat_age_s>900&&<span style={{color:JULES_ROUGE, fontWeight:800}}> · sans signe de vie</span>}
@@ -7500,12 +7575,12 @@ function JulesEncours({ encours, dueToday }) {
       ))}
       {dueToday.length>0&&(
         <div style={{borderTop:'2px solid '+JULES_GRIS, paddingTop:10}}>
-          <div style={{fontSize:11, fontWeight:800, color:JULES_GRIS_F, textTransform:'uppercase',
+          <div style={{fontSize:11, fontWeight:800, color:JULES_NOIR, textTransform:'uppercase',
                        letterSpacing:'0.12em', marginBottom:6}}>Échéances du jour ({dueToday.length})</div>
           {dueToday.slice(0,12).map(d=>(
             <div key={String(d.kind)+d.id} style={{display:'flex', gap:8, alignItems:'baseline', padding:'3px 0'}}>
               <span style={{fontSize:11, color:JULES_GRIS_F, width:44, flexShrink:0}}>{extractTime(d.due)||'—'}</span>
-              <span style={{fontSize:13, color:JULES_NOIR}}>{d.titre}</span>
+              <span title={julesTitre(d.titre)} style={{fontSize:13, color:JULES_NOIR, minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(d.titre)}</span>
             </div>
           ))}
         </div>
@@ -7515,11 +7590,16 @@ function JulesEncours({ encours, dueToday }) {
 }
 
 // Le pouls d'une mission : un point qui pulse si une tâche tourne, sinon un état.
-function julesPouls(l) {
+function julesPouls(l, campagne) {
   if(l.nb_claimed>0)    return {couleur:JULES_VERT,  pulse:true,  mot:'en cours'};
   if(l.nb_failed>0)     return {couleur:JULES_ROUGE, pulse:false, mot:'en échec'};
   if(l.nb_waiting_go>0) return {couleur:JULES_JAUNE, pulse:false, mot:'attend un accord'};
   if(l.statut==='paused') return {couleur:JULES_GRIS_F, pulse:false, mot:'en pause'};
+  // Une campagne qui a des relances dues ou des réponses à traiter n'est pas « au calme » :
+  // l'état affiché doit dire la même chose que la phrase en dessous.
+  if(campagne&&campagne.nb_due_today>0) return {couleur:JULES_BLEU,  pulse:false, mot:'à relancer'};
+  if(campagne&&campagne.nb_replied>0)   return {couleur:JULES_VIOLET,pulse:false, mot:'réponses'};
+  if(l.nb_due>0)        return {couleur:JULES_BLEU,  pulse:false, mot:'en attente'};
   return {couleur:JULES_GRIS, pulse:false, mot:'au calme'};
 }
 
@@ -7541,7 +7621,7 @@ function julesPhrase(l, campagne) {
 }
 
 function JulesLigneMission({ ligne, campagne, onOuvrir }) {
-  const p = julesPouls(ligne);
+  const p = julesPouls(ligne, campagne);
   return (
     <button onClick={()=>onOuvrir(ligne)}
       style={{width:'100%', minHeight:44, textAlign:'left', background:'#fff', border:'2px solid '+JULES_NOIR,
@@ -7552,8 +7632,8 @@ function JulesLigneMission({ ligne, campagne, onOuvrir }) {
       <div style={{display:'flex', alignItems:'center', gap:9}}>
         <span className={p.pulse?'jules-pouls':''}
               style={{width:10, height:10, background:p.couleur, flexShrink:0}}/>
-        <span style={{fontSize:14, fontWeight:800, color:JULES_NOIR, flex:1, minWidth:0}}>{ligne.titre}</span>
-        <span style={{fontSize:10, fontWeight:800, color:JULES_GRIS_F, textTransform:'uppercase',
+        <span title={julesTitre(ligne.titre)} style={{fontSize:14, fontWeight:800, color:JULES_NOIR, flex:1, minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(ligne.titre)}</span>
+        <span style={{fontSize:10, fontWeight:800, color:'#565861', textTransform:'uppercase',
                       letterSpacing:'0.1em', flexShrink:0}}>{p.mot}</span>
       </div>
       <div style={{fontSize:12, color:'#565861', marginTop:5, marginLeft:19}}>
@@ -7567,41 +7647,49 @@ function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
   const kindOf = useMemo(()=>Object.fromEntries((missions||[]).map(m=>[m.id,m.kind])),[missions]);
   const campMap = useMemo(()=>Object.fromEntries((campagnes||[]).map(c=>[c.id,c])),[campagnes]);
   const fam = useMemo(()=>{
-    const f={campagnes:[], projets:[], routines:[]};
+    const f={campagnes:[], ponctuelles:[], routines:[]};
     (backlog||[]).forEach(l=>{
       const k=kindOf[l.id]||l.kind;
       if(k==='campagne')       f.campagnes.push(l);
       else if(k==='recurring') f.routines.push(l);
-      else                     f.projets.push(l);
+      else                     f.ponctuelles.push(l);
     });
     return f;
   },[backlog,kindOf]);
   // Une routine qui se passe bien n'est pas une information : repliée par défaut,
   // dépliée seulement si l'une déraille (spec §3.3).
   const routineDeraille = fam.routines.some(l=>l.nb_failed>0||l.nb_waiting_go>0);
-  const [routinesOuvertes,setRoutinesOuvertes] = useState(false);
-  useEffect(()=>{ if(routineDeraille) setRoutinesOuvertes(true); },[routineDeraille]);
+  // Les trois familles se replient de la même façon. Seule la valeur de départ diffère :
+  // une routine qui se passe bien n'est pas une information (spec §3.3), donc elle part
+  // repliée — mais elle s'ouvre d'elle-même dès que l'une déraille.
+  const [ouvertes,setOuvertes] = useState({campagnes:true, ponctuelles:true, routines:false});
+  useEffect(()=>{ if(routineDeraille) setOuvertes(o=>({...o, routines:true})); },[routineDeraille]);
+  const basculeFamille = (k) => setOuvertes(o=>({...o,[k]:!o[k]}));
   const rend = (l) => <JulesLigneMission key={l.id} ligne={l} campagne={campMap[l.id]} onOuvrir={onOuvrir}/>;
-  const titreFamille = (t,n) => (
-    <div style={{fontSize:11, fontWeight:800, color:JULES_GRIS_F, textTransform:'uppercase',
-                 letterSpacing:'0.12em', margin:'4px 0 8px'}}>{t} ({n})</div>
+  const titreFamille = (cle,t,n,alerte) => (
+    <button onClick={()=>basculeFamille(cle)} aria-expanded={!!ouvertes[cle]}
+      style={{display:'flex', alignItems:'center', gap:7, background:'none', border:'none', padding:0,
+              minHeight:44, cursor:'pointer', fontFamily:'Outfit,sans-serif', fontSize:11, fontWeight:800,
+              color:JULES_NOIR, textTransform:'uppercase', letterSpacing:'0.12em', marginTop:6}}>
+      <span style={{display:'inline-flex', transform:ouvertes[cle]?'rotate(90deg)':'none',
+                    transition:'transform 120ms ease'}}><Icon d={ICONS.chevronRight} size={13}/></span>
+      {t} ({n}){alerte&&<span style={{color:JULES_ROUGE}}> · une routine déraille</span>}
+    </button>
   );
-  if(!fam.campagnes.length&&!fam.projets.length&&!fam.routines.length)
+  const famille = (cle,t,liste,alerte) => liste.length>0 && (
+    <div style={{marginBottom:6}}>
+      {titreFamille(cle,t,liste.length,alerte)}
+      {ouvertes[cle]&&<div style={{marginTop:8}}>{liste.map(rend)}</div>}
+    </div>
+  );
+  if(!fam.campagnes.length&&!fam.ponctuelles.length&&!fam.routines.length)
     return <div style={{fontSize:13, color:'#565861'}}>Aucune mission active.</div>;
   return (
     <div>
       {/* Aucune campagne active : la famille n'apparaît pas du tout (spec §8). */}
-      {fam.campagnes.length>0&&<>{titreFamille('Campagnes',fam.campagnes.length)}{fam.campagnes.map(rend)}</>}
-      {fam.projets.length>0&&<>{titreFamille('Projets',fam.projets.length)}{fam.projets.map(rend)}</>}
-      {fam.routines.length>0&&<>
-        <button onClick={()=>setRoutinesOuvertes(v=>!v)}
-          style={{background:'none', border:'none', padding:0, minHeight:44, cursor:'pointer',
-                  fontFamily:'Outfit,sans-serif', fontSize:11, fontWeight:800, color:JULES_GRIS_F,
-                  textTransform:'uppercase', letterSpacing:'0.12em'}}>
-          Routines ({fam.routines.length}){routineDeraille&&<span style={{color:JULES_ROUGE}}> · une routine déraille</span>}
-        </button>
-        {routinesOuvertes&&<div style={{marginTop:8}}>{fam.routines.map(rend)}</div>}
-      </>}
+      {famille('campagnes','Campagnes',fam.campagnes,false)}
+      {famille('ponctuelles','Ponctuelles',fam.ponctuelles,false)}
+      {famille('routines','Routines',fam.routines,routineDeraille)}
     </div>
   );
 }
@@ -7628,6 +7716,22 @@ const julesActions = {
     await sb.from('agent_events').insert({actor:'crm', kind:'approval.approved',
       task_id:a.task_id||null, message:a.titre});
   },
+  // Une entrée « bloqué » ou « décision » n'appelle pas un oui/non : elle appelle une RÉPONSE.
+  // On la consigne dans decision, on passe l'entrée en 'answered' et la tâche repart en 'due'.
+  async repondre(a, reponse) {
+    const { data, error } = await sb.from('agent_approvals')
+      .update({statut:'answered', decision:reponse, decided_at:new Date().toISOString()})
+      .eq('id', a.id).eq('statut','pending').select('id');
+    if(error) throw new Error('Réponse non enregistrée : '+error.message);
+    if(!data||!data.length) throw new Error('Cette demande n\'était plus en attente — rien n\'a été écrit.');
+    if(a.task_id) {
+      const { error:e2 } = await sb.from('agent_tasks').update({statut:'due'})
+        .eq('id', a.task_id).eq('statut','waiting_go');
+      if(e2) throw new Error('Réponse écrite mais tâche non relancée : '+e2.message);
+    }
+    await sb.from('agent_events').insert({actor:'crm', kind:'approval.answered',
+      task_id:a.task_id||null, message:a.titre, data:{reponse}});
+  },
   async refuser(a) {
     const { data, error } = await sb.from('agent_approvals')
       .update({statut:'rejected', decision:'non', decided_at:new Date().toISOString()})
@@ -7650,6 +7754,42 @@ const julesActions = {
     if(!data||!data.length) throw new Error('La mission n\'était plus dans l\'état affiché — rien n\'a été écrit.');
     await sb.from('agent_events').insert({actor:'crm',
       kind:cible==='paused'?'mission.paused':'mission.resumed', mission_id:m.id, message:m.titre});
+  },
+  // Modifier une mission : titre, priorité, contexte. Rien d'autre n'est éditable ici —
+  // la cadence et la config d'une campagne se règlent au dialogue avec Jules.
+  async creerMission(champs) {
+    const ligne = {titre:champs.titre, kind:champs.kind, priorite:champs.priorite,
+                   contexte:champs.contexte||null, statut:'active'};
+    if(champs.kind==='recurring' && champs.cadence) ligne.cadence = champs.cadence;
+    if(champs.kind==='recurring' && champs.task_type) ligne.task_type = champs.task_type;
+    const { data, error } = await sb.from('agent_missions').insert(ligne).select('id,titre');
+    if(error) throw new Error('Création refusée : '+error.message);
+    if(!data||!data.length) throw new Error('Mission non créée — rien n\'a été écrit.');
+    await sb.from('agent_events').insert({actor:'crm', kind:'mission.created',
+      mission_id:data[0].id, message:data[0].titre});
+  },
+  async modifierMission(m, champs) {
+    const { data, error } = await sb.from('agent_missions')
+      .update({titre:champs.titre, priorite:champs.priorite, contexte:champs.contexte})
+      .eq('id', m.id).select('id');
+    if(error) throw new Error('Modification refusée : '+error.message);
+    if(!data||!data.length) throw new Error('Mission introuvable — rien n\'a été écrit.');
+    await sb.from('agent_events').insert({actor:'crm', kind:'mission.updated',
+      mission_id:m.id, message:champs.titre});
+  },
+  // Fermer une mission. Jamais de suppression : la mission et son historique restent en base,
+  // elles sortent seulement du backlog (la vue ne montre que active et paused).
+  async fermerMission(m, cible) {
+    const { data, error } = await sb.from('agent_missions').update({statut:cible})
+      .eq('id', m.id).select('id');
+    if(error) throw new Error('Clôture refusée : '+error.message);
+    if(!data||!data.length) throw new Error('Mission introuvable — rien n\'a été écrit.');
+    // Ses tâches encore ouvertes n'ont plus lieu d'être : une mission fermée qui laisse
+    // des tâches « due » derrière elle les verrait reprises par l'ordonnanceur.
+    await sb.from('agent_tasks').update({statut:'cancelled'})
+      .eq('mission_id', m.id).in('statut',['due','waiting_go']);
+    await sb.from('agent_events').insert({actor:'crm',
+      kind:cible==='done'?'mission.done':'mission.cancelled', mission_id:m.id, message:m.titre});
   },
   async arreterSuivi(s) {
     const { data, error } = await sb.from('agent_sequences')
@@ -7695,13 +7835,17 @@ function JulesDetail({ missionId, data, onClose, actions, occupe }) {
   const enPause = mission.statut==='paused';
   const cfg = mission.config||{};
   return (
-    <SidePanel title={mission.titre} onClose={onClose}
+    <SidePanel title={julesTitre(mission.titre)} onClose={onClose}
       badge={<ColorBadge label={mission.kind} bg={JULES_NOIR} color="#fff"/>}
-      actions={<span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
+      actions={<span style={{display:'inline-flex', gap:8, flexWrap:'wrap', minHeight:44, alignItems:'center'}}>
         <BtnAction onClick={()=>actions.basculerPause(mission)}
           icon={enPause?ICONS.refresh:ICONS.stop}
           label={enPause?'Relancer':'Mettre en pause'}
           variant={enPause?'success':'close'} disabled={occupe===mission.id}/>
+        <BtnAction onClick={()=>actions.modifier(mission)} icon={ICONS.edit} label="Modifier"
+                   variant="edit" disabled={occupe===mission.id}/>
+        <BtnAction onClick={()=>actions.fermer(mission)} icon={ICONS.close} label="Clôturer"
+                   variant="danger" disabled={occupe===mission.id}/>
       </span>}>
 
       <Field label="Configuration">
@@ -7710,7 +7854,7 @@ function JulesDetail({ missionId, data, onClose, actions, occupe }) {
           {mission.task_type&&<div>Type de tâche : {mission.task_type}</div>}
           {mission.cadence&&<div>Cadence : {JSON.stringify(mission.cadence)}</div>}
           {cfg.autonomy&&<div>Autonomie : {cfg.autonomy}{cfg.preset?' · preset '+cfg.preset:''}</div>}
-          {mission.contexte&&<div style={{marginTop:6, whiteSpace:'pre-wrap'}}>{mission.contexte}</div>}
+          {mission.contexte&&<div style={{marginTop:8}}><JulesTexteRiche texte={mission.contexte}/></div>}
         </div>
       </Field>
 
@@ -7723,7 +7867,7 @@ function JulesDetail({ missionId, data, onClose, actions, occupe }) {
               return <div key={t.id} style={{border:'2px solid '+JULES_GRIS, padding:8}}>
                 <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
                   <ColorBadge label={t.statut} bg={st.bg} color={st.color}/>
-                  <span style={{fontSize:13, fontWeight:700, color:JULES_NOIR}}>{t.titre}</span>
+                  <span style={{fontSize:13, fontWeight:700, color:JULES_NOIR}}>{julesTitre(t.titre)}</span>
                 </div>
                 <div style={{fontSize:11, color:JULES_GRIS_F, marginTop:3, textTransform:'uppercase', letterSpacing:'0.05em'}}>
                   {t.type} · due {extractDate(t.due_at)} {extractTime(t.due_at)}
@@ -7742,7 +7886,7 @@ function JulesDetail({ missionId, data, onClose, actions, occupe }) {
               return <div key={s.id} style={{border:'2px solid '+JULES_GRIS, padding:8, display:'flex',
                                              alignItems:'center', gap:8, flexWrap:'wrap'}}>
                 <ColorBadge label={s.statut} bg={st.bg} color={st.color}/>
-                <span style={{fontSize:13, fontWeight:700, color:JULES_NOIR, flex:1, minWidth:0}}>{s.target_label}</span>
+                <span style={{fontSize:13, fontWeight:700, color:JULES_NOIR, flex:1, minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(s.target_label)}</span>
                 <span style={{fontSize:11, color:JULES_GRIS_F, textTransform:'uppercase', letterSpacing:'0.05em'}}>
                   étape {s.etape}{s.next_due_at?' · '+extractDate(s.next_due_at):''}
                 </span>
@@ -7763,7 +7907,7 @@ function JulesDetail({ missionId, data, onClose, actions, occupe }) {
               <div key={e.id} style={{display:'flex', gap:8, alignItems:'baseline', fontSize:12}}>
                 <span style={{color:JULES_GRIS_F, flexShrink:0, width:88}}>{extractDate(e.at)} {extractTime(e.at)}</span>
                 <span style={{fontWeight:700, color:JULES_NOIR, flexShrink:0}}>{e.kind}</span>
-                <span style={{color:'#565861', minWidth:0}}>{e.message}</span>
+                <span title={e.message||''} style={{color:'#565861', minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(e.message)}</span>
               </div>
             ))}
            </div>}
@@ -7772,11 +7916,149 @@ function JulesDetail({ missionId, data, onClose, actions, occupe }) {
   );
 }
 
+const JULES_CHAMP = {width:'100%', border:'2px solid '+JULES_NOIR, padding:'8px 10px', fontSize:13,
+                     fontFamily:'Outfit,sans-serif', minHeight:44, background:'#fff', color:JULES_NOIR};
+
+// Répondre à un blocage ou trancher une décision. Si l'entrée porte des options, elles
+// deviennent des boutons : c'est le geste le plus court. Sinon, texte libre.
+function JulesRepondre({ entree, onClose, onSave, saving }) {
+  const [texte,setTexte] = useState('');
+  const options = Array.isArray(entree.options) ? entree.options
+                : (entree.options && Array.isArray(entree.options.options)) ? entree.options.options : [];
+  const bloque = entree.nature==='bloque';
+  return (
+    <Modal title={bloque?'Donner l\'information qui manque':'Trancher'} onClose={onClose}
+      footer={<ModalFooter onClose={onClose} saving={saving} disabled={!texte.trim()} label="Envoyer à Jules"
+        onSave={()=>onSave(texte.trim())}/>}>
+      <div style={{fontSize:14, fontWeight:700, color:JULES_NOIR, marginBottom:6}}>{julesTitre(entree.titre)}</div>
+      {entree.detail&&<div style={{fontSize:12, color:'#565861', marginBottom:12}}><JulesTexteRiche texte={entree.detail}/></div>}
+      {options.length>0&&(
+        <div style={{display:'flex', gap:8, flexWrap:'wrap', marginBottom:12}}>
+          {options.map((o,i)=>{
+            const lib = typeof o==='string' ? o : (o.label||o.titre||JSON.stringify(o));
+            return <span key={i} style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
+              <BtnAction onClick={()=>onSave(lib)} label={lib} variant="edit" disabled={saving}/>
+            </span>;
+          })}
+        </div>
+      )}
+      <Field label={bloque?'Ce qu\'il te manquait':'Ta réponse'}>
+        <textarea value={texte} onChange={e=>setTexte(e.target.value)} rows={5} autoFocus
+          placeholder={bloque?'Ex : réf BPM002946, TJM plafond 570.':'Ex : pousse Marie en premier, puis Lucas.'}
+          style={{...JULES_CHAMP, minHeight:110, lineHeight:1.5}}/>
+      </Field>
+      <div style={{fontSize:12, color:'#565861'}}>Jules reprend la tâche liée dès que tu envoies.</div>
+    </Modal>
+  );
+}
+
+// Créer une mission. Trois types, et c'est tout : une campagne se configure ensuite
+// au dialogue avec Jules, qui remplit sa cible, ses gabarits et ses quotas.
+function JulesNouvelleMission({ onClose, onSave, saving }) {
+  const [titre,setTitre] = useState('');
+  const [kind,setKind] = useState('oneshot');
+  const [priorite,setPriorite] = useState(2);
+  const [contexte,setContexte] = useState('');
+  const [jours,setJours] = useState('1,2,3,4,5');
+  const [heures,setHeures] = useState('10:00');
+  const [taskType,setTaskType] = useState('libre');
+  const recurrente = kind==='recurring';
+  const cadence = () => ({
+    days: jours.split(',').map(x=>parseInt(x.trim(),10)).filter(n=>!isNaN(n)&&n>=1&&n<=7),
+    times: heures.split(',').map(x=>x.trim()).filter(Boolean),
+  });
+  const cad = cadence();
+  const cadenceOk = !recurrente || (cad.days.length>0 && cad.times.length>0);
+  return (
+    <Modal title="Nouvelle mission" onClose={onClose}
+      footer={<ModalFooter onClose={onClose} saving={saving} label="Créer"
+        disabled={!titre.trim()||!cadenceOk}
+        onSave={()=>onSave({titre:titre.trim(), kind, priorite:Number(priorite), contexte,
+                            cadence:recurrente?cadence():null, task_type:recurrente?taskType.trim():null})}/>}>
+      <Field label="Titre">
+        <input value={titre} onChange={e=>setTitre(e.target.value)} autoFocus style={JULES_CHAMP}
+          placeholder="Ex : Chasse BA senior Crédit Agricole"/>
+      </Field>
+      <Field label="Type">
+        <select value={kind} onChange={e=>setKind(e.target.value)} style={JULES_CHAMP}>
+          <option value="oneshot">Ponctuelle — un travail qui se termine</option>
+          <option value="recurring">Routine — elle revient d'elle-même</option>
+          <option value="campagne">Campagne — un suivi personne par personne</option>
+        </select>
+      </Field>
+      {recurrente&&(
+        <>
+          <Field label="Jours (1 = lundi, séparés par des virgules)">
+            <input value={jours} onChange={e=>setJours(e.target.value)} style={JULES_CHAMP}/>
+          </Field>
+          <Field label="Heures (séparées par des virgules)">
+            <input value={heures} onChange={e=>setHeures(e.target.value)} style={JULES_CHAMP}/>
+          </Field>
+          <Field label="Type de tâche engendrée">
+            <input value={taskType} onChange={e=>setTaskType(e.target.value)} style={JULES_CHAMP}/>
+          </Field>
+          {!cadenceOk&&<div style={{fontSize:12, color:JULES_ROUGE, fontWeight:700}}>
+            Une routine a besoin d'au moins un jour et une heure.</div>}
+        </>
+      )}
+      <Field label="Priorité">
+        <select value={priorite} onChange={e=>setPriorite(e.target.value)} style={JULES_CHAMP}>
+          <option value={1}>1 — d'abord</option>
+          <option value={2}>2 — normale</option>
+          <option value={3}>3 — quand il y a le temps</option>
+        </select>
+      </Field>
+      <Field label="Contexte">
+        <textarea value={contexte} onChange={e=>setContexte(e.target.value)} rows={5}
+          placeholder="Ce que Jules doit savoir pour s'y mettre seul."
+          style={{...JULES_CHAMP, minHeight:110, lineHeight:1.5}}/>
+      </Field>
+      {kind==='campagne'&&<div style={{fontSize:12, color:'#565861'}}>
+        La cible, les gabarits et les quotas se règlent ensuite au dialogue avec Jules.
+        Elle est créée active mais ne fera rien tant qu'elle n'a pas sa configuration.
+      </div>}
+    </Modal>
+  );
+}
+
+// Modifier une mission : le strict nécessaire. Le titre et le contexte sont souvent repris
+// d'un import et méritent d'être réécrits proprement ; la priorité se règle à la main.
+function JulesModifierMission({ mission, onClose, onSave, saving }) {
+  const [titre,setTitre] = useState(mission.titre||'');
+  const [priorite,setPriorite] = useState(mission.priorite||2);
+  const [contexte,setContexte] = useState(mission.contexte||'');
+  const champ = JULES_CHAMP;
+  return (
+    <Modal title="Modifier la mission" onClose={onClose}
+      footer={<ModalFooter onClose={onClose} saving={saving} disabled={!titre.trim()}
+        onSave={()=>onSave({titre:titre.trim(), priorite:Number(priorite), contexte})}/>}>
+      <Field label="Titre">
+        <input value={titre} onChange={e=>setTitre(e.target.value)} style={champ}/>
+      </Field>
+      <Field label="Priorité">
+        <select value={priorite} onChange={e=>setPriorite(e.target.value)} style={champ}>
+          <option value={1}>1 — d'abord</option>
+          <option value={2}>2 — normale</option>
+          <option value={3}>3 — quand il y a le temps</option>
+        </select>
+      </Field>
+      <Field label="Contexte">
+        <textarea value={contexte} onChange={e=>setContexte(e.target.value)} rows={8}
+          style={{...champ, minHeight:140, lineHeight:1.5}}/>
+      </Field>
+    </Modal>
+  );
+}
+
 function TabJules({ profile, prefs }) {
   const J = useJulesData();
   const [detailId,setDetailId] = useState(null);
   const [occupe,setOccupe] = useState(null);      // id de l'objet en cours d'écriture
   const [aRefuser,setARefuser] = useState(null);  // entrée du parapheur en attente de confirmation
+  const [aModifier,setAModifier] = useState(null);// mission en cours d'édition
+  const [aFermer,setAFermer] = useState(null);    // mission dont on confirme la clôture
+  const [aRepondre,setARepondre] = useState(null);// entrée bloquée ou à trancher
+  const [creation,setCreation] = useState(false); // nouvelle mission
   const recharger = J.rechargerMaintenant;
   const agir = useCallback(async (cle, fn) => {
     setOccupe(cle);
@@ -7823,6 +8105,7 @@ function TabJules({ profile, prefs }) {
         <JulesParapheur entrees={J.data.parapheur}
           onAccorder={a=>agir(a.id,()=>julesActions.accorder(a))}
           onRefuser={a=>setARefuser(a)}
+          onRepondre={a=>setARepondre(a)}
           actionEnCours={occupe}/>
       </JulesBandeau>
       <JulesBandeau titre="Ce qui tourne" compteur={J.data.encours.length}
@@ -7831,19 +8114,56 @@ function TabJules({ profile, prefs }) {
       </JulesBandeau>
       <JulesBandeau titre="Missions" compteur={J.data.backlog.length}
         ouvert={!replie.missions} onToggle={()=>bascule('missions')}>
+        <div style={{marginBottom:12}}>
+          <BtnAction onClick={()=>setCreation(true)} icon={ICONS.add} label="Nouvelle mission" variant="primary"/>
+        </div>
         <JulesMissions campagnes={J.data.campagnes} backlog={J.data.backlog}
           missions={J.data.missions} onOuvrir={m=>setDetailId(m.id)}/>
       </JulesBandeau>
       {detailId&&<JulesDetail missionId={detailId} data={J.data} onClose={()=>setDetailId(null)}
         occupe={occupe}
         actions={{basculerPause:m=>agir(m.id,()=>julesActions.basculerPause(m)),
-                  arreterSuivi:s=>agir(s.id,()=>julesActions.arreterSuivi(s))}}/>}
+                  arreterSuivi:s=>agir(s.id,()=>julesActions.arreterSuivi(s)),
+                  modifier:m=>setAModifier(m),
+                  fermer:m=>setAFermer(m)}}/>}
+      {aModifier&&<JulesModifierMission mission={aModifier} onClose={()=>setAModifier(null)}
+        saving={occupe===aModifier.id}
+        onSave={champs=>{ const m=aModifier; setAModifier(null);
+          agir(m.id,()=>julesActions.modifierMission(m,champs)); }}/>}
+      {aFermer&&(
+        <Modal title="Clôturer cette mission ?" onClose={()=>setAFermer(null)}
+          footer={<>
+            <button onClick={()=>setAFermer(null)} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button>
+            <BtnAction variant="close" icon={ICONS.close} label="Abandonner"
+              onClick={()=>{ const m=aFermer; setAFermer(null); setDetailId(null);
+                agir(m.id,()=>julesActions.fermerMission(m,'cancelled')); }}/>
+            <BtnAction variant="success" icon={ICONS.check} label="Terminée"
+              onClick={()=>{ const m=aFermer; setAFermer(null); setDetailId(null);
+                agir(m.id,()=>julesActions.fermerMission(m,'done')); }}/>
+          </>}>
+          <div style={{fontSize:14, fontWeight:700, color:JULES_NOIR, marginBottom:6}}>{julesTitre(aFermer.titre)}</div>
+          <div style={{fontSize:13, color:'#565861'}}>
+            Elle sort de la liste et ses tâches encore ouvertes sont annulées.
+            <strong> Rien n'est supprimé</strong> : la mission, ses tâches et son journal restent en base.
+            <br/><br/>
+            <strong>Terminée</strong> si l'objectif est atteint. <strong>Abandonner</strong> si elle n'a plus lieu d'être.
+          </div>
+        </Modal>
+      )}
+      {aRepondre&&<JulesRepondre entree={aRepondre} onClose={()=>setARepondre(null)}
+        saving={occupe===aRepondre.id}
+        onSave={txt=>{ const a=aRepondre; setARepondre(null);
+          agir(a.id,()=>julesActions.repondre(a,txt)); }}/>}
+      {creation&&<JulesNouvelleMission onClose={()=>setCreation(false)}
+        saving={occupe==='creation'}
+        onSave={champs=>{ setCreation(false);
+          agir('creation',()=>julesActions.creerMission(champs)); }}/>}
       {aRefuser&&(
         <Modal title="Refuser cette demande ?" onClose={()=>setARefuser(null)}
           footer={<ModalFooter onClose={()=>setARefuser(null)} label="Oui, refuser"
             saving={occupe===aRefuser.id}
             onSave={()=>{ const a=aRefuser; setARefuser(null); agir(a.id,()=>julesActions.refuser(a)); }}/>}>
-          <div style={{fontSize:14, fontWeight:700, color:JULES_NOIR, marginBottom:6}}>{aRefuser.titre}</div>
+          <div style={{fontSize:14, fontWeight:700, color:JULES_NOIR, marginBottom:6}}>{julesTitre(aRefuser.titre)}</div>
           <div style={{fontSize:13, color:'#565861'}}>
             Refuser <strong>annule la tâche liée</strong> : Jules ne la reprendra pas.
             Il faudra la recréer pour revenir en arrière.
@@ -9773,7 +10093,7 @@ function App() {
     {id:'pipe',       label:<><Icon d={ICONS.chart} size={14}/> Pipe ({besoinsPipeActifs.length})</>},
     {id:'tdb',        label:<><Icon d={ICONS.work} size={14}/> Missions ({vMissions.length})</>},
     {id:'historique', label:<><Icon d={ICONS.history} size={14}/> Historique ({vHistorique.length})</>},
-    ...(julesOn ? [{id:'jules', label:<><Icon d={ICONS.target} size={14}/> Jules</>}] : []),
+    ...(julesOn ? [{id:'jules', label:<><Icon d={ICONS.robot} size={14}/> Jules</>}] : []),
   ].filter(t=> !isPartner || ['taches','agence','prospects','tdb','historique'].includes(t.id)); // partner : Tâches / Agence / Comptes&Contacts / Missions / Historique uniquement
 
   return (
