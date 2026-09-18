@@ -7771,6 +7771,10 @@ const julesActions = {
                    contexte:champs.contexte||null, statut:'active'};
     if(champs.kind==='recurring' && champs.cadence) ligne.cadence = champs.cadence;
     if(champs.kind==='recurring' && champs.task_type) ligne.task_type = champs.task_type;
+    // Chaque type de tâche exige certaines clés de payload. Créer une routine sans elles
+    // garantit que l'ordonnanceur la bloquera au premier passage et déposera un blocage au
+    // parapheur. On remplit ici ce que l'écran connaît : l'instruction, c'est le contexte.
+    if(champs.kind==='recurring' && champs.task_payload) ligne.task_payload = champs.task_payload;
     const { data, error } = await sb.from('agent_missions').insert(ligne).select('id,titre');
     if(error) throw new Error('Création refusée : '+error.message);
     if(!data||!data.length) throw new Error('Mission non créée — rien n\'a été écrit.');
@@ -7795,8 +7799,17 @@ const julesActions = {
     if(!data||!data.length) throw new Error('Mission introuvable — rien n\'a été écrit.');
     // Ses tâches encore ouvertes n'ont plus lieu d'être : une mission fermée qui laisse
     // des tâches « due » derrière elle les verrait reprises par l'ordonnanceur.
-    await sb.from('agent_tasks').update({statut:'cancelled'})
-      .eq('mission_id', m.id).in('statut',['due','waiting_go']);
+    const { data: annulees } = await sb.from('agent_tasks').update({statut:'cancelled'})
+      .eq('mission_id', m.id).in('statut',['due','waiting_go']).select('id');
+    // Une mission fermée qui laisse une demande au parapheur fait attendre Nicolas pour
+    // quelque chose qui n'existe plus. On périme les entrées encore en attente : celles
+    // liées à ses tâches, et celle que l'ordonnanceur dépose sous un titre convenu quand
+    // une récurrence est bloquée (agent_approvals ne porte pas de mission_id).
+    const ids = (annulees||[]).map(t=>t.id);
+    if(ids.length) await sb.from('agent_approvals').update({statut:'caduque'})
+      .in('task_id', ids).eq('statut','pending');
+    await sb.from('agent_approvals').update({statut:'caduque'})
+      .eq('titre', 'Récurrence bloquée — '+m.titre).eq('statut','pending');
     await sb.from('agent_events').insert({actor:'crm',
       kind:cible==='done'?'mission.done':'mission.cancelled', mission_id:m.id, message:m.titre});
   },
@@ -7985,7 +7998,7 @@ function useJulesTypesTache(actif) {
   useEffect(()=>{
     if(!actif) return;
     let vivant = true;
-    sb.from('agent_task_types').select('type,description,needs_browser').order('type')
+    sb.from('agent_task_types').select('type,description,needs_browser,payload_keys').order('type')
       .then(r=>{ if(vivant) setTypes(r.error?[]:(r.data||[])); });
     return ()=>{ vivant = false; };
   },[actif]);
@@ -8064,15 +8077,33 @@ function JulesNouvelleMission({ onClose, onSave, saving }) {
   const [taskType,setTaskType] = useState('libre');
   const recurrente = kind==='recurring';
   const types = useJulesTypesTache(recurrente);
+  // L'écran sait remplir deux clés : l'instruction (c'est le contexte) et le titre de la
+  // mission. Un type qui en réclame d'autres (un contact, des séquences) ne peut pas être
+  // configuré ici : on le montre, désactivé, plutôt que de laisser créer une routine qui
+  // se bloquera au premier passage.
+  const CLES_CONNUES = ['instruction','mission_titre'];
+  const clesDe = (t) => (t&&t.payload_keys)||[];
+  const typeChoisi = (types||[]).find(t=>t.type===taskType);
+  const clesManquantes = clesDe(typeChoisi).filter(k=>!CLES_CONNUES.includes(k));
+  const veutInstruction = clesDe(typeChoisi).includes('instruction');
+  const payloadPour = () => {
+    const pl = {};
+    if(clesDe(typeChoisi).includes('instruction'))   pl.instruction = contexte.trim();
+    if(clesDe(typeChoisi).includes('mission_titre')) pl.mission_titre = titre.trim();
+    return pl;
+  };
+  const typeOk = !recurrente || (!!typeChoisi && clesManquantes.length===0
+                                 && (!veutInstruction || contexte.trim().length>0));
   const heuresPropres = heures.map(h=>String(h||'').trim()).filter(Boolean);
   const cadence = () => ({days:jours, times:heuresPropres});
   const cadenceOk = !recurrente || (jours.length>0 && heuresPropres.length>0);
   return (
     <Modal title="Nouvelle mission" onClose={onClose}
       footer={<ModalFooter onClose={onClose} saving={saving} label="Créer"
-        disabled={!titre.trim()||!cadenceOk}
+        disabled={!titre.trim()||!cadenceOk||!typeOk}
         onSave={()=>onSave({titre:titre.trim(), kind, priorite:Number(priorite), contexte,
-                            cadence:recurrente?cadence():null, task_type:recurrente?taskType:null})}/>}>
+                            cadence:recurrente?cadence():null, task_type:recurrente?taskType:null,
+                            task_payload:recurrente?payloadPour():null})}/>}>
       <Field label="Titre">
         <input ref={champRef} value={titre} onChange={e=>setTitre(e.target.value)} style={JULES_CHAMP}
           placeholder="Ex : Chasse BA senior Crédit Agricole"/>
@@ -8081,7 +8112,6 @@ function JulesNouvelleMission({ onClose, onSave, saving }) {
         <select value={kind} onChange={e=>setKind(e.target.value)} style={JULES_CHAMP}>
           <option value="oneshot">Ponctuelle — un travail qui se termine</option>
           <option value="recurring">Routine — elle revient d'elle-même</option>
-          <option value="campagne">Campagne — un suivi personne par personne</option>
         </select>
       </Field>
       {recurrente&&(
@@ -8090,17 +8120,27 @@ function JulesNouvelleMission({ onClose, onSave, saving }) {
           <Field label="Ce que Jules fait à chaque fois">
             <select value={taskType} onChange={e=>setTaskType(e.target.value)} style={JULES_CHAMP}>
               {!types&&<option value={taskType}>Lecture…</option>}
-              {(types||[]).map(t=>(
-                <option key={t.type} value={t.type}>
-                  {t.description}{t.needs_browser?' (navigateur)':''}
-                </option>
-              ))}
+              {(types||[]).map(t=>{
+                const bloquant = clesDe(t).some(k=>!CLES_CONNUES.includes(k));
+                return (
+                  <option key={t.type} value={t.type} disabled={bloquant}>
+                    {t.description}{t.needs_browser?' (navigateur)':''}
+                    {bloquant?' — à lancer depuis Jules':''}
+                  </option>
+                );
+              })}
             </select>
             <div style={{fontSize:12, color:'#565861', marginTop:6}}>
               À chaque échéance, Jules crée une tâche de ce genre et suit le mode opératoire
               qui va avec. Si rien ne colle, garde « mission décrite en texte libre » : il
               s'appuiera sur le contexte que tu écris plus bas.
             </div>
+            {veutInstruction&&!contexte.trim()&&(
+              <div style={{fontSize:12, color:JULES_ROUGE, fontWeight:700, marginTop:6}}>
+                Ce type a besoin du contexte : c'est lui qui dit à Jules quoi faire à chaque passage.
+                Sans lui, la routine se bloquerait dès demain.
+              </div>
+            )}
           </Field>
           {!cadenceOk&&<div style={{fontSize:12, color:JULES_ROUGE, fontWeight:700, marginBottom:8}}>
             Choisis au moins un jour et une heure.</div>}
@@ -8118,10 +8158,14 @@ function JulesNouvelleMission({ onClose, onSave, saving }) {
           placeholder="Ce que Jules doit savoir pour s'y mettre seul."
           style={{...JULES_CHAMP, minHeight:110, lineHeight:1.5}}/>
       </Field>
-      {kind==='campagne'&&<div style={{fontSize:12, color:'#565861'}}>
-        La cible, les gabarits et les quotas se règlent ensuite au dialogue avec Jules.
-        Elle est créée active mais ne fera rien tant qu'elle n'a pas sa configuration.
-      </div>}
+      {/* Pas de campagne ici. Une campagne a besoin de sa cible, de ses gabarits, de ses
+          quotas et de son niveau d'autonomie pour faire quoi que ce soit : créée nue depuis
+          cet écran, elle resterait un objet inerte. Elle s'amorce par la conversation. */}
+      <div style={{fontSize:12, color:'#565861', borderLeft:'3px solid '+JULES_BLEU, paddingLeft:10}}>
+        Pour une <strong>campagne</strong>, demande-la à Jules : il te pose les questions de
+        cadrage (cible, gabarits, Calendly, cadence de relance, niveau d'autonomie) et la crée
+        configurée. Elle apparaîtra ici juste après.
+      </div>
     </Modal>
   );
 }
