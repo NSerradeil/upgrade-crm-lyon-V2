@@ -7429,6 +7429,55 @@ function JulesBandeau({ titre, compteur, ouvert, onToggle, repliable=true, child
   );
 }
 
+// Le parapheur. La vue agent_v_parapheur trie déjà : bloqué, puis décision, puis go.
+// On garde cet ordre tel quel — c'est l'ordre d'urgence décidé avec Nicolas.
+const JULES_NATURE_STYLE = {
+  bloque:   { bg:JULES_ROUGE,  color:'#FFFFFF', label:'Bloqué' },
+  decision: { bg:JULES_JAUNE,  color:JULES_NOIR, label:'Décision' },
+  go:       { bg:JULES_BLEU,   color:'#FFFFFF', label:'Accord attendu' },
+};
+function julesAge(iso) {
+  if(!iso) return '';
+  const min = Math.max(0, Math.round((Date.now()-new Date(iso).getTime())/60000));
+  if(min<60) return min+' min';
+  if(min<1440) return Math.round(min/60)+' h';
+  return Math.round(min/1440)+' j';
+}
+
+function JulesParapheur({ entrees, onAccorder, onRefuser, actionEnCours }) {
+  if(!entrees.length) return <div style={{fontSize:13, color:'#565861'}}>Rien n'attend ta décision.</div>;
+  return (
+    <div style={{display:'flex', flexDirection:'column', gap:10}}>
+      {entrees.map(a=>{
+        const n = JULES_NATURE_STYLE[a.nature]||JULES_NATURE_STYLE.go;
+        const occupe = actionEnCours===a.id;
+        return (
+          <div key={a.id} style={{border:'2px solid '+JULES_NOIR, background:'#fff', padding:12,
+                                  boxShadow:'4px 4px 0 '+n.bg}}>
+            <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:6}}>
+              <ColorBadge label={n.label} bg={n.bg} color={n.color}/>
+              <span style={{fontSize:11, fontWeight:700, color:JULES_GRIS_F, textTransform:'uppercase',
+                            letterSpacing:'0.06em'}}>depuis {julesAge(a.created_at)}</span>
+            </div>
+            <div style={{fontSize:14, fontWeight:700, color:JULES_NOIR, marginBottom:4}}>{a.titre}</div>
+            {a.detail&&<div style={{fontSize:12, color:'#565861', whiteSpace:'pre-wrap', marginBottom:8}}>{a.detail}</div>}
+            <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+              <span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
+                <BtnAction onClick={()=>onAccorder(a)} icon={ICONS.check} label="Accorder"
+                           variant="success" disabled={occupe}/>
+              </span>
+              <span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
+                <BtnAction onClick={()=>onRefuser(a)} icon={ICONS.close} label="Refuser"
+                           variant="danger" disabled={occupe}/>
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function TabJules({ profile, prefs }) {
   const J = useJulesData();
   // Sous 768 px, seul le parapheur est déployé (spec §6) : les deux autres bandeaux partent repliés.
@@ -7467,7 +7516,10 @@ function TabJules({ profile, prefs }) {
         </button>
       )}
       <JulesBandeau titre="Ce qui t'attend" compteur={J.data.parapheur.length} repliable={false}>
-        <div style={{fontSize:13, color:'#565861'}}>Rien pour le moment.</div>
+        <JulesParapheur entrees={J.data.parapheur}
+          onAccorder={a=>toast('Accorder : branché à la tâche 6')}
+          onRefuser={a=>toast('Refuser : branché à la tâche 6')}
+          actionEnCours={null}/>
       </JulesBandeau>
       <JulesBandeau titre="Ce qui tourne" compteur={J.data.encours.length}
         ouvert={!replie.encours} onToggle={()=>bascule('encours')}>
