@@ -7313,6 +7313,58 @@ function AdminPanel({ orgDefaults, allProfiles, profile, onSave }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// ONGLET JULES — pilotage de l'agent (spec docs/superpowers/specs/2026-09-18-onglet-jules-design.md)
+// Réservé aux profils jules_enabled (db/25). Le composant lit ses données LUI-MÊME :
+// fetchAll n'est pas touché, pour qu'un profil non activé n'émette jamais une requête
+// sur agent_* (RLS le renverrait vide, mais une vue absente renverrait un 404 global).
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const JULES_NOIR   = '#1C1F35';
+const JULES_ROUGE  = '#FF3D2E';
+const JULES_VERT   = '#00C218';
+const JULES_JAUNE  = '#FFE500';
+const JULES_BLEU   = '#4A7FE5';
+const JULES_VIOLET = '#823DE8';
+const JULES_GRIS   = '#E4E4E6';
+const JULES_GRIS_F = '#A4A6AB';
+
+// Titre de bandeau : bordure basse de 4 px, majuscules, interlettrage. Repliable sur mobile.
+function JulesBandeau({ titre, compteur, ouvert, onToggle, repliable=true, children }) {
+  return (
+    <section style={{border:'2px solid '+JULES_NOIR, background:'#fff', marginBottom:16, boxShadow:'4px 4px 0 '+JULES_GRIS}}>
+      <button onClick={repliable?onToggle:undefined}
+        style={{width:'100%', minHeight:44, display:'flex', alignItems:'center', justifyContent:'space-between',
+                gap:8, padding:'10px 14px', background:'#fff', border:'none', borderBottom:'4px solid '+JULES_NOIR,
+                cursor:repliable?'pointer':'default', fontFamily:'Outfit,sans-serif'}}>
+        <span style={{fontSize:13, fontWeight:800, color:JULES_NOIR, textTransform:'uppercase', letterSpacing:'0.12em'}}>
+          {titre}{compteur!=null&&compteur>0?' ('+compteur+')':''}
+        </span>
+        {repliable&&<span style={{display:'inline-flex', transform:ouvert?'rotate(90deg)':'none', transition:'transform 120ms ease'}}>
+          <Icon d={ICONS.chevronRight} size={16}/>
+        </span>}
+      </button>
+      {(!repliable||ouvert)&&<div style={{padding:14}}>{children}</div>}
+    </section>
+  );
+}
+
+function TabJules({ profile, prefs }) {
+  return (
+    <div className="tab-content">
+      <JulesBandeau titre="Ce qui t'attend" repliable={false}>
+        <div style={{fontSize:13, color:'#565861'}}>Rien pour le moment.</div>
+      </JulesBandeau>
+      <JulesBandeau titre="Ce qui tourne" repliable={false}>
+        <div style={{fontSize:13, color:'#565861'}}>Rien ne tourne.</div>
+      </JulesBandeau>
+      <JulesBandeau titre="Missions" repliable={false}>
+        <div style={{fontSize:13, color:'#565861'}}>Aucune mission.</div>
+      </JulesBandeau>
+    </div>
+  );
+}
+
 function TabSettings({ user, profile, taches, subTab, onSubTabChange, prefs, onSavePrefs, achievements, viewAs }) {
   const SUB_TABS=viewAs?[{id:'exploits',label:'Exploits'}]:[{id:'profil',label:'Profil & Sécurité'},{id:'calendrier',label:'Calendrier ICS'},{id:'preferences',label:'Préférences'},{id:'exploits',label:'Exploits'}];
 
@@ -7525,7 +7577,7 @@ function PreferencesPanel({ prefs, onSave, profileNom, isPartner }) {
     setFiltContactsStatut(o.contacts_filter_statut);setFiltContactsResp(o.contacts_filter_responsable);setFiltTachesEcheance(o.taches_filter_echeance);setFiltPipeResp(o.pipe_filter_responsable);setProspectionFocus(o.prospection_focus_mode);
   };
 
-  const TAB_OPTIONS=[{v:'taches',l:'Tâches'},{v:'agence',l:'Agence'},{v:'prospects',l:'Contacts'},{v:'prospection',l:'Prospection'},{v:'besoins',l:'Besoins'},{v:'pipe',l:'Pipe'},{v:'tdb',l:'Missions'},{v:'historique',l:'Historique'}];
+  const TAB_OPTIONS=[{v:'taches',l:'Tâches'},{v:'agence',l:'Agence'},{v:'prospects',l:'Contacts'},{v:'prospection',l:'Prospection'},{v:'besoins',l:'Besoins'},{v:'pipe',l:'Pipe'},{v:'tdb',l:'Missions'},{v:'historique',l:'Historique'},{v:'jules',l:'Jules'}];
   const AGENCES=['Lyon','Paris','Bordeaux','Nantes'];
 
   const selectStyle={appearance:'none',padding:'9px 36px 9px 12px',border:'1px solid #e2e8f0',borderRadius:9,fontSize:'13.5px',fontWeight:500,color:'#1e293b',background:'white url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath d=\'M3 4.5L6 7.5L9 4.5\' fill=\'none\' stroke=\'%2394a3b8\' stroke-width=\'1.5\' stroke-linecap=\'round\'/%3E%3C/svg%3E") no-repeat right 12px center',boxShadow:'0 1px 2px rgba(0,0,0,.04)',width:'100%',outline:'none'};
@@ -8911,6 +8963,7 @@ function App() {
   const initialTabSetRef=useRef(false);
   const [lastRefresh,setLastRefresh]=useState(null);
   const [viewAs,setViewAs]=useState(null); const [allProfiles,setAllProfiles]=useState([]);
+  const julesOn = !!(profile&&profile.jules_enabled&&!viewAs);
   const [tachesNavKey,setTachesNavKey]=useState(0); const [tachesNavEcheance,setTachesNavEcheance]=useState('');
   const navToTaches = echeance => { setTab('taches'); setTachesNavEcheance(echeance); setTachesNavKey(k=>k+1); };
   // Cross-tab navigation
@@ -9118,10 +9171,16 @@ function App() {
       if(e.key==='6'){e.preventDefault();setTab('pipe');}
       if(e.key==='7'){e.preventDefault();setTab('tdb');}
       if(e.key==='8'){e.preventDefault();setTab('historique');}
+      if(e.key==='9'&&julesOn){e.preventDefault();setTab('jules');}
       if(e.key==='r'&&!e.metaKey&&!e.ctrlKey){e.preventDefault();fetchAll();}
     };
     window.addEventListener('keydown',h);return()=>window.removeEventListener('keydown',h);
-  },[fetchAll]);
+  },[fetchAll,julesOn]);
+  // Onglet Jules : réservé aux profils jules_enabled (db/25 — Nicolas seul aujourd'hui).
+  // On lit le profil RÉEL, pas activeProfile : en vue simulée l'onglet disparaît, parce qu'une vue
+  // simulée n'a pas la session Supabase de la personne simulée et que toute écriture partirait
+  // sous l'identité de Nicolas. Le repli évite l'écran vide si l'onglet disparaît alors qu'il est actif.
+  useEffect(()=>{ if(tab==='jules'&&!julesOn) setTab('taches'); },[tab,julesOn]);
   // Enter on hover → open detail
   useEffect(()=>{
     const h=e=>{
@@ -9211,7 +9270,7 @@ function App() {
   const tachesActives=vTaches.filter(t=>t.statut!=='fait'&&t.statut!=='annule');
   const tachesRetard=taches.filter(t=>t.statut!=='fait'&&t.statut!=='annule'&&t.due_date&&extractDate(t.due_date)<TODAY&&t.responsable===activeProfile.nom);
   const besoinsPipeActifs=vBesoins.filter(b=>b.statut!=='Besoin Perdu');
-  const TAB_COLORS={taches:'#0BA600',agence:'#FF7A00',prospects:'#5090FE',prospection:'#FF3D2E',besoins:'#FFEA2F',pipe:'#823DE8',tdb:'#FF78FD',historique:'#565861',settings:'#A4A6AB'};
+  const TAB_COLORS={taches:'#0BA600',agence:'#FF7A00',prospects:'#5090FE',prospection:'#FF3D2E',besoins:'#FFEA2F',pipe:'#823DE8',tdb:'#FF78FD',historique:'#565861',settings:'#A4A6AB',jules:'#1C1F35'};
   const activeColor=TAB_COLORS[tab]||'#5090FE';
   var _bdResolved=(function(){var ach=activeAchievements;var dp=(prefs&&prefs.displayedBadge)||'auto';if(viewAs)dp='auto';if(dp==='auto')return resolveTopBadge(ach);var parts=dp.split(':');var cat=parts[0];var lv=parseInt(parts[1])||0;var cur=getBadgeLevel(cat,ach[cat]||0);if(cur===0)return resolveTopBadge(ach);return{category:cat,level:Math.min(lv,cur)};}());
   var badgeCategory=_bdResolved.category;var badgeLevel=_bdResolved.level;var badgeMeta=BADGE_META[badgeCategory];
@@ -9225,6 +9284,7 @@ function App() {
     {id:'pipe',       label:<><Icon d={ICONS.chart} size={14}/> Pipe ({besoinsPipeActifs.length})</>},
     {id:'tdb',        label:<><Icon d={ICONS.work} size={14}/> Missions ({vMissions.length})</>},
     {id:'historique', label:<><Icon d={ICONS.history} size={14}/> Historique ({vHistorique.length})</>},
+    ...(julesOn ? [{id:'jules', label:<><Icon d={ICONS.target} size={14}/> Jules</>}] : []),
   ].filter(t=> !isPartner || ['taches','agence','prospects','tdb','historique'].includes(t.id)); // partner : Tâches / Agence / Comptes&Contacts / Missions / Historique uniquement
 
   return (
@@ -9318,6 +9378,7 @@ function App() {
         {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} comptes={vComptes} compteMap={compteMap} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToCompte={navToCompte} prefs={prefs}/>}
         {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} contactMap={contactMap} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache}/>}
         {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} missionPeriods={missionPeriods} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navMissionId={navMissionId} navMissionKey={navMissionKey} comptes={vComptes} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache} onNavToCompte={navToCompte} prefs={prefs}/>}
+        {tab==='jules'    &&julesOn&&<TabJules profile={profile} prefs={prefs}/>}
         {tab==='settings' &&<TabSettings user={user} profile={activeProfile} taches={vTaches} subTab={settingsSubTab} onSubTabChange={setSettingsSubTab} prefs={prefs} onSavePrefs={viewAs?null:savePrefs} achievements={activeAchievements} viewAs={!!viewAs}/>}
       </div>
       {/* Shortcuts modal */}
