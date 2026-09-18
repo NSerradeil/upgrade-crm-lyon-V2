@@ -7584,25 +7584,41 @@ function JulesEncours({ encours, dueToday }) {
       ))}
       {dueToday.length>0&&(
         <div style={{borderTop:'2px solid '+JULES_GRIS, paddingTop:10}}>
-          <div style={{fontSize:11, fontWeight:800, color:JULES_NOIR, textTransform:'uppercase',
-                       letterSpacing:'0.12em', marginBottom:6}}>À faire aujourd'hui ({dueToday.length})</div>
-          {/* Les items à heure fixée passent devant. La colonne d'heure n'existe que s'il y
-              en a au moins une : sinon chaque ligne commence par son titre, sans décalage. */}
+          {/* La vue agent_v_due_today prend tout ce qui est dû AVANT demain : un retard de
+              trois semaines s'y affichait comme une échéance du jour. On sépare, parce que
+              « en retard » et « prévu aujourd'hui » n'appellent pas la même réaction. */}
           {(()=>{
-            const avecHeure = dueToday.filter(d=>julesHeure(d.due));
-            const sansHeure = dueToday.filter(d=>!julesHeure(d.due));
-            const colonne = avecHeure.length>0;
-            return [...avecHeure, ...sansHeure].slice(0,12).map(d=>{
-              const h = julesHeure(d.due);
-              return (
-                <div key={String(d.kind)+d.id} style={{display:'flex', gap:8, alignItems:'baseline', padding:'3px 0'}}>
-                  {colonne&&(h
-                    ? <span style={{fontSize:11, fontWeight:700, color:JULES_NOIR, width:42, flexShrink:0}}>{h}</span>
-                    : <span aria-hidden="true" style={{width:42, flexShrink:0}}/>)}
-                  <span title={julesTitre(d.titre)} style={{fontSize:13, color:JULES_NOIR, minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(d.titre)}</span>
-                </div>
-              );
-            });
+            const jour = (x) => extractDate(x.due);
+            const retard = dueToday.filter(x=>jour(x) && jour(x) < TODAY);
+            const aujourdhui = dueToday.filter(x=>!jour(x) || jour(x) >= TODAY);
+            const bloc = (titre, liste, couleur, suffixe) => liste.length>0 && (
+              <div style={{marginBottom:10}}>
+                <div style={{fontSize:11, fontWeight:800, color:couleur, textTransform:'uppercase',
+                             letterSpacing:'0.12em', marginBottom:6}}>{titre} ({liste.length}){suffixe}</div>
+                {(()=>{
+                  const avecHeure = liste.filter(d=>julesHeure(d.due));
+                  const sansHeure = liste.filter(d=>!julesHeure(d.due));
+                  const colonne = avecHeure.length>0;
+                  return [...avecHeure, ...sansHeure].slice(0,10).map(d=>{
+                    const h = julesHeure(d.due);
+                    return (
+                      <div key={String(d.kind)+d.id} style={{display:'flex', gap:8, alignItems:'baseline', padding:'3px 0'}}>
+                        {colonne&&(h
+                          ? <span style={{fontSize:11, fontWeight:700, color:JULES_NOIR, width:42, flexShrink:0}}>{h}</span>
+                          : <span aria-hidden="true" style={{width:42, flexShrink:0}}/>)}
+                        <span title={julesTitre(d.titre)} style={{fontSize:13, color:JULES_NOIR, minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(d.titre)}</span>
+                      </div>
+                    );
+                  });
+                })()}
+                {liste.length>10&&<div style={{fontSize:11, color:'#565861', marginTop:4}}>
+                  et {liste.length-10} autre{liste.length-10>1?'s':''}.</div>}
+              </div>
+            );
+            return <>
+              {bloc('En retard', retard, JULES_ROUGE, ' — dues avant aujourd\'hui')}
+              {bloc('Aujourd\'hui', aujourdhui, JULES_NOIR, '')}
+            </>;
           })()}
         </div>
       )}
