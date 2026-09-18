@@ -8017,39 +8017,6 @@ function JulesRepondre({ entree, onClose, onSave, saving }) {
   );
 }
 
-// Les descriptions en base sont écrites pour l'ordonnanceur, pas pour Nicolas : « Mission
-// décrite en texte libre dans payload.instruction » cite une colonne. On garde la base comme
-// source de vérité des types disponibles, et on habille le libellé ici. Un type inconnu de
-// cette table retombe sur sa description : la liste ne se tait jamais.
-const JULES_LIBELLE_TYPE = {
-  'libre':               'Ce que je décris dans le contexte ci-dessous',
-  'ronde.tour':          'Faire une ronde : Slack, mails, calendrier, CRM, vault',
-  'matin.brief':         'Préparer le brief du matin et la todo du jour',
-  'bilan.vendredi':      'Écrire le bilan de la semaine',
-  'scan.plateformes':    'Scanner les plateformes fournisseur',
-  'chasse.sourcer':      'Sourcer des profils',
-  'lk.lire_acceptations':'Lire les acceptations et réponses LinkedIn',
-  'campagne.lire':       'Lire les acceptations et réponses de la campagne',
-  'campagne.envoyer':    'Envoyer les invitations, accroches et relances dues',
-  'campagne.alimenter':  'Compléter le vivier de la campagne',
-};
-const julesLibelleType = (t) => (t && (JULES_LIBELLE_TYPE[t.type] || t.description)) || '';
-
-// Les types de tâches vivent en base avec leur description. On les lit une fois à l'ouverture
-// de la modale : demander « type de tâche engendrée » en texte libre supposait connaître la
-// table par cœur.
-function useJulesTypesTache(actif) {
-  const [types,setTypes] = useState(null);
-  useEffect(()=>{
-    if(!actif) return;
-    let vivant = true;
-    sb.from('agent_task_types').select('type,description,needs_browser,payload_keys').order('type')
-      .then(r=>{ if(vivant) setTypes(r.error?[]:(r.data||[])); });
-    return ()=>{ vivant = false; };
-  },[actif]);
-  return types;
-}
-
 // Les jours et les heures d'une routine se cliquent. « 1,2,3,4,5 » est le format de la base,
 // pas une interface : personne n'a à savoir que lundi vaut 1.
 const JULES_JOURS = [['L',1],['M',2],['M',3],['J',4],['V',5],['S',6],['D',7]];
@@ -8119,33 +8086,17 @@ function JulesNouvelleMission({ onClose, onSave, saving }) {
   const [contexte,setContexte] = useState('');
   const [jours,setJours] = useState([1,2,3,4,5]);
   const [heures,setHeures] = useState(['10:00']);
-  const [taskType,setTaskType] = useState('libre');
+  // Toujours « libre » : voir le commentaire dans le bloc récurrent plus bas.
+  const taskType = 'libre';
   const recurrente = kind==='recurring';
-  const types = useJulesTypesTache(recurrente);
   // L'écran sait remplir deux clés : l'instruction (c'est le contexte) et le titre de la
   // mission. Un type qui en réclame d'autres (un contact, des séquences) ne peut pas être
   // configuré ici : on le montre, désactivé, plutôt que de laisser créer une routine qui
   // se bloquera au premier passage.
-  const CLES_CONNUES = ['instruction','mission_titre'];
-  const clesDe = (t) => (t&&t.payload_keys)||[];
-  // On ne montre que ce qui est réellement choisissable ici. Une option grisée par ligne
-  // n'informe personne : elle double la longueur du menu et donne l'air d'un formulaire cassé.
-  const typesOffrables = (types||[])
-    .filter(t=>clesDe(t).every(k=>CLES_CONNUES.includes(k)))
-    .sort((a,b)=> a.type==='libre' ? -1 : b.type==='libre' ? 1
-                : julesLibelleType(a).localeCompare(julesLibelleType(b),'fr'));
-  const nbEcartes = (types||[]).length - typesOffrables.length;
-  const typeChoisi = (types||[]).find(t=>t.type===taskType);
-  const clesManquantes = clesDe(typeChoisi).filter(k=>!CLES_CONNUES.includes(k));
-  const veutInstruction = clesDe(typeChoisi).includes('instruction');
-  const payloadPour = () => {
-    const pl = {};
-    if(clesDe(typeChoisi).includes('instruction'))   pl.instruction = contexte.trim();
-    if(clesDe(typeChoisi).includes('mission_titre')) pl.mission_titre = titre.trim();
-    return pl;
-  };
-  const typeOk = !recurrente || (!!typeChoisi && clesManquantes.length===0
-                                 && (!veutInstruction || contexte.trim().length>0));
+  // Le type « libre » réclame payload.instruction : sans elle l'ordonnanceur bloque la
+  // récurrence au premier passage. Le contexte la remplit, donc il devient obligatoire.
+  const payloadPour = () => ({instruction: contexte.trim()});
+  const typeOk = !recurrente || contexte.trim().length>0;
   const heuresPropres = heures.map(h=>String(h||'').trim()).filter(Boolean);
   const cadence = () => ({days:jours, times:heuresPropres});
   const cadenceOk = !recurrente || (jours.length>0 && heuresPropres.length>0);
@@ -8169,25 +8120,18 @@ function JulesNouvelleMission({ onClose, onSave, saving }) {
       {recurrente&&(
         <>
           <JulesCadence jours={jours} heures={heures} onJours={setJours} onHeures={setHeures}/>
-          <Field label="Ce que Jules fait à chaque fois">
-            <select value={taskType} onChange={e=>setTaskType(e.target.value)} style={JULES_CHAMP}>
-              {!types&&<option value={taskType}>Lecture…</option>}
-              {typesOffrables.map(t=>(
-                <option key={t.type} value={t.type}>{julesLibelleType(t)}</option>
-              ))}
-            </select>
-            <div style={{fontSize:12, color:'#565861', marginTop:6}}>
-              À chaque échéance, Jules crée une tâche de ce genre et suit le mode opératoire
-              qui va avec.
-              {nbEcartes>0&&' D\'autres types existent mais se lancent depuis une conversation avec lui : ils ont besoin d\'un contact ou d\'une campagne précise.'}
+          {/* Pas de choix de mode opératoire ici. Le worker reçoit À LA FOIS le contexte de la
+              mission ET le mode opératoire du type, sans règle d'arbitrage entre les deux :
+              choisir « faire une ronde » puis écrire « fais une chasse LinkedIn » dans le
+              contexte lui donnait deux consignes contradictoires. Une routine créée depuis
+              l'écran est donc toujours en texte libre, et le contexte EST la consigne.
+              Les routines à mode opératoire (ronde, brief, scan, bilan) existent déjà. */}
+          {!contexte.trim()&&(
+            <div style={{fontSize:12, color:JULES_ROUGE, fontWeight:700, marginBottom:8}}>
+              Une routine a besoin de son contexte : c'est lui qui dit à Jules quoi faire à
+              chaque passage. Sans lui, elle se bloquerait dès demain.
             </div>
-            {veutInstruction&&!contexte.trim()&&(
-              <div style={{fontSize:12, color:JULES_ROUGE, fontWeight:700, marginTop:6}}>
-                Ce type a besoin du contexte : c'est lui qui dit à Jules quoi faire à chaque passage.
-                Sans lui, la routine se bloquerait dès demain.
-              </div>
-            )}
-          </Field>
+          )}
           {!cadenceOk&&<div style={{fontSize:12, color:JULES_ROUGE, fontWeight:700, marginBottom:8}}>
             Choisis au moins un jour et une heure.</div>}
         </>
