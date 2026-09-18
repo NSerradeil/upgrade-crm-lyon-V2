@@ -7502,6 +7502,16 @@ function JulesTexteRiche({ texte }) {
   );
 }
 
+// 23:59 et 00:00 ne sont pas des heures : ce sont les valeurs par défaut de « fin de journée »
+// et « pas d'heure fixée », héritées de la migration du backlog. Les afficher au format horaire
+// fait croire à un rendez-vous à minuit moins une. On dit « journée », et les vraies heures
+// ressortent enfin.
+function julesHeure(iso) {
+  const h = extractTime(iso);
+  if(!h) return 'journée';
+  return (h==='23:59'||h==='00:00') ? 'journée' : h;
+}
+
 function julesAge(iso) {
   if(!iso) return '';
   const min = Math.max(0, Math.round((Date.now()-new Date(iso).getTime())/60000));
@@ -7579,7 +7589,7 @@ function JulesEncours({ encours, dueToday }) {
                        letterSpacing:'0.12em', marginBottom:6}}>Échéances du jour ({dueToday.length})</div>
           {dueToday.slice(0,12).map(d=>(
             <div key={String(d.kind)+d.id} style={{display:'flex', gap:8, alignItems:'baseline', padding:'3px 0'}}>
-              <span style={{fontSize:11, color:JULES_GRIS_F, width:44, flexShrink:0}}>{extractTime(d.due)||'—'}</span>
+              <span style={{fontSize:11, color:'#565861', width:58, flexShrink:0}}>{julesHeure(d.due)}</span>
               <span title={julesTitre(d.titre)} style={{fontSize:13, color:JULES_NOIR, minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(d.titre)}</span>
             </div>
           ))}
@@ -7659,11 +7669,10 @@ function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
   // Une routine qui se passe bien n'est pas une information : repliée par défaut,
   // dépliée seulement si l'une déraille (spec §3.3).
   const routineDeraille = fam.routines.some(l=>l.nb_failed>0||l.nb_waiting_go>0);
-  // Les trois familles se replient de la même façon. Seule la valeur de départ diffère :
-  // une routine qui se passe bien n'est pas une information (spec §3.3), donc elle part
-  // repliée — mais elle s'ouvre d'elle-même dès que l'une déraille.
-  const [ouvertes,setOuvertes] = useState({campagnes:true, ponctuelles:true, routines:false});
-  useEffect(()=>{ if(routineDeraille) setOuvertes(o=>({...o, routines:true})); },[routineDeraille]);
+  // Les trois familles se replient de la même façon et partent toutes dépliées : la spec
+  // repliait les routines « parce qu'une routine qui va bien n'est pas une information »,
+  // mais une famille repliée quand les autres ne le sont pas se lit comme un bug.
+  const [ouvertes,setOuvertes] = useState({campagnes:true, ponctuelles:true, routines:true});
   const basculeFamille = (k) => setOuvertes(o=>({...o,[k]:!o[k]}));
   const rend = (l) => <JulesLigneMission key={l.id} ligne={l} campagne={campMap[l.id]} onOuvrir={onOuvrir}/>;
   const titreFamille = (cle,t,n,alerte) => (
@@ -7916,6 +7925,21 @@ function JulesDetail({ missionId, data, onClose, actions, occupe }) {
   );
 }
 
+// Prendre le focus sans faire sauter l'écran. L'attribut natif fait défiler la page derrière
+// la modale pour amener le champ dans le viewport, alors que la modale est déjà en position
+// fixe : le résultat est un saut vers le bas à l'ouverture. On focalise nous-mêmes, en
+// interdisant explicitement le défilement.
+function useJulesFocusSansScroll() {
+  const ref = useRef(null);
+  useEffect(()=>{
+    const el = ref.current;
+    if(!el) return;
+    const t = setTimeout(()=>{ try { el.focus({preventScroll:true}); } catch(e) { el.focus(); } }, 0);
+    return ()=>clearTimeout(t);
+  },[]);
+  return ref;
+}
+
 const JULES_CHAMP = {width:'100%', border:'2px solid '+JULES_NOIR, padding:'8px 10px', fontSize:13,
                      fontFamily:'Outfit,sans-serif', minHeight:44, background:'#fff', color:JULES_NOIR};
 
@@ -7923,6 +7947,7 @@ const JULES_CHAMP = {width:'100%', border:'2px solid '+JULES_NOIR, padding:'8px 
 // deviennent des boutons : c'est le geste le plus court. Sinon, texte libre.
 function JulesRepondre({ entree, onClose, onSave, saving }) {
   const [texte,setTexte] = useState('');
+  const champRef = useJulesFocusSansScroll();
   const options = Array.isArray(entree.options) ? entree.options
                 : (entree.options && Array.isArray(entree.options.options)) ? entree.options.options : [];
   const bloque = entree.nature==='bloque';
@@ -7943,7 +7968,7 @@ function JulesRepondre({ entree, onClose, onSave, saving }) {
         </div>
       )}
       <Field label={bloque?'Ce qu\'il te manquait':'Ta réponse'}>
-        <textarea value={texte} onChange={e=>setTexte(e.target.value)} rows={5} autoFocus
+        <textarea ref={champRef} value={texte} onChange={e=>setTexte(e.target.value)} rows={5}
           placeholder={bloque?'Ex : réf BPM002946, TJM plafond 570.':'Ex : pousse Marie en premier, puis Lucas.'}
           style={{...JULES_CHAMP, minHeight:110, lineHeight:1.5}}/>
       </Field>
@@ -7952,31 +7977,104 @@ function JulesRepondre({ entree, onClose, onSave, saving }) {
   );
 }
 
+// Les types de tâches vivent en base avec leur description. On les lit une fois à l'ouverture
+// de la modale : demander « type de tâche engendrée » en texte libre supposait connaître la
+// table par cœur.
+function useJulesTypesTache(actif) {
+  const [types,setTypes] = useState(null);
+  useEffect(()=>{
+    if(!actif) return;
+    let vivant = true;
+    sb.from('agent_task_types').select('type,description,needs_browser').order('type')
+      .then(r=>{ if(vivant) setTypes(r.error?[]:(r.data||[])); });
+    return ()=>{ vivant = false; };
+  },[actif]);
+  return types;
+}
+
+// Les jours et les heures d'une routine se cliquent. « 1,2,3,4,5 » est le format de la base,
+// pas une interface : personne n'a à savoir que lundi vaut 1.
+const JULES_JOURS = [['L',1],['M',2],['M',3],['J',4],['V',5],['S',6],['D',7]];
+
+function JulesCadence({ jours, heures, onJours, onHeures }) {
+  const basculeJour = (n) => onJours(jours.includes(n) ? jours.filter(x=>x!==n) : [...jours,n].sort());
+  const majHeure = (i,v) => onHeures(heures.map((h,k)=>k===i?v:h));
+  const oteHeure = (i) => onHeures(heures.filter((_,k)=>k!==i));
+  return (
+    <>
+      <Field label="Quels jours">
+        <div style={{display:'flex', gap:6, flexWrap:'wrap'}}>
+          {JULES_JOURS.map(([lettre,n])=>{
+            const on = jours.includes(n);
+            return (
+              <button key={n} type="button" onClick={()=>basculeJour(n)}
+                aria-pressed={on} aria-label={'jour '+n}
+                style={{width:44, height:44, flexShrink:0, cursor:'pointer',
+                        fontFamily:'Outfit,sans-serif', fontSize:14, fontWeight:800,
+                        background:on?JULES_NOIR:'#fff', color:on?'#fff':JULES_NOIR,
+                        border:'2px solid '+JULES_NOIR,
+                        boxShadow:on?'3px 3px 0 '+JULES_VERT:'none'}}>{lettre}</button>
+            );
+          })}
+        </div>
+        <div style={{display:'flex', gap:10, marginTop:8}}>
+          <button type="button" onClick={()=>onJours([1,2,3,4,5])}
+            style={{background:'none', border:'none', padding:0, cursor:'pointer', fontFamily:'Outfit,sans-serif',
+                    fontSize:11, fontWeight:700, color:JULES_BLEU, textTransform:'uppercase',
+                    letterSpacing:'0.06em'}}>Du lundi au vendredi</button>
+          <button type="button" onClick={()=>onJours([1,2,3,4,5,6,7])}
+            style={{background:'none', border:'none', padding:0, cursor:'pointer', fontFamily:'Outfit,sans-serif',
+                    fontSize:11, fontWeight:700, color:JULES_BLEU, textTransform:'uppercase',
+                    letterSpacing:'0.06em'}}>Tous les jours</button>
+        </div>
+      </Field>
+      <Field label="À quelles heures">
+        <div style={{display:'flex', flexDirection:'column', gap:6}}>
+          {heures.map((h,i)=>(
+            <div key={i} style={{display:'flex', gap:8, alignItems:'center'}}>
+              <input type="time" value={h} onChange={e=>majHeure(i,e.target.value)}
+                style={{...JULES_CHAMP, width:140}}/>
+              {heures.length>1&&(
+                <button type="button" onClick={()=>oteHeure(i)} aria-label="retirer cette heure"
+                  style={{width:44, height:44, flexShrink:0, cursor:'pointer', background:'#fff',
+                          color:JULES_ROUGE, border:'2px solid '+JULES_ROUGE, fontFamily:'Outfit,sans-serif',
+                          fontSize:16, fontWeight:800}}>×</button>
+              )}
+            </div>
+          ))}
+        </div>
+        <div style={{marginTop:8}}>
+          <BtnAction onClick={()=>onHeures([...heures,'14:00'])} icon={ICONS.add} label="Ajouter une heure" variant="edit"/>
+        </div>
+      </Field>
+    </>
+  );
+}
+
 // Créer une mission. Trois types, et c'est tout : une campagne se configure ensuite
 // au dialogue avec Jules, qui remplit sa cible, ses gabarits et ses quotas.
 function JulesNouvelleMission({ onClose, onSave, saving }) {
   const [titre,setTitre] = useState('');
+  const champRef = useJulesFocusSansScroll();
   const [kind,setKind] = useState('oneshot');
   const [priorite,setPriorite] = useState(2);
   const [contexte,setContexte] = useState('');
-  const [jours,setJours] = useState('1,2,3,4,5');
-  const [heures,setHeures] = useState('10:00');
+  const [jours,setJours] = useState([1,2,3,4,5]);
+  const [heures,setHeures] = useState(['10:00']);
   const [taskType,setTaskType] = useState('libre');
   const recurrente = kind==='recurring';
-  const cadence = () => ({
-    days: jours.split(',').map(x=>parseInt(x.trim(),10)).filter(n=>!isNaN(n)&&n>=1&&n<=7),
-    times: heures.split(',').map(x=>x.trim()).filter(Boolean),
-  });
-  const cad = cadence();
-  const cadenceOk = !recurrente || (cad.days.length>0 && cad.times.length>0);
+  const types = useJulesTypesTache(recurrente);
+  const heuresPropres = heures.map(h=>String(h||'').trim()).filter(Boolean);
+  const cadence = () => ({days:jours, times:heuresPropres});
+  const cadenceOk = !recurrente || (jours.length>0 && heuresPropres.length>0);
   return (
     <Modal title="Nouvelle mission" onClose={onClose}
       footer={<ModalFooter onClose={onClose} saving={saving} label="Créer"
         disabled={!titre.trim()||!cadenceOk}
         onSave={()=>onSave({titre:titre.trim(), kind, priorite:Number(priorite), contexte,
-                            cadence:recurrente?cadence():null, task_type:recurrente?taskType.trim():null})}/>}>
+                            cadence:recurrente?cadence():null, task_type:recurrente?taskType:null})}/>}>
       <Field label="Titre">
-        <input value={titre} onChange={e=>setTitre(e.target.value)} autoFocus style={JULES_CHAMP}
+        <input ref={champRef} value={titre} onChange={e=>setTitre(e.target.value)} style={JULES_CHAMP}
           placeholder="Ex : Chasse BA senior Crédit Agricole"/>
       </Field>
       <Field label="Type">
@@ -7988,17 +8086,24 @@ function JulesNouvelleMission({ onClose, onSave, saving }) {
       </Field>
       {recurrente&&(
         <>
-          <Field label="Jours (1 = lundi, séparés par des virgules)">
-            <input value={jours} onChange={e=>setJours(e.target.value)} style={JULES_CHAMP}/>
+          <JulesCadence jours={jours} heures={heures} onJours={setJours} onHeures={setHeures}/>
+          <Field label="Ce que Jules fait à chaque fois">
+            <select value={taskType} onChange={e=>setTaskType(e.target.value)} style={JULES_CHAMP}>
+              {!types&&<option value={taskType}>Lecture…</option>}
+              {(types||[]).map(t=>(
+                <option key={t.type} value={t.type}>
+                  {t.description}{t.needs_browser?' (navigateur)':''}
+                </option>
+              ))}
+            </select>
+            <div style={{fontSize:12, color:'#565861', marginTop:6}}>
+              À chaque échéance, Jules crée une tâche de ce genre et suit le mode opératoire
+              qui va avec. Si rien ne colle, garde « mission décrite en texte libre » : il
+              s'appuiera sur le contexte que tu écris plus bas.
+            </div>
           </Field>
-          <Field label="Heures (séparées par des virgules)">
-            <input value={heures} onChange={e=>setHeures(e.target.value)} style={JULES_CHAMP}/>
-          </Field>
-          <Field label="Type de tâche engendrée">
-            <input value={taskType} onChange={e=>setTaskType(e.target.value)} style={JULES_CHAMP}/>
-          </Field>
-          {!cadenceOk&&<div style={{fontSize:12, color:JULES_ROUGE, fontWeight:700}}>
-            Une routine a besoin d'au moins un jour et une heure.</div>}
+          {!cadenceOk&&<div style={{fontSize:12, color:JULES_ROUGE, fontWeight:700, marginBottom:8}}>
+            Choisis au moins un jour et une heure.</div>}
         </>
       )}
       <Field label="Priorité">
