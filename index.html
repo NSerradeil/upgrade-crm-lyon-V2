@@ -8068,6 +8068,8 @@ function TabJules({ profile, prefs }) {
   },[recharger]);
   // Sous 768 px, seul le parapheur est déployé (spec §6) : les deux autres bandeaux partent repliés.
   const [replie,setReplie] = useState(()=> window.innerWidth<768 ? {encours:true,missions:true} : {});
+  // Le parapheur se replie comme les autres — cohérence de l'écran — mais il n'est jamais
+  // replié au départ : ce qui attend Nicolas ne se cache pas tout seul.
   const bascule = (k) => setReplie(r=>({...r,[k]:!r[k]}));
   if(!J.data&&J.chargement) return <Loader label="Lecture de l'état de Jules…"/>;
   if(!J.data) return (
@@ -8101,7 +8103,8 @@ function TabJules({ profile, prefs }) {
           {J.nbNouveautes} nouveauté{J.nbNouveautes>1?'s':''} — toucher pour actualiser
         </button>
       )}
-      <JulesBandeau titre="Ce qui t'attend" compteur={J.data.parapheur.length} repliable={false}>
+      <JulesBandeau titre="Ce qui t'attend" compteur={J.data.parapheur.length}
+        ouvert={!replie.parapheur} onToggle={()=>bascule('parapheur')}>
         <JulesParapheur entrees={J.data.parapheur}
           onAccorder={a=>agir(a.id,()=>julesActions.accorder(a))}
           onRefuser={a=>setARefuser(a)}
