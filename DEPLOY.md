@@ -13,6 +13,7 @@ constaté qu'aucune doc n'existait).
 | **Serveur MCP** (`../upgrade-crm-mcp-src/server/index.mjs`) | Local, **PAS un dépôt git** | Sauver le fichier ; le process MCP le charge au (re)démarrage de la session Claude. Rien à pousser. |
 
 ### Notes de version — Serveur MCP
+- **8.19.0 (18/09/2026)** : garde anti-doublon de missions — `agent_mission_create` (kind=oneshot) refuse de créer une mission proche d'une mission existante (surtout done/cancelled) et propose de la rouvrir ; `force:true` pour créer quand même. Nouveau fichier `server/agent-similar.mjs` (normalizeTitle/similarity/findSimilar).
 - **8.18.0 (17/09/2026)** : outils MCP `agent_*` (noyau d'état Jules) — fichier `server/agent-tools.mjs`.
 
 ### Migrations à appliquer (en ordre)
