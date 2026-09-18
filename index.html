@@ -7606,8 +7606,120 @@ function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
   );
 }
 
+const JULES_TASK_STATUT_STYLE = {
+  due:        { bg:JULES_GRIS,   color:JULES_NOIR },
+  claimed:    { bg:JULES_VERT,   color:JULES_NOIR },
+  waiting_go: { bg:JULES_JAUNE,  color:JULES_NOIR },
+  done:       { bg:'#FFFFFF',    color:JULES_GRIS_F },
+  failed:     { bg:JULES_ROUGE,  color:'#FFFFFF' },
+  cancelled:  { bg:JULES_GRIS_F, color:'#FFFFFF' },
+};
+const JULES_SEQ_STATUT_STYLE = {
+  active:    { bg:JULES_BLEU,   color:'#FFFFFF' },
+  replied:   { bg:JULES_VERT,   color:JULES_NOIR },
+  converted: { bg:JULES_VIOLET, color:'#FFFFFF' },
+  stopped:   { bg:JULES_GRIS,   color:JULES_NOIR },
+};
+
+// agent_tasks n'est pas chargée globalement : une mission peut en porter beaucoup et elles ne
+// servent qu'ici (« le seul endroit où les tâches sont listées », spec §3.4). Lecture à l'ouverture,
+// ce qui borne le trafic du sondage des 30 s.
+function JulesDetail({ missionId, data, onClose, actions, occupe }) {
+  const mission = useMemo(()=>(data.missions||[]).find(m=>m.id===missionId),[data.missions,missionId]);
+  const [taches,setTaches] = useState(null);
+  useEffect(()=>{
+    let vivant=true;
+    sb.from('agent_tasks').select('*').eq('mission_id',missionId)
+      .order('due_at',{ascending:false}).limit(100)
+      .then(r=>{ if(vivant) setTaches(r.error?[]:(r.data||[])); });
+    return ()=>{ vivant=false; };
+  },[missionId]);
+  const seqs   = useMemo(()=>(data.sequences||[]).filter(s=>s.mission_id===missionId),[data.sequences,missionId]);
+  const events = useMemo(()=>(data.events||[]).filter(e=>e.mission_id===missionId).slice(0,40),[data.events,missionId]);
+  if(!mission) return null;
+  const enPause = mission.statut==='paused';
+  const cfg = mission.config||{};
+  return (
+    <SidePanel title={mission.titre} onClose={onClose}
+      badge={<ColorBadge label={mission.kind} bg={JULES_NOIR} color="#fff"/>}
+      actions={<span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
+        <BtnAction onClick={()=>actions.basculerPause(mission)}
+          icon={enPause?ICONS.refresh:ICONS.stop}
+          label={enPause?'Relancer':'Mettre en pause'}
+          variant={enPause?'success':'close'} disabled={occupe===mission.id}/>
+      </span>}>
+
+      <Field label="Configuration">
+        <div style={{fontSize:12, color:'#565861', lineHeight:1.7}}>
+          <div>Statut : <strong style={{color:JULES_NOIR}}>{mission.statut}</strong> · priorité {mission.priorite}</div>
+          {mission.task_type&&<div>Type de tâche : {mission.task_type}</div>}
+          {mission.cadence&&<div>Cadence : {JSON.stringify(mission.cadence)}</div>}
+          {cfg.autonomy&&<div>Autonomie : {cfg.autonomy}{cfg.preset?' · preset '+cfg.preset:''}</div>}
+          {mission.contexte&&<div style={{marginTop:6, whiteSpace:'pre-wrap'}}>{mission.contexte}</div>}
+        </div>
+      </Field>
+
+      <Field label={'Tâches'+(taches?' ('+taches.length+')':'')}>
+        {!taches ? <div style={{fontSize:12, color:JULES_GRIS_F}}>Lecture…</div>
+         : !taches.length ? <div style={{fontSize:12, color:'#565861'}}>Aucune tâche — c'est un cas légitime.</div>
+         : <div style={{display:'flex', flexDirection:'column', gap:6}}>
+            {taches.map(t=>{
+              const st=JULES_TASK_STATUT_STYLE[t.statut]||JULES_TASK_STATUT_STYLE.due;
+              return <div key={t.id} style={{border:'2px solid '+JULES_GRIS, padding:8}}>
+                <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
+                  <ColorBadge label={t.statut} bg={st.bg} color={st.color}/>
+                  <span style={{fontSize:13, fontWeight:700, color:JULES_NOIR}}>{t.titre}</span>
+                </div>
+                <div style={{fontSize:11, color:JULES_GRIS_F, marginTop:3, textTransform:'uppercase', letterSpacing:'0.05em'}}>
+                  {t.type} · due {extractDate(t.due_at)} {extractTime(t.due_at)}
+                  {t.attempts>0&&' · '+t.attempts+' tentative'+(t.attempts>1?'s':'')}
+                </div>
+              </div>;
+            })}
+           </div>}
+      </Field>
+
+      {seqs.length>0&&(
+        <Field label={'Personnes suivies ('+seqs.length+')'}>
+          <div style={{display:'flex', flexDirection:'column', gap:6}}>
+            {seqs.map(s=>{
+              const st=JULES_SEQ_STATUT_STYLE[s.statut]||JULES_SEQ_STATUT_STYLE.stopped;
+              return <div key={s.id} style={{border:'2px solid '+JULES_GRIS, padding:8, display:'flex',
+                                             alignItems:'center', gap:8, flexWrap:'wrap'}}>
+                <ColorBadge label={s.statut} bg={st.bg} color={st.color}/>
+                <span style={{fontSize:13, fontWeight:700, color:JULES_NOIR, flex:1, minWidth:0}}>{s.target_label}</span>
+                <span style={{fontSize:11, color:JULES_GRIS_F, textTransform:'uppercase', letterSpacing:'0.05em'}}>
+                  étape {s.etape}{s.next_due_at?' · '+extractDate(s.next_due_at):''}
+                </span>
+                {s.statut==='active'&&<span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
+                  <BtnAction onClick={()=>actions.arreterSuivi(s)} icon={ICONS.stop} label="Arrêter"
+                             variant="danger" disabled={occupe===s.id}/>
+                </span>}
+              </div>;
+            })}
+          </div>
+        </Field>
+      )}
+
+      <Field label="Journal">
+        {!events.length ? <div style={{fontSize:12, color:'#565861'}}>Aucun événement.</div>
+         : <div style={{display:'flex', flexDirection:'column', gap:4}}>
+            {events.map(e=>(
+              <div key={e.id} style={{display:'flex', gap:8, alignItems:'baseline', fontSize:12}}>
+                <span style={{color:JULES_GRIS_F, flexShrink:0, width:88}}>{extractDate(e.at)} {extractTime(e.at)}</span>
+                <span style={{fontWeight:700, color:JULES_NOIR, flexShrink:0}}>{e.kind}</span>
+                <span style={{color:'#565861', minWidth:0}}>{e.message}</span>
+              </div>
+            ))}
+           </div>}
+      </Field>
+    </SidePanel>
+  );
+}
+
 function TabJules({ profile, prefs }) {
   const J = useJulesData();
+  const [detailId,setDetailId] = useState(null);
   // Sous 768 px, seul le parapheur est déployé (spec §6) : les deux autres bandeaux partent repliés.
   const [replie,setReplie] = useState(()=> window.innerWidth<768 ? {encours:true,missions:true} : {});
   const bascule = (k) => setReplie(r=>({...r,[k]:!r[k]}));
@@ -7656,8 +7768,12 @@ function TabJules({ profile, prefs }) {
       <JulesBandeau titre="Missions" compteur={J.data.backlog.length}
         ouvert={!replie.missions} onToggle={()=>bascule('missions')}>
         <JulesMissions campagnes={J.data.campagnes} backlog={J.data.backlog}
-          missions={J.data.missions} onOuvrir={m=>toast('Détail : branché à la tâche 5')}/>
+          missions={J.data.missions} onOuvrir={m=>setDetailId(m.id)}/>
       </JulesBandeau>
+      {detailId&&<JulesDetail missionId={detailId} data={J.data} onClose={()=>setDetailId(null)}
+        occupe={null}
+        actions={{basculerPause:()=>toast('Pause : branchée à la tâche 6'),
+                  arreterSuivi:()=>toast('Arrêt : branché à la tâche 6')}}/>}
     </div>
   );
 }
