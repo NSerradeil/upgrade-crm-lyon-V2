@@ -73,6 +73,8 @@ tailwind.config = {
   .skip-link { position: absolute; top: -100%; left: 16px; z-index: 9999; padding: 8px 16px; background: #FFE500; color: #0A0A0A; font-weight: 700; font-size: 14px; border: 2px solid #0A0A0A; text-decoration: none; }
   .skip-link:focus { top: 8px; }
   .spin { animation: spin 1s linear infinite; }
+@keyframes julesPulse { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:.35;transform:scale(.7);} }
+.jules-pouls { animation: julesPulse 1.4s ease-in-out infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   @media(max-width:767px){
     .mobile-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
@@ -7478,6 +7480,132 @@ function JulesParapheur({ entrees, onAccorder, onRefuser, actionEnCours }) {
   );
 }
 
+function JulesEncours({ encours, dueToday }) {
+  if(!encours.length && !dueToday.length)
+    return <div style={{fontSize:13, color:'#565861'}}>Rien ne tourne, rien n'est dû aujourd'hui.</div>;
+  return (
+    <div style={{display:'flex', flexDirection:'column', gap:10}}>
+      {encours.map(t=>(
+        <div key={t.id} style={{border:'2px solid '+JULES_NOIR, background:'#fff', padding:12,
+                                boxShadow:'4px 4px 0 '+JULES_VERT, display:'flex', alignItems:'center', gap:10}}>
+          <span className="jules-pouls" style={{width:10, height:10, background:JULES_VERT, flexShrink:0}}/>
+          <div style={{minWidth:0, flex:1}}>
+            <div style={{fontSize:13, fontWeight:700, color:JULES_NOIR}}>{t.titre}</div>
+            <div style={{fontSize:11, color:'#565861', textTransform:'uppercase', letterSpacing:'0.06em'}}>
+              {t.mission_titre||'sans mission'} · depuis {julesAge(t.heartbeat_at)}
+              {t.heartbeat_age_s>900&&<span style={{color:JULES_ROUGE, fontWeight:800}}> · sans signe de vie</span>}
+            </div>
+          </div>
+        </div>
+      ))}
+      {dueToday.length>0&&(
+        <div style={{borderTop:'2px solid '+JULES_GRIS, paddingTop:10}}>
+          <div style={{fontSize:11, fontWeight:800, color:JULES_GRIS_F, textTransform:'uppercase',
+                       letterSpacing:'0.12em', marginBottom:6}}>Échéances du jour ({dueToday.length})</div>
+          {dueToday.slice(0,12).map(d=>(
+            <div key={String(d.kind)+d.id} style={{display:'flex', gap:8, alignItems:'baseline', padding:'3px 0'}}>
+              <span style={{fontSize:11, color:JULES_GRIS_F, width:44, flexShrink:0}}>{extractTime(d.due)||'—'}</span>
+              <span style={{fontSize:13, color:JULES_NOIR}}>{d.titre}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Le pouls d'une mission : un point qui pulse si une tâche tourne, sinon un état.
+function julesPouls(l) {
+  if(l.nb_claimed>0)    return {couleur:JULES_VERT,  pulse:true,  mot:'en cours'};
+  if(l.nb_failed>0)     return {couleur:JULES_ROUGE, pulse:false, mot:'en échec'};
+  if(l.nb_waiting_go>0) return {couleur:JULES_JAUNE, pulse:false, mot:'attend un accord'};
+  if(l.statut==='paused') return {couleur:JULES_GRIS_F, pulse:false, mot:'en pause'};
+  return {couleur:JULES_GRIS, pulse:false, mot:'au calme'};
+}
+
+// Langage courant, pas des compteurs (spec §3.3). Une seule phrase, la plus utile.
+function julesPhrase(l, campagne) {
+  if(l.nb_failed>0)     return l.nb_failed===1 ? 'Une tâche a échoué, elle attend une reprise.'
+                                               : l.nb_failed+' tâches ont échoué.';
+  if(l.nb_waiting_go>0) return 'Jules attend ton accord pour continuer.';
+  if(l.statut==='paused') return 'En pause — rien ne partira tant que tu ne la relances pas.';
+  if(campagne) {
+    if(campagne.nb_due_today>0) return campagne.nb_due_today+' relance'+(campagne.nb_due_today>1?'s':'')+' à faire aujourd\'hui.';
+    if(campagne.nb_replied>0)   return campagne.nb_replied+' réponse'+(campagne.nb_replied>1?'s':'')+' à traiter.';
+    if(campagne.nb_active>0)    return campagne.nb_active+' personne'+(campagne.nb_active>1?'s':'')+' suivie'+(campagne.nb_active>1?'s':'')+', rien à faire d\'ici demain.';
+    return 'Personne n\'est encore suivi sur cette campagne.';
+  }
+  if(l.nb_claimed>0) return 'Jules travaille dessus en ce moment.';
+  if(l.nb_due>0)     return 'Prochaine tâche en attente de son tour.';
+  return 'Rien de prévu pour l\'instant.';
+}
+
+function JulesLigneMission({ ligne, campagne, onOuvrir }) {
+  const p = julesPouls(ligne);
+  return (
+    <button onClick={()=>onOuvrir(ligne)}
+      style={{width:'100%', minHeight:44, textAlign:'left', background:'#fff', border:'2px solid '+JULES_NOIR,
+              boxShadow:'4px 4px 0 '+p.couleur, padding:12, marginBottom:10, cursor:'pointer',
+              fontFamily:'Outfit,sans-serif', transition:'transform 80ms ease'}}
+      onMouseEnter={e=>e.currentTarget.style.transform='translate(-2px,-2px)'}
+      onMouseLeave={e=>e.currentTarget.style.transform='none'}>
+      <div style={{display:'flex', alignItems:'center', gap:9}}>
+        <span className={p.pulse?'jules-pouls':''}
+              style={{width:10, height:10, background:p.couleur, flexShrink:0}}/>
+        <span style={{fontSize:14, fontWeight:800, color:JULES_NOIR, flex:1, minWidth:0}}>{ligne.titre}</span>
+        <span style={{fontSize:10, fontWeight:800, color:JULES_GRIS_F, textTransform:'uppercase',
+                      letterSpacing:'0.1em', flexShrink:0}}>{p.mot}</span>
+      </div>
+      <div style={{fontSize:12, color:'#565861', marginTop:5, marginLeft:19}}>
+        {julesPhrase(ligne, campagne)}
+      </div>
+    </button>
+  );
+}
+
+function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
+  const kindOf = useMemo(()=>Object.fromEntries((missions||[]).map(m=>[m.id,m.kind])),[missions]);
+  const campMap = useMemo(()=>Object.fromEntries((campagnes||[]).map(c=>[c.id,c])),[campagnes]);
+  const fam = useMemo(()=>{
+    const f={campagnes:[], projets:[], routines:[]};
+    (backlog||[]).forEach(l=>{
+      const k=kindOf[l.id]||l.kind;
+      if(k==='campagne')       f.campagnes.push(l);
+      else if(k==='recurring') f.routines.push(l);
+      else                     f.projets.push(l);
+    });
+    return f;
+  },[backlog,kindOf]);
+  // Une routine qui se passe bien n'est pas une information : repliée par défaut,
+  // dépliée seulement si l'une déraille (spec §3.3).
+  const routineDeraille = fam.routines.some(l=>l.nb_failed>0||l.nb_waiting_go>0);
+  const [routinesOuvertes,setRoutinesOuvertes] = useState(false);
+  useEffect(()=>{ if(routineDeraille) setRoutinesOuvertes(true); },[routineDeraille]);
+  const rend = (l) => <JulesLigneMission key={l.id} ligne={l} campagne={campMap[l.id]} onOuvrir={onOuvrir}/>;
+  const titreFamille = (t,n) => (
+    <div style={{fontSize:11, fontWeight:800, color:JULES_GRIS_F, textTransform:'uppercase',
+                 letterSpacing:'0.12em', margin:'4px 0 8px'}}>{t} ({n})</div>
+  );
+  if(!fam.campagnes.length&&!fam.projets.length&&!fam.routines.length)
+    return <div style={{fontSize:13, color:'#565861'}}>Aucune mission active.</div>;
+  return (
+    <div>
+      {/* Aucune campagne active : la famille n'apparaît pas du tout (spec §8). */}
+      {fam.campagnes.length>0&&<>{titreFamille('Campagnes',fam.campagnes.length)}{fam.campagnes.map(rend)}</>}
+      {fam.projets.length>0&&<>{titreFamille('Projets',fam.projets.length)}{fam.projets.map(rend)}</>}
+      {fam.routines.length>0&&<>
+        <button onClick={()=>setRoutinesOuvertes(v=>!v)}
+          style={{background:'none', border:'none', padding:0, minHeight:44, cursor:'pointer',
+                  fontFamily:'Outfit,sans-serif', fontSize:11, fontWeight:800, color:JULES_GRIS_F,
+                  textTransform:'uppercase', letterSpacing:'0.12em'}}>
+          Routines ({fam.routines.length}){routineDeraille&&<span style={{color:JULES_ROUGE}}> · une routine déraille</span>}
+        </button>
+        {routinesOuvertes&&<div style={{marginTop:8}}>{fam.routines.map(rend)}</div>}
+      </>}
+    </div>
+  );
+}
+
 function TabJules({ profile, prefs }) {
   const J = useJulesData();
   // Sous 768 px, seul le parapheur est déployé (spec §6) : les deux autres bandeaux partent repliés.
@@ -7523,11 +7651,12 @@ function TabJules({ profile, prefs }) {
       </JulesBandeau>
       <JulesBandeau titre="Ce qui tourne" compteur={J.data.encours.length}
         ouvert={!replie.encours} onToggle={()=>bascule('encours')}>
-        <div style={{fontSize:13, color:'#565861'}}>Rien ne tourne.</div>
+        <JulesEncours encours={J.data.encours} dueToday={J.data.dueToday}/>
       </JulesBandeau>
       <JulesBandeau titre="Missions" compteur={J.data.backlog.length}
         ouvert={!replie.missions} onToggle={()=>bascule('missions')}>
-        <div style={{fontSize:13, color:'#565861'}}>Aucune mission.</div>
+        <JulesMissions campagnes={J.data.campagnes} backlog={J.data.backlog}
+          missions={J.data.missions} onOuvrir={m=>toast('Détail : branché à la tâche 5')}/>
       </JulesBandeau>
     </div>
   );
