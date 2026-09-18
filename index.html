@@ -8017,6 +8017,24 @@ function JulesRepondre({ entree, onClose, onSave, saving }) {
   );
 }
 
+// Les descriptions en base sont écrites pour l'ordonnanceur, pas pour Nicolas : « Mission
+// décrite en texte libre dans payload.instruction » cite une colonne. On garde la base comme
+// source de vérité des types disponibles, et on habille le libellé ici. Un type inconnu de
+// cette table retombe sur sa description : la liste ne se tait jamais.
+const JULES_LIBELLE_TYPE = {
+  'libre':               'Ce que je décris dans le contexte ci-dessous',
+  'ronde.tour':          'Faire une ronde : Slack, mails, calendrier, CRM, vault',
+  'matin.brief':         'Préparer le brief du matin et la todo du jour',
+  'bilan.vendredi':      'Écrire le bilan de la semaine',
+  'scan.plateformes':    'Scanner les plateformes fournisseur',
+  'chasse.sourcer':      'Sourcer des profils',
+  'lk.lire_acceptations':'Lire les acceptations et réponses LinkedIn',
+  'campagne.lire':       'Lire les acceptations et réponses de la campagne',
+  'campagne.envoyer':    'Envoyer les invitations, accroches et relances dues',
+  'campagne.alimenter':  'Compléter le vivier de la campagne',
+};
+const julesLibelleType = (t) => (t && (JULES_LIBELLE_TYPE[t.type] || t.description)) || '';
+
 // Les types de tâches vivent en base avec leur description. On les lit une fois à l'ouverture
 // de la modale : demander « type de tâche engendrée » en texte libre supposait connaître la
 // table par cœur.
@@ -8110,6 +8128,13 @@ function JulesNouvelleMission({ onClose, onSave, saving }) {
   // se bloquera au premier passage.
   const CLES_CONNUES = ['instruction','mission_titre'];
   const clesDe = (t) => (t&&t.payload_keys)||[];
+  // On ne montre que ce qui est réellement choisissable ici. Une option grisée par ligne
+  // n'informe personne : elle double la longueur du menu et donne l'air d'un formulaire cassé.
+  const typesOffrables = (types||[])
+    .filter(t=>clesDe(t).every(k=>CLES_CONNUES.includes(k)))
+    .sort((a,b)=> a.type==='libre' ? -1 : b.type==='libre' ? 1
+                : julesLibelleType(a).localeCompare(julesLibelleType(b),'fr'));
+  const nbEcartes = (types||[]).length - typesOffrables.length;
   const typeChoisi = (types||[]).find(t=>t.type===taskType);
   const clesManquantes = clesDe(typeChoisi).filter(k=>!CLES_CONNUES.includes(k));
   const veutInstruction = clesDe(typeChoisi).includes('instruction');
@@ -8147,20 +8172,14 @@ function JulesNouvelleMission({ onClose, onSave, saving }) {
           <Field label="Ce que Jules fait à chaque fois">
             <select value={taskType} onChange={e=>setTaskType(e.target.value)} style={JULES_CHAMP}>
               {!types&&<option value={taskType}>Lecture…</option>}
-              {(types||[]).map(t=>{
-                const bloquant = clesDe(t).some(k=>!CLES_CONNUES.includes(k));
-                return (
-                  <option key={t.type} value={t.type} disabled={bloquant}>
-                    {t.description}{t.needs_browser?' (navigateur)':''}
-                    {bloquant?' — à lancer depuis Jules':''}
-                  </option>
-                );
-              })}
+              {typesOffrables.map(t=>(
+                <option key={t.type} value={t.type}>{julesLibelleType(t)}</option>
+              ))}
             </select>
             <div style={{fontSize:12, color:'#565861', marginTop:6}}>
               À chaque échéance, Jules crée une tâche de ce genre et suit le mode opératoire
-              qui va avec. Si rien ne colle, garde « mission décrite en texte libre » : il
-              s'appuiera sur le contexte que tu écris plus bas.
+              qui va avec.
+              {nbEcartes>0&&' D\'autres types existent mais se lancent depuis une conversation avec lui : ils ont besoin d\'un contact ou d\'une campagne précise.'}
             </div>
             {veutInstruction&&!contexte.trim()&&(
               <div style={{fontSize:12, color:JULES_ROUGE, fontWeight:700, marginTop:6}}>
