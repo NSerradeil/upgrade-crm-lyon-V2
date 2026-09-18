@@ -7503,13 +7503,12 @@ function JulesTexteRiche({ texte }) {
 }
 
 // 23:59 et 00:00 ne sont pas des heures : ce sont les valeurs par défaut de « fin de journée »
-// et « pas d'heure fixée », héritées de la migration du backlog. Les afficher au format horaire
-// fait croire à un rendez-vous à minuit moins une. On dit « journée », et les vraies heures
-// ressortent enfin.
+// et « pas d'heure fixée », héritées de la migration du backlog. On ne les affiche pas du tout —
+// une colonne entière remplie du même mot n'apprend rien et masque les vraies heures.
 function julesHeure(iso) {
   const h = extractTime(iso);
-  if(!h) return 'journée';
-  return (h==='23:59'||h==='00:00') ? 'journée' : h;
+  if(!h || h==='23:59' || h==='00:00') return '';
+  return h;
 }
 
 function julesAge(iso) {
@@ -7586,13 +7585,25 @@ function JulesEncours({ encours, dueToday }) {
       {dueToday.length>0&&(
         <div style={{borderTop:'2px solid '+JULES_GRIS, paddingTop:10}}>
           <div style={{fontSize:11, fontWeight:800, color:JULES_NOIR, textTransform:'uppercase',
-                       letterSpacing:'0.12em', marginBottom:6}}>Échéances du jour ({dueToday.length})</div>
-          {dueToday.slice(0,12).map(d=>(
-            <div key={String(d.kind)+d.id} style={{display:'flex', gap:8, alignItems:'baseline', padding:'3px 0'}}>
-              <span style={{fontSize:11, color:'#565861', width:58, flexShrink:0}}>{julesHeure(d.due)}</span>
-              <span title={julesTitre(d.titre)} style={{fontSize:13, color:JULES_NOIR, minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(d.titre)}</span>
-            </div>
-          ))}
+                       letterSpacing:'0.12em', marginBottom:6}}>À faire aujourd'hui ({dueToday.length})</div>
+          {/* Les items à heure fixée passent devant. La colonne d'heure n'existe que s'il y
+              en a au moins une : sinon chaque ligne commence par son titre, sans décalage. */}
+          {(()=>{
+            const avecHeure = dueToday.filter(d=>julesHeure(d.due));
+            const sansHeure = dueToday.filter(d=>!julesHeure(d.due));
+            const colonne = avecHeure.length>0;
+            return [...avecHeure, ...sansHeure].slice(0,12).map(d=>{
+              const h = julesHeure(d.due);
+              return (
+                <div key={String(d.kind)+d.id} style={{display:'flex', gap:8, alignItems:'baseline', padding:'3px 0'}}>
+                  {colonne&&(h
+                    ? <span style={{fontSize:11, fontWeight:700, color:JULES_NOIR, width:42, flexShrink:0}}>{h}</span>
+                    : <span aria-hidden="true" style={{width:42, flexShrink:0}}/>)}
+                  <span title={julesTitre(d.titre)} style={{fontSize:13, color:JULES_NOIR, minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(d.titre)}</span>
+                </div>
+              );
+            });
+          })()}
         </div>
       )}
     </div>
