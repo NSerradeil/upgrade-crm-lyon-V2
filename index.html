@@ -7809,6 +7809,23 @@ const julesActions = {
     await sb.from('agent_events').insert({actor:'crm', kind:'approval.rejected',
       task_id:a.task_id||null, message:a.titre});
   },
+  // Rejouer UNE tâche déjà terminée, sans toucher à sa mission. Le moteur savait déjà le faire
+  // (répondre à une entrée du parapheur remet sa tâche en 'due') : il manquait le geste direct.
+  // Sans lui, la seule façon de rejouer une ronde ratée était de mettre la mission entière en
+  // pause — un levier bien trop large (cas vécu 21/09).
+  // attempts repart à 0 : sinon une tâche déjà tombée 3 fois serait abandonnée au premier échec
+  // par la reprise des baux expirés, alors que Nicolas vient justement de demander un nouvel essai.
+  async relancerTache(t) {
+    const { data, error } = await sb.from('agent_tasks')
+      .update({statut:'due', leased_by:null, lease_until:null, attempts:0,
+               due_at:new Date().toISOString()})
+      .eq('id', t.id).in('statut',['done','failed','cancelled']).select('id');
+    if(error) throw new Error('Relance refusée : '+error.message);
+    if(!data||!data.length) throw new Error('Cette tâche n\'était plus terminée — rien n\'a été écrit.');
+    await sb.from('agent_events').insert({actor:'crm', kind:'task.requeued',
+      task_id:t.id, mission_id:t.mission_id||null,
+      message:'relancée depuis le CRM (était '+t.statut+')'});
+  },
   async basculerPause(m) {
     const cible = m.statut==='paused' ? 'active' : 'paused';
     const { data, error } = await sb.from('agent_missions').update({statut:cible})
@@ -7898,13 +7915,20 @@ const JULES_SEQ_STATUT_STYLE = {
 function JulesDetail({ missionId, data, onClose, actions, occupe }) {
   const mission = useMemo(()=>(data.missions||[]).find(m=>m.id===missionId),[data.missions,missionId]);
   const [taches,setTaches] = useState(null);
+  const [detailOuvert,setDetailOuvert] = useState(null);   // id de la tâche dépliée, une seule à la fois
+  const [relance,setRelance] = useState(0);                // incrémenté après une relance → relit la liste
   useEffect(()=>{
     let vivant=true;
     sb.from('agent_tasks').select('*').eq('mission_id',missionId)
       .order('due_at',{ascending:false}).limit(100)
       .then(r=>{ if(vivant) setTaches(r.error?[]:(r.data||[])); });
     return ()=>{ vivant=false; };
-  },[missionId]);
+  },[missionId,relance]);
+  // Relancer relit la liste : sans ça la carte resterait affichée « done » alors qu'elle est
+  // repartie en file, et Nicolas cliquerait une deuxième fois en croyant que rien n'a bougé.
+  // On relit dans tous les cas, succès ou échec : la base fait foi, pas ce qu'on espérait.
+  // Le message (succès ou erreur) est porté par `agir`, comme pour tous les autres gestes.
+  const relancer = async (t) => { await actions.relancerTache(t); setRelance(n=>n+1); };
   const seqs   = useMemo(()=>(data.sequences||[]).filter(s=>s.mission_id===missionId),[data.sequences,missionId]);
   const events = useMemo(()=>(data.events||[]).filter(e=>e.mission_id===missionId).slice(0,40),[data.events,missionId]);
   if(!mission) return null;
@@ -7940,6 +7964,12 @@ function JulesDetail({ missionId, data, onClose, actions, occupe }) {
          : <div style={{display:'flex', flexDirection:'column', gap:6}}>
             {taches.map(t=>{
               const st=JULES_TASK_STATUT_STYLE[t.statut]||JULES_TASK_STATUT_STYLE.due;
+              // Un « done » ne dit pas si la tâche a tout fait : le détail vit dans result.summary
+              // (cas vécu 21/09 — une ronde close en done avait en réalité échoué sur Slack, et
+              // rien ne le montrait). On ne crie pas pour autant : le résumé se déplie au clic.
+              const detail = t.result && (t.result.summary || t.result.error);
+              const deplie = detailOuvert===t.id;
+              const rejouable = ['done','failed','cancelled'].includes(t.statut);
               return <div key={t.id} style={{border:'2px solid '+JULES_GRIS, padding:8}}>
                 <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
                   <ColorBadge label={t.statut} bg={st.bg} color={st.color}/>
@@ -7949,6 +7979,34 @@ function JulesDetail({ missionId, data, onClose, actions, occupe }) {
                   {t.type} · due {extractDate(t.due_at)} {extractTime(t.due_at)}
                   {t.attempts>0&&' · '+t.attempts+' tentative'+(t.attempts>1?'s':'')}
                 </div>
+                {(detail||rejouable)&&(
+                  <div style={{display:'flex', gap:12, alignItems:'center', marginTop:6, flexWrap:'wrap'}}>
+                    {detail&&(
+                      <button type="button" onClick={()=>setDetailOuvert(deplie?null:t.id)}
+                        aria-expanded={deplie}
+                        style={{background:'none', border:'none', padding:0, cursor:'pointer',
+                                fontSize:11, color:JULES_GRIS_F, textTransform:'uppercase',
+                                letterSpacing:'0.05em', minHeight:32}}>
+                        {deplie?'▾ masquer le détail':'▸ voir le détail'}
+                      </button>
+                    )}
+                    {rejouable&&(
+                      <button type="button" onClick={()=>relancer(t)} disabled={occupe===t.id}
+                        style={{background:'none', border:'none', padding:0,
+                                cursor:occupe===t.id?'default':'pointer',
+                                fontSize:11, color:occupe===t.id?JULES_GRIS_F:JULES_BLEU,
+                                textTransform:'uppercase', letterSpacing:'0.05em', minHeight:32}}>
+                        {occupe===t.id?'relance…':'↻ relancer'}
+                      </button>
+                    )}
+                  </div>
+                )}
+                {deplie&&detail&&(
+                  <div style={{fontSize:12, color:'#565861', lineHeight:1.6, marginTop:4,
+                               borderTop:'1px solid '+JULES_GRIS, paddingTop:6, whiteSpace:'pre-wrap'}}>
+                    {detail}
+                  </div>
+                )}
               </div>;
             })}
            </div>}
@@ -8315,6 +8373,7 @@ function TabJules({ profile, prefs }) {
         occupe={occupe}
         actions={{basculerPause:m=>agir(m.id,()=>julesActions.basculerPause(m)),
                   arreterSuivi:s=>agir(s.id,()=>julesActions.arreterSuivi(s)),
+                  relancerTache:t=>agir(t.id,()=>julesActions.relancerTache(t)),
                   modifier:m=>setAModifier(m),
                   fermer:m=>setAFermer(m)}}/>}
       {aModifier&&<JulesModifierMission mission={aModifier} onClose={()=>setAModifier(null)}
