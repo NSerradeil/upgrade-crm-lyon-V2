@@ -7429,6 +7429,34 @@ function julesApproTeinte(a){
   if(julesApproCritique(a)) return JULES_ROUGE;
   return julesApproEchanger(a) ? JULES_BLEU : JULES_VERT;
 }
+// Suivi de résolution d'un blocage (spec §5.1 étendue) : sur qui ça attend + fraîcheur.
+// Lu depuis le dernier event de la tâche liée (agent_events, déjà chargés). Répond à la
+// question de Nicolas « comment ça avance, quand débloqué » directement sur la carte.
+function julesSuiviResolution(a, events){
+  const evs = a.task_id ? (events||[]).filter(e=>e.task_id===a.task_id) : [];
+  const last = evs[0];  // events triés at desc dans useJulesData
+  const k = last ? String(last.kind) : '';
+  let etat, couleur;
+  if(/waiting_go/.test(k))      { etat='attend ton GO'; couleur=JULES_JAUNE; }
+  else if(/done/.test(k))       { etat='résolu, à revalider'; couleur=JULES_VERT; }
+  else if(/failed/.test(k))     { etat='en échec'; couleur=JULES_ROUGE; }
+  else if(/claimed|requeued|created/.test(k)) { etat='en cours'; couleur=JULES_BLEU; }
+  else                          { etat='en cours'; couleur=JULES_BLEU; }  // pas de tâche liée → présumé traité
+  return {etat, couleur, age: julesAge(last ? last.at : a.created_at)};
+}
+function JulesSuiviLigne({ a, events }){
+  if(a.nature!=='bloque') return null;
+  const s = julesSuiviResolution(a, events);
+  return (
+    <div style={{display:'flex', alignItems:'center', gap:6, fontSize:11, fontWeight:700, color:'#565861'}}
+         onClick={e=>e.stopPropagation()}>
+      <span className={s.etat==='en cours'?'jules-pouls':''} style={{width:8, height:8, borderRadius:'50%', background:s.couleur, flexShrink:0}}/>
+      <span style={{textTransform:'uppercase', letterSpacing:'0.04em'}}>Suivi :</span>
+      <span style={{color:s.couleur}}>{s.etat}</span>
+      <span style={{color:JULES_GRIS_F, marginLeft:'auto'}}>MAJ il y a {s.age}</span>
+    </div>
+  );
+}
 const JULES_SLACK_PATH = 'M6 15a2 2 0 1 1-2-2h2v2zm1 0a2 2 0 0 1 4 0v5a2 2 0 1 1-4 0v-5zM9 6a2 2 0 1 1 2-2v2H9zm0 1a2 2 0 0 1 0 4H4a2 2 0 1 1 0-4h5zm9 2a2 2 0 1 1 2 2h-2V9zm-1 0a2 2 0 0 1-4 0V4a2 2 0 1 1 4 0v5zm-2 9a2 2 0 1 1-2 2v-2h2zm0-1a2 2 0 0 1 0-4h5a2 2 0 1 1 0 4h-5z';
 
 // Bandeau d'accueil : dit ce que la page permet + trois compteurs qui mènent aux trois zones.
@@ -7607,7 +7635,7 @@ const JULES_FILTRES = [
   {cle:'go',       label:'Go / No-go', dot:JULES_VERT},
   {cle:'critique', label:'Critique', dot:JULES_ROUGE},
 ];
-function JulesParapheur({ entrees, onAccorder, onAjuster, onRefuser, onRepondre, onOuvrir, onDiscuter, actionEnCours }) {
+function JulesParapheur({ entrees, onAccorder, onAjuster, onRefuser, onRepondre, onOuvrir, onDiscuter, actionEnCours, events }) {
   const [filtre,setFiltre] = useState('tout');
   if(!entrees.length) return <div style={{fontSize:13, color:'#565861'}}>Rien n'attend ta décision.</div>;
   const gardees = entrees.filter(a=>{
@@ -7655,6 +7683,8 @@ function JulesParapheur({ entrees, onAccorder, onAjuster, onRefuser, onRepondre,
               <div style={{fontSize:13.5, fontWeight:800, color:JULES_NOIR, lineHeight:1.25}}>{julesTitre(a.titre)}</div>
               {a.detail&&<div style={{fontSize:12, color:'#565861', lineHeight:1.35, display:'-webkit-box',
                             WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden'}}>{julesTitre(a.detail)}</div>}
+              {a.nature==='bloque'&&<div style={{borderTop:'1px dashed '+JULES_GRIS, paddingTop:7}}>
+                <JulesSuiviLigne a={a} events={events}/></div>}
               <JulesActionsAppro a={a} occupe={occupe} onDiscuter={onDiscuter}
                 onAccorder={onAccorder} onAjuster={onAjuster} onRefuser={onRefuser} onRepondre={onRepondre}/>
             </div>
@@ -7667,7 +7697,7 @@ function JulesParapheur({ entrees, onAccorder, onAjuster, onRefuser, onRepondre,
 
 // Volet de détail d'une entrée du parapheur (spec §3.2/§3.5) : tout le contexte + les mêmes
 // gestes. La conversation libre (« les mots ») passera par Slack au sous-projet 360.
-function JulesApercuAppro({ entree, onClose, onAccorder, onAjuster, onRefuser, onRepondre, onDiscuter, occupe }) {
+function JulesApercuAppro({ entree, onClose, onAccorder, onAjuster, onRefuser, onRepondre, onDiscuter, occupe, events }) {
   const a = entree;
   const teinte = julesApproTeinte(a);
   const tag = a.nature==='go' ? 'Go / No-go' : a.nature==='bloque' ? 'Bloqué' : 'Décision';
@@ -7679,6 +7709,8 @@ function JulesApercuAppro({ entree, onClose, onAccorder, onAjuster, onRefuser, o
       </span>}
       actions={<JulesActionsAppro a={a} occupe={occupe} onDiscuter={onDiscuter}
         onAccorder={onAccorder} onAjuster={onAjuster} onRefuser={onRefuser} onRepondre={onRepondre}/>}>
+      {a.nature==='bloque'&&<div style={{border:'2px solid '+JULES_NOIR, padding:'10px 12px'}}>
+        <JulesSuiviLigne a={a} events={events}/></div>}
       <Field label={'Depuis '+julesAge(a.created_at)}>
         {a.detail ? <div style={{fontSize:13, color:'#333', lineHeight:1.55}}><JulesTexteRiche texte={a.detail}/></div>
                   : <div style={{fontSize:13, color:'#565861'}}>Pas de détail supplémentaire.</div>}
@@ -8748,7 +8780,7 @@ function TabJules({ profile, prefs, deepLink }) {
         <JulesParapheur entrees={J.data.parapheur}
           onAccorder={approOnAccorder} onAjuster={approOnAjuster}
           onRefuser={approOnRefuser} onRepondre={approOnRepondre} onDiscuter={discuter}
-          onOuvrir={a=>setApercu(a)} actionEnCours={occupe}/>
+          onOuvrir={a=>setApercu(a)} actionEnCours={occupe} events={J.data.events}/>
       </JulesZone>
       <JulesZone id="tourne" titre="Ce qui tourne" compteur={J.data.encours.length}
         hint="La journée de Jules · fait ✓ · en cours ● · planté ✕">
@@ -8766,7 +8798,7 @@ function TabJules({ profile, prefs, deepLink }) {
         onOuvrirMission={id=>{ setPin(null); setDetailId(id); }}/>}
       {apercu&&<JulesApercuAppro entree={apercu} occupe={occupe} onClose={()=>setApercu(null)}
         onAccorder={approOnAccorder} onAjuster={approOnAjuster}
-        onRefuser={approOnRefuser} onRepondre={approOnRepondre} onDiscuter={discuter}/>}
+        onRefuser={approOnRefuser} onRepondre={approOnRepondre} onDiscuter={discuter} events={J.data.events}/>}
       {detailId&&<JulesDetail missionId={detailId} data={J.data} onClose={()=>setDetailId(null)}
         occupe={occupe} discuter={discuter}
         actions={{basculerPause:m=>agir(m.id,()=>julesActions.basculerPause(m)),
