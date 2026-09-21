@@ -7356,12 +7356,13 @@ function useJulesData() {
       sb.from('agent_missions').select('*').in('statut',['active','paused']).order('updated_at',{ascending:false}),
       sb.from('agent_sequences').select('*').order('next_due_at',{ascending:true,nullsFirst:false}),
       sb.from('agent_events').select('*').order('at',{ascending:false}).limit(200),
+      sb.from('agent_v_journee').select('mission_id,titre,prevu_at,etat').order('prevu_at'),
     ]);
     const ko = r.find(x=>x.error);
     if(ko) throw new Error(ko.error.message);
     return {parapheur:r[0].data||[], encours:r[1].data||[], dueToday:r[2].data||[],
             backlog:r[3].data||[], campagnes:r[4].data||[], missions:r[5].data||[],
-            sequences:r[6].data||[], events:r[7].data||[]};
+            sequences:r[6].data||[], events:r[7].data||[], journee:r[8].data||[]};
   },[]);
 
   // Empreinte : ce qui, en changeant, mérite d'annoncer une nouveauté. On ne compte
@@ -7372,6 +7373,7 @@ function useJulesData() {
     du: d.dueToday.map(t=>String(t.kind)+t.id).sort(),
     ba: d.backlog.map(m=>[m.id,m.statut,m.nb_due,m.nb_claimed,m.nb_waiting_go,m.nb_failed].join(':')).sort(),
     ca: d.campagnes.map(m=>[m.id,m.statut,m.nb_active,m.nb_replied,m.nb_due_today].join(':')).sort(),
+    jo: (d.journee||[]).map(x=>x.mission_id+String(x.prevu_at)+x.etat).sort(),
   });
 
   const rechargerMaintenant = useCallback(async () => {
@@ -7967,7 +7969,13 @@ function JulesDetail({ missionId, data, onClose, actions, occupe }) {
               // Un « done » ne dit pas si la tâche a tout fait : le détail vit dans result.summary
               // (cas vécu 21/09 — une ronde close en done avait en réalité échoué sur Slack, et
               // rien ne le montrait). On ne crie pas pour autant : le résumé se déplie au clic.
-              const detail = t.result && (t.result.summary || t.result.error);
+              // Le détail ne vit pas toujours sous `summary` : un worker qui se termine sans
+              // appeler agent_task_done est clos par le scheduler, qui écrit {rc, note}. C'est
+              // justement le cas qu'on veut pouvoir lire — il dit que la tâche n'a pas rendu
+              // compte. On prend donc le premier texte disponible, et à défaut tout le result
+              // brut : mieux vaut du JSON lisible que pas de bouton du tout.
+              const detail = t.result && (t.result.summary || t.result.error || t.result.note
+                || (Object.keys(t.result).length ? JSON.stringify(t.result, null, 1) : null));
               const deplie = detailOuvert===t.id;
               const rejouable = ['done','failed','cancelled'].includes(t.statut);
               return <div key={t.id} style={{border:'2px solid '+JULES_GRIS, padding:8}}>
