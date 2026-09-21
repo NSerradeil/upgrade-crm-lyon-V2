@@ -8054,6 +8054,58 @@ const JULES_TYPE_MISSION = {
 };
 
 const JULES_ETAT_RANG = {'en échec':0,'en cours':1,'attend un accord':2,'à relancer':3,'réponses':4,'en attente':5,'en pause':6,'au calme':7};
+// Où en est une personne dans le parcours de la campagne (demande Nicolas 21/09 : « on ne
+// sait pas si on est au bout d'une séquence pour un contact »). Jusqu'ici la fiche affichait
+// « étape 3 » — un nombre sans échelle, qui ne dit ni ce qui a été fait, ni ce qu'il reste.
+//
+// Le parcours est entièrement déterminé par la config de la campagne : invitation → message
+// → autant de relances que `cadence.relances` en prévoit (défaut par preset, cf.
+// bin/seqcadence.py, source unique de la machine à états — ne pas diverger d'elle).
+const JULES_SEQ_CADENCE_DEFAUT = { recrutement: [4, 10], prospection: [14, 30] };
+function julesSeqRelances(config) {
+  const sur = ((config||{}).cadence||{}).relances;
+  if (Array.isArray(sur) && sur.length) return sur;
+  return JULES_SEQ_CADENCE_DEFAUT[(config||{}).preset] || JULES_SEQ_CADENCE_DEFAUT.prospection;
+}
+// Rend { faits, total, etapes[], sortie }. `sortie` = la séquence a quitté le parcours par le
+// haut (a répondu, convertie) ou par le bas (arrêtée) : ce n'est pas « plus loin » dans le
+// parcours, c'est en sortir — on ne le montre donc jamais comme une progression.
+function julesSeqParcours(seq, config) {
+  const nbRelances = julesSeqRelances(config).length;
+  const noms = ['Invitation', 'Message'].concat(
+    Array.from({length: nbRelances}, (_, i) => 'Relance ' + (i + 1)));
+  const etape = Number(seq.etape || 0);
+  // etape : 0 identifié · 1 invité · 2 accepté (message dû) · 3 messagé · 3+n relancé n
+  //         6 répondu · 7 converti (réservées, cf. seqcadence.ETAPES)
+  let faits;
+  if (etape >= 6) faits = noms.length;              // sorti par le haut : parcours sans objet
+  else if (etape <= 0) faits = 0;
+  else if (etape <= 2) faits = 1;                   // invitation partie (acceptée ou non)
+  else faits = Math.min(2 + (etape - 3), noms.length);
+  // « arrêté » est ambigu : un parcours allé au bout sans réponse et un arrêt manuel portent
+  // le même statut `stopped`. On les distingue — c'est justement la question de Nicolas
+  // (« est-ce qu'on est au bout ? »), et la réponse n'est pas la même dans les deux cas.
+  const auBout = faits >= noms.length;
+  const sortie = etape === 7 ? 'converti' : etape === 6 ? 'a répondu'
+               : seq.statut === 'stopped' ? (auBout ? 'parcours terminé, sans réponse' : 'arrêté en cours de route')
+               : null;
+  return { faits, total: noms.length, etapes: noms, sortie,
+           termine: !sortie && auBout };
+}
+// La barre : un segment par étape du parcours, plein = fait. Plus lisible qu'un pourcentage
+// sur 3 ou 4 étapes, et ça tient dans la DA (carrés nets, pas de dégradé ni d'arrondi).
+function JulesSeqBarre({ parcours, couleur }) {
+  const { faits, total, etapes } = parcours;
+  return (
+    <span style={{display:'inline-flex', gap:3, alignItems:'center'}} title={etapes.map((n,i)=>(i<faits?'✓ ':'· ')+n).join('\n')}>
+      {etapes.map((n,i)=>(
+        <span key={i} style={{width:16, height:8, border:'1.5px solid '+JULES_NOIR,
+                              background: i<faits ? (couleur||JULES_NOIR) : 'transparent'}}/>
+      ))}
+    </span>
+  );
+}
+
 function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
   const missMap = useMemo(()=>Object.fromEntries((missions||[]).map(m=>[m.id,m])),[missions]);
   const campMap = useMemo(()=>Object.fromEntries((campagnes||[]).map(c=>[c.id,c])),[campagnes]);
@@ -8550,14 +8602,20 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
             {seqs.map(s=>{
               const st=JULES_SEQ_STATUT_STYLE[s.statut]||JULES_SEQ_STATUT_STYLE.stopped;
               const mot={active:'Suivi actif',replied:'A répondu',converted:'Converti',stopped:'Arrêté'}[s.statut]||s.statut;
+              const parc=julesSeqParcours(s, cfg);
+              // Ce qu'on VEUT lire d'un coup d'œil : où on en est et s'il reste quelque chose.
+              const ouEnEst = parc.sortie ? parc.sortie
+                            : parc.termine ? 'parcours terminé'
+                            : (parc.etapes[parc.faits] || '?') + ' à venir';
               const deplie=seqOuvert===s.id;
               const jrn=(data.events||[]).filter(e=>e.sequence_id===s.id).slice(0,6);
               return <div key={s.id} style={{border:'2px solid '+JULES_GRIS, padding:8}}>
                 <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
                   <ColorBadge label={mot} bg={st.bg} color={st.color}/>
                   <span style={{fontSize:13, fontWeight:700, color:JULES_NOIR, flex:1, minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(s.target_label)}</span>
+                  <JulesSeqBarre parcours={parc} couleur={st.bg}/>
                   <span style={{fontSize:11, color:JULES_GRIS_F, textTransform:'uppercase', letterSpacing:'0.05em'}}>
-                    étape {s.etape}{s.next_due_at?' · '+extractDate(s.next_due_at):''}
+                    {parc.faits}/{parc.total} · {ouEnEst}{s.next_due_at?' · '+extractDate(s.next_due_at):''}
                   </span>
                   {s.statut==='active'&&<span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
                     <BtnAction onClick={()=>actions.arreterSuivi(s)} icon={ICONS.stop} label="Arrêter"
@@ -8575,7 +8633,25 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
                 </div>
                 {deplie&&(
                   <div style={{marginTop:6, borderTop:'1px solid '+JULES_GRIS, paddingTop:6, fontSize:12, color:'#565861', lineHeight:1.5}}>
-                    <div>Statut : <strong style={{color:JULES_NOIR}}>{mot}</strong> · étape {s.etape}{s.next_due_at?' · prochaine échéance '+extractDate(s.next_due_at):''}</div>
+                    <div>Statut : <strong style={{color:JULES_NOIR}}>{mot}</strong>{s.next_due_at?' · prochaine échéance '+extractDate(s.next_due_at):''}</div>
+                    <div style={{marginTop:6, display:'flex', flexDirection:'column', gap:2}}>
+                      {parc.etapes.map((nom,i)=>{
+                        const fait=i<parc.faits;
+                        const courant=!parc.sortie && i===parc.faits;
+                        return <div key={i} style={{display:'flex', gap:7, alignItems:'baseline',
+                                                    color: fait?JULES_NOIR:(courant?JULES_NOIR:JULES_GRIS_F),
+                                                    fontWeight: courant?800:(fait?700:400)}}>
+                          <span style={{flexShrink:0, width:14}}>{fait?'✓':(courant?'▸':'·')}</span>
+                          <span>{nom}{courant?(s.next_due_at?' — due le '+extractDate(s.next_due_at):' — à venir'):''}</span>
+                        </div>;
+                      })}
+                      {parc.sortie&&<div style={{marginTop:4, fontWeight:700, color:JULES_NOIR}}>
+                        Sorti du parcours : {parc.sortie}.
+                      </div>}
+                      {!parc.sortie&&parc.termine&&<div style={{marginTop:4, fontWeight:700, color:JULES_NOIR}}>
+                        Parcours terminé — plus aucune relance prévue.
+                      </div>}
+                    </div>
                     {s.notes&&<div style={{marginTop:4}}>{julesTitre(s.notes)}</div>}
                     {jrn.length>0 && <div style={{marginTop:6, display:'flex', flexDirection:'column', gap:3}}>
                       {jrn.map(e=>(
