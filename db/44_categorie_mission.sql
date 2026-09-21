@@ -12,10 +12,14 @@ alter table public.agent_missions
 
 -- 2) Migrer le vocabulaire des task_types (drop 'chasse')
 alter table public.agent_task_types drop constraint if exists agent_task_types_categorie_check;
+-- Défaut raisonnable pour la chasse générique ; les campagnes / lk / libre sont business OU
+-- recrutement selon la mission → décidé par l'override mission (défaut null).
 update public.agent_task_types set categorie = 'business' where type = 'chasse.sourcer';
--- Les campagnes et le type libre sont business OU recrutement selon la mission → décidé par
--- l'override mission, pas par le task_type (défaut null).
-update public.agent_task_types set categorie = null where type in ('campagne.lire','campagne.envoyer','campagne.alimenter','libre');
+-- Filet générique : TOUTE catégorie hors du nouveau vocab (ex. 'chasse' sur campagne.*, lk.envoyer…)
+-- retombe à null, décidée par l'override mission. Évite toute violation de contrainte.
+update public.agent_task_types set categorie = null
+ where categorie is not null
+   and categorie not in ('business','recrutement','veille','relance','pilotage','admin');
 alter table public.agent_task_types
   add constraint agent_task_types_categorie_check
   check (categorie is null or categorie in ('business','recrutement','veille','relance','pilotage','admin'));
