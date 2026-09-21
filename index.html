@@ -8448,6 +8448,27 @@ const julesActions = {
     // gardait son ancienne heure). Les tâches DÉJÀ EN FILE portent leur propre due_at : on
     // les réaligne sur l'heure de cadence la plus proche, le même jour. Sans ça, on modifie
     // une mission en croyant l'avoir déplacée, et elle repart à l'ancienne heure.
+    // Date de traitement d'une ponctuelle : on crée la tâche si elle n'existe pas, sinon on
+    // replanifie celle qui est déjà en file — jamais deux tâches pour la même intention.
+    if(champs.traiter_le){
+      const { data: deja } = await sb.from('agent_tasks')
+        .select('id').eq('mission_id', m.id).eq('statut','due').limit(1);
+      if(deja&&deja.length){
+        await sb.from('agent_tasks').update({due_at:champs.traiter_le}).eq('id', deja[0].id);
+        await sb.from('agent_events').insert({actor:'crm', kind:'task.replanifiee',
+          task_id:deja[0].id, mission_id:m.id, message:champs.titre});
+      } else {
+        const { data: neuve, error: errT } = await sb.from('agent_tasks').insert({
+          mission_id:m.id, titre:champs.titre, type:'libre', statut:'due',
+          priorite:champs.priorite, due_at:champs.traiter_le,
+          payload:{instruction: champs.contexte || champs.titre},
+        }).select('id');
+        if(errT) throw new Error('Tâche non créée : '+errT.message);
+        await sb.from('agent_events').insert({actor:'crm', kind:'task.created',
+          task_id:(neuve&&neuve[0]||{}).id, mission_id:m.id,
+          message:'Planifiée depuis la fiche mission — '+champs.titre});
+      }
+    }
     const heures = ((champs.cadence||{}).times)||[];
     if(heures.length){
       const { data: futures } = await sb.from('agent_tasks')
@@ -9249,13 +9270,21 @@ function JulesModifierMission({ mission, onClose, onSave, saving }) {
   const cadenceModifiable = !!cad;
   const heuresPropres = heures.map(x=>String(x||'').trim()).filter(Boolean);
   const cadenceOk = !cadenceModifiable || (heuresPropres.length>0 && jours.length>0);
+  // Une mission PONCTUELLE sans cadence ne produit AUCUNE tâche : le dépileur ne prend que
+  // des tâches déjà en base (`statut='due' and due_at <= now()`, trié par priorité puis
+  // échéance). La priorité n'ordonne donc que ce qui existe — une ponctuelle sans tâche
+  // reste lettre morte, quelle que soit sa priorité. D'où ce champ (Nicolas 22/09) : donner
+  // une date de traitement, c'est ce qui CRÉE la tâche.
+  const ponctuelle = !cad;
+  const [quand,setQuand] = useState('');
   const champ = JULES_CHAMP;
   return (
     <Modal title="Modifier la mission" onClose={onClose}
       footer={<ModalFooter onClose={onClose} saving={saving} disabled={!titre.trim()||!cadenceOk}
         onSave={()=>onSave({titre:titre.trim(), priorite:Number(priorite),
                             categorie: categorie || null, contexte,
-                            ...(cadenceModifiable ? {cadence:{...cad, days:jours, times:heuresPropres}} : {})})}/>}>
+                            ...(cadenceModifiable ? {cadence:{...cad, days:jours, times:heuresPropres}} : {}),
+                            ...(ponctuelle && quand ? {traiter_le: new Date(quand).toISOString()} : {})})}/>}>
       <Field label="Titre">
         <input value={titre} onChange={e=>setTitre(e.target.value)} style={champ}/>
       </Field>
@@ -9285,6 +9314,17 @@ function JulesModifierMission({ mission, onClose, onSave, saving }) {
             file seront réalignées sur la nouvelle heure.
           </div>
         </>
+      )}
+      {ponctuelle&&(
+        <Field label="Traiter le (facultatif)">
+          <input type="datetime-local" value={quand} onChange={e=>setQuand(e.target.value)}
+            style={{...champ, width:240}}/>
+          <div style={{fontSize:11.5, color:'#565861', marginTop:5, lineHeight:1.5}}>
+            Une mission ponctuelle ne se lance pas toute seule : tant qu'aucune tâche n'existe,
+            la priorité n'ordonne rien. Poser une date ici crée la tâche — laisse vide pour ne
+            rien planifier.
+          </div>
+        </Field>
       )}
       <Field label="Contexte">
         <textarea value={contexte} onChange={e=>setContexte(e.target.value)} rows={8}
