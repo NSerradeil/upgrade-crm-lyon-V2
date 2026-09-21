@@ -8558,7 +8558,7 @@ function JulesModifierMission({ mission, onClose, onSave, saving }) {
   );
 }
 
-function TabJules({ profile, prefs }) {
+function TabJules({ profile, prefs, deepLink }) {
   const J = useJulesData();
   const [detailId,setDetailId] = useState(null);
   const [occupe,setOccupe] = useState(null);      // id de l'objet en cours d'écriture
@@ -8583,6 +8583,16 @@ function TabJules({ profile, prefs }) {
   const approOnAjuster  = a=>{ setApercu(null); setAAjuster(a); };
   const approOnRefuser  = a=>{ setApercu(null); setARefuser(a); };
   const approOnRepondre = a=>{ setApercu(null); setARepondre(a); };
+  // Consomme le deep-link une fois les données lues : ouvre le volet de l'appro ou la mission.
+  const deepLinkFait = useRef(false);
+  useEffect(()=>{
+    if(deepLinkFait.current || !deepLink || !J.data) return;
+    deepLinkFait.current = true;
+    if(deepLink.appro){ const a=(J.data.parapheur||[]).find(x=>x.id===deepLink.appro); if(a) setApercu(a); }
+    else if(deepLink.mission){ setDetailId(deepLink.mission); }
+    try{ if(window.history&&window.history.replaceState)
+      window.history.replaceState(null,'',window.location.pathname); }catch(e){}
+  },[deepLink, J.data]);
   if(!J.data&&J.chargement) return <Loader label="Lecture de l'état de Jules…"/>;
   if(!J.data) return (
     <div className="tab-content">
@@ -10290,7 +10300,14 @@ function App() {
   const [prefs,setPrefs]=useState({});
   const [orgDefaults,setOrgDefaults]=useState([]);
   const [data,setData]=useState(null); const [loading,setLoading]=useState(false);
-  const [error,setError]=useState(null); const [tab,setTab]=useState('taches');
+  // Deep-link (?tab=jules&appro=<id> | &mission=<id>) : ouvre l'onglet Jules sur le bon item.
+  // Lu une fois au montage ; l'URL est nettoyée après pour qu'un refresh ne le rejoue pas.
+  const julesDeepLink = useMemo(()=>{ try{
+    const p=new URLSearchParams(window.location.search);
+    if(p.get('tab')!=='jules') return null;
+    return {appro:p.get('appro')||null, mission:p.get('mission')||null};
+  }catch(e){ return null; } },[]);
+  const [error,setError]=useState(null); const [tab,setTab]=useState(julesDeepLink?'jules':'taches');
   const initialTabSetRef=useRef(false);
   const [lastRefresh,setLastRefresh]=useState(null);
   const [viewAs,setViewAs]=useState(null); const [allProfiles,setAllProfiles]=useState([]);
@@ -10413,7 +10430,7 @@ function App() {
       setProfile(p);
       if(p){
         setTimeout(function(){loadAchievements(p.nom).then(function(a){setAchievements(a);});},2000);
-        if(!initialTabSetRef.current&&p.preferences&&p.preferences.default_tab){setTab(p.preferences.default_tab);initialTabSetRef.current=true;}
+        if(!initialTabSetRef.current&&!julesDeepLink&&p.preferences&&p.preferences.default_tab){setTab(p.preferences.default_tab);initialTabSetRef.current=true;}
         setPrefs(p.preferences||{});
       } else {
         setPrefs({});
@@ -10709,7 +10726,7 @@ function App() {
         {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} comptes={vComptes} compteMap={compteMap} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToCompte={navToCompte} prefs={prefs}/>}
         {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} contactMap={contactMap} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache}/>}
         {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} missionPeriods={missionPeriods} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navMissionId={navMissionId} navMissionKey={navMissionKey} comptes={vComptes} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache} onNavToCompte={navToCompte} prefs={prefs}/>}
-        {tab==='jules'    &&julesOn&&<TabJules profile={profile} prefs={prefs}/>}
+        {tab==='jules'    &&julesOn&&<TabJules profile={profile} prefs={prefs} deepLink={julesDeepLink}/>}
         {tab==='settings' &&<TabSettings user={user} profile={activeProfile} taches={vTaches} subTab={settingsSubTab} onSubTabChange={setSettingsSubTab} prefs={prefs} onSavePrefs={viewAs?null:savePrefs} achievements={activeAchievements} viewAs={!!viewAs}/>}
       </div>
       {/* Shortcuts modal */}
