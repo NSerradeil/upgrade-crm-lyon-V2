@@ -7709,51 +7709,40 @@ function JulesFrise({ journee, onOuvrir }) {
   const now=new Date(); const nowH=now.getHours()+now.getMinutes()/60;
   const nowPct=(nowH-JULES_FRISE_DEB)/(JULES_FRISE_FIN-JULES_FRISE_DEB)*100;
   const heures=[]; for(let h=JULES_FRISE_DEB; h<=JULES_FRISE_FIN; h+=2) heures.push(h);
+  // Peu de passages (les routines du jour) : on remet le libellé SUR la pastille, en alternant
+  // haut/bas, et le symbole d'état dans la pastille (cohérent avec la légende ✓ ● ✕).
   return (
-    <div style={{border:'2px solid '+JULES_NOIR, boxShadow:'4px 4px 0 '+JULES_GRIS, background:'#fff'}}>
-      {/* Axe : uniquement des pastilles colorées par état, sans libellé (sinon ça se chevauche).
-          Le détail lisible est dans la liste dessous. */}
-      <div style={{padding:'20px 24px 14px', overflowX:'auto'}}>
-        <div style={{position:'relative', minWidth:520, height:34}}>
-          <div style={{position:'absolute', left:0, right:0, top:16, height:3, background:JULES_NOIR}}/>
-          {heures.map(h=>{ const p=(h-JULES_FRISE_DEB)/(JULES_FRISE_FIN-JULES_FRISE_DEB)*100; return (
-            <React.Fragment key={h}>
-              <div style={{position:'absolute', top:11, left:p+'%', width:1.5, height:13, background:JULES_GRIS, transform:'translateX(-50%)'}}/>
-              <div style={{position:'absolute', top:24, left:p+'%', transform:'translateX(-50%)', fontSize:9.5, color:JULES_GRIS_F, fontWeight:700}}>{h}h</div>
-            </React.Fragment>
-          );})}
-          {nowPct>=0&&nowPct<=100&&(
-            <div style={{position:'absolute', top:-4, height:24, left:nowPct+'%', width:2, background:JULES_ROUGE, transform:'translateX(-50%)'}}>
-              <span style={{position:'absolute', top:-13, left:'50%', transform:'translateX(-50%)', fontSize:8, fontWeight:800, color:JULES_ROUGE, whiteSpace:'nowrap', textTransform:'uppercase', letterSpacing:'0.05em'}}>maintenant</span>
-            </div>
-          )}
-          {journee.map(r=>{
-            const col=JULES_ETAT_COULEUR[r.etat]||JULES_GRIS_F;
-            return <div key={r.mission_id+r.prevu_at} title={julesTitre(r.titre)+' — '+extractTime(r.prevu_at)}
-              className={r.etat==='running'?'jules-pouls':''}
-              style={{position:'absolute', top:16, left:julesFrisePct(r.prevu_at)+'%', transform:'translate(-50%,-50%)',
-                      width:13, height:13, borderRadius:'50%', background:r.etat==='pending'?'#fff':col,
-                      border:'2px solid '+(r.etat==='pending'?JULES_GRIS_F:col)}}/>;
-          })}
-        </div>
-      </div>
-      {/* La liste : lisible, scannable, cliquable → ouvre la mission. */}
-      <div style={{borderTop:'2px solid '+JULES_GRIS, padding:10, display:'grid',
-                   gridTemplateColumns:'repeat(auto-fill,minmax(232px,1fr))', gap:6}}>
-        {journee.map(r=>{
-          const col=JULES_ETAT_COULEUR[r.etat]||JULES_GRIS_F;
+    <div style={{border:'2px solid '+JULES_NOIR, boxShadow:'4px 4px 0 '+JULES_GRIS, background:'#fff', padding:'24px 26px 18px', overflowX:'auto'}}>
+      <div style={{position:'relative', minWidth:560, height:118, margin:'0 8px'}}>
+        <div style={{position:'absolute', left:0, right:0, top:59, height:3, background:JULES_NOIR}}/>
+        {heures.map(h=>{ const p=(h-JULES_FRISE_DEB)/(JULES_FRISE_FIN-JULES_FRISE_DEB)*100; return (
+          <React.Fragment key={h}>
+            <div style={{position:'absolute', top:54, left:p+'%', width:1.5, height:13, background:JULES_GRIS, transform:'translateX(-50%)'}}/>
+            <div style={{position:'absolute', top:67, left:p+'%', transform:'translateX(-50%)', fontSize:9.5, color:JULES_GRIS_F, fontWeight:700}}>{h}h</div>
+          </React.Fragment>
+        );})}
+        {nowPct>=0&&nowPct<=100&&(
+          <div style={{position:'absolute', top:26, bottom:26, left:nowPct+'%', width:2, background:JULES_ROUGE, transform:'translateX(-50%)'}}>
+            <span style={{position:'absolute', top:-14, left:'50%', transform:'translateX(-50%)', fontSize:8, fontWeight:800, color:JULES_ROUGE, whiteSpace:'nowrap', textTransform:'uppercase', letterSpacing:'0.05em'}}>maintenant</span>
+          </div>
+        )}
+        {journee.map((r,i)=>{
+          const col=JULES_ETAT_COULEUR[r.etat]||JULES_GRIS_F; const pend=r.etat==='pending'; const haut=i%2===0;
           return (
-            <button key={'l'+r.mission_id+r.prevu_at} onClick={()=>onOuvrir&&onOuvrir(r.mission_id)}
-              title={julesTitre(r.titre)}
-              style={{display:'flex', alignItems:'center', gap:8, textAlign:'left', background:'none', border:'none',
-                      padding:'5px 6px', cursor:onOuvrir?'pointer':'default', fontFamily:'Outfit,sans-serif', minWidth:0}}
-              onMouseEnter={e=>e.currentTarget.style.background='#F4F3EE'}
-              onMouseLeave={e=>e.currentTarget.style.background='none'}>
-              <span className={r.etat==='running'?'jules-pouls':''} style={{width:9, height:9, borderRadius:'50%', flexShrink:0,
-                    background:r.etat==='pending'?'#fff':col, border:'1.5px solid '+(r.etat==='pending'?JULES_GRIS_F:col)}}/>
-              <span style={{fontFamily:'IBM Plex Mono,monospace', fontSize:11, fontWeight:600, color:JULES_NOIR, flexShrink:0, width:38}}>{extractTime(r.prevu_at)}</span>
-              <span style={{fontSize:12.5, fontWeight:700, color:JULES_NOIR, minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(r.titre)}</span>
-              <span style={{fontSize:10, fontWeight:800, color:col, textTransform:'uppercase', letterSpacing:'0.04em', flexShrink:0, marginLeft:'auto'}}>{JULES_ETAT_MOT[r.etat]}</span>
+            <button key={r.mission_id+r.prevu_at} onClick={()=>onOuvrir&&onOuvrir(r.mission_id)}
+              title={julesTitre(r.titre)+' — '+JULES_ETAT_MOT[r.etat]}
+              style={{position:'absolute', top:59, left:julesFrisePct(r.prevu_at)+'%', transform:'translate(-50%,-50%)',
+                      background:'none', border:'none', padding:0, cursor:onOuvrir?'pointer':'default', fontFamily:'Outfit,sans-serif'}}>
+              <span style={{position:'absolute', left:'50%', transform:'translateX(-50%)', width:96, textAlign:'center',
+                            fontSize:10.5, fontWeight:800, lineHeight:1.15, color:JULES_NOIR, ...(haut?{bottom:26}:{top:26})}}>
+                {julesTitre(r.titre)}
+                <span style={{display:'block', fontFamily:'IBM Plex Mono,monospace', fontSize:9, color:JULES_GRIS_F, fontWeight:600}}>{extractTime(r.prevu_at)}</span>
+              </span>
+              <span className={r.etat==='running'?'jules-pouls':''}
+                style={{display:'grid', placeItems:'center', width:28, height:28, borderRadius:'50%',
+                        background:pend?'#fff':col, color:pend?JULES_GRIS_F:'#fff',
+                        border:'2px solid '+(pend?JULES_GRIS_F:col), borderStyle:pend?'dashed':'solid',
+                        fontSize:14, fontWeight:800, boxShadow:'2px 2px 0 '+JULES_GRIS}}>{JULES_ETAT_CAP[r.etat]}</span>
             </button>
           );
         })}
@@ -7782,7 +7771,10 @@ function JulesEncours({ journee, encours, dueToday, onOuvrir }) {
         </div>
       )}
       {dueToday.length>0&&(
-        <div style={{borderTop:'2px solid '+JULES_GRIS, paddingTop:10}}>
+        <div style={{borderTop:'2px solid '+JULES_NOIR, paddingTop:12, marginTop:2}}>
+          <div style={{fontSize:12, fontWeight:800, color:JULES_NOIR, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:10}}>
+            Échéances du jour <span style={{color:JULES_GRIS_F, fontWeight:600, textTransform:'none', letterSpacing:0}}>— les tâches datées de Jules (relances, envois programmés)</span>
+          </div>
           {/* La vue agent_v_due_today prend tout ce qui est dû AVANT demain : un retard de
               trois semaines s'y affichait comme une échéance du jour. On sépare, parce que
               « en retard » et « prévu aujourd'hui » n'appellent pas la même réaction. */}
