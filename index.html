@@ -7432,17 +7432,22 @@ function julesApproTeinte(a){
 // Suivi de résolution d'un blocage (spec §5.1 étendue) : sur qui ça attend + fraîcheur.
 // Lu depuis le dernier event de la tâche liée (agent_events, déjà chargés). Répond à la
 // question de Nicolas « comment ça avance, quand débloqué » directement sur la carte.
+// Un blocage TECHNIQUE (≠ métier) : Nicolas n'a rien à « donner », c'est au builder de réparer
+// (règle Nicolas 21/09). On le détecte au vocabulaire pour l'afficher comme tel, jamais comme
+// « attend ton GO » (il n'y a d'ailleurs pas de bouton GO sur une carte Bloqué).
+const JULES_TECH_RE = /sandbox|jules-browser|jules-cdp|\bcdp\b|playwright|moteur d.?envoi|beforeunload|target\.?close|\bnode \b|\bmcp\b|browserenvoi|browsergestes|requires approval|navigateur (cass|d[ée]connect)|script/i;
+function julesBlocageTechnique(a){ return JULES_TECH_RE.test(((a.titre||'')+' '+(a.detail||''))); }
 function julesSuiviResolution(a, events){
   const evs = a.task_id ? (events||[]).filter(e=>e.task_id===a.task_id) : [];
   const last = evs[0];  // events triés at desc dans useJulesData
   const k = last ? String(last.kind) : '';
-  let etat, couleur;
-  if(/waiting_go/.test(k))      { etat='attend ton GO'; couleur=JULES_JAUNE; }
+  let etat, couleur, pulse=false;
+  if(julesBlocageTechnique(a))  { etat='technique — à voir avec le builder'; couleur=JULES_BLEU; }
   else if(/done/.test(k))       { etat='résolu, à revalider'; couleur=JULES_VERT; }
   else if(/failed/.test(k))     { etat='en échec'; couleur=JULES_ROUGE; }
-  else if(/claimed|requeued|created/.test(k)) { etat='en cours'; couleur=JULES_BLEU; }
-  else                          { etat='en cours'; couleur=JULES_BLEU; }  // pas de tâche liée → présumé traité
-  return {etat, couleur, age: julesAge(last ? last.at : a.created_at)};
+  else if(/claimed|requeued|created/.test(k)) { etat='Jules bosse dessus'; couleur=JULES_BLEU; pulse=true; }
+  else                          { etat='en attente de ton info'; couleur=JULES_JAUNE; }  // → bouton « Donner l'info »
+  return {etat, couleur, pulse, tech:julesBlocageTechnique(a), age: julesAge(last ? last.at : a.created_at)};
 }
 function JulesSuiviLigne({ a, events }){
   if(a.nature!=='bloque') return null;
@@ -7450,9 +7455,9 @@ function JulesSuiviLigne({ a, events }){
   return (
     <div style={{display:'flex', alignItems:'center', gap:6, fontSize:11, fontWeight:700, color:'#565861'}}
          onClick={e=>e.stopPropagation()}>
-      <span className={s.etat==='en cours'?'jules-pouls':''} style={{width:8, height:8, borderRadius:'50%', background:s.couleur, flexShrink:0}}/>
+      <span className={s.pulse?'jules-pouls':''} style={{width:8, height:8, borderRadius:'50%', background:s.couleur, flexShrink:0}}/>
       <span style={{textTransform:'uppercase', letterSpacing:'0.04em'}}>Suivi :</span>
-      <span style={{color:s.couleur}}>{s.etat}</span>
+      <span style={{color:s.couleur}}>{s.tech?'🔧 ':''}{s.etat}</span>
       <span style={{color:JULES_GRIS_F, marginLeft:'auto'}}>MAJ il y a {s.age}</span>
     </div>
   );
@@ -8318,6 +8323,11 @@ const JULES_TASK_STATUT_STYLE = {
   failed:     { bg:JULES_ROUGE,  color:'#FFFFFF' },
   cancelled:  { bg:JULES_GRIS_F, color:'#FFFFFF' },
 };
+// Libellés humains (les statuts bruts sont des enum base, en anglais — pas pour Nicolas).
+const JULES_TASK_STATUT_MOT = {
+  due:'À faire', claimed:'En cours', waiting_go:'Attend un GO',
+  done:'Fait', failed:'Échec', cancelled:'Annulée',
+};
 const JULES_SEQ_STATUT_STYLE = {
   active:    { bg:JULES_BLEU,   color:'#FFFFFF' },
   replied:   { bg:JULES_VERT,   color:JULES_NOIR },
@@ -8430,8 +8440,9 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
               const rejouable = ['done','failed','cancelled'].includes(t.statut);
               return <div key={t.id} style={{border:'2px solid '+JULES_GRIS, padding:8}}>
                 <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
-                  <ColorBadge label={t.statut} bg={st.bg} color={st.color}/>
+                  <ColorBadge label={JULES_TASK_STATUT_MOT[t.statut]||t.statut} bg={st.bg} color={st.color}/>
                   <span style={{fontSize:13, fontWeight:700, color:JULES_NOIR}}>{julesTitre(t.titre)}</span>
+                  {t.statut==='waiting_go'&&<span style={{fontSize:10.5, color:JULES_GRIS_F, fontStyle:'italic'}}>le GO se donne sur la carte du parapheur</span>}
                 </div>
                 <div style={{fontSize:11, color:JULES_GRIS_F, marginTop:3, textTransform:'uppercase', letterSpacing:'0.05em'}}>
                   {t.type} · due {extractDate(t.due_at)} {extractTime(t.due_at)}
