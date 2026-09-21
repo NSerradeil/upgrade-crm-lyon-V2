@@ -7472,7 +7472,7 @@ function JulesAccueil({ data, onJump }) {
 // jumeaux (spec §3). L'id sert d'ancre aux compteurs du bandeau d'accueil.
 function JulesZone({ id, titre, compteur, hint, action, children }) {
   return (
-    <section id={id} style={{marginTop:26, scrollMarginTop:12}}>
+    <section id={id} style={{marginTop:26, scrollMarginTop:110}}>
       <div style={{display:'flex', alignItems:'baseline', gap:10, marginBottom:12, flexWrap:'wrap'}}>
         <h2 style={{fontSize:15, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.05em', color:JULES_NOIR, margin:0}}>{titre}</h2>
         {compteur!=null&&compteur>0&&<span style={{background:JULES_NOIR, color:'#fff', fontSize:11, fontWeight:800, padding:'1px 8px', borderRadius:999}}>{compteur}</span>}
