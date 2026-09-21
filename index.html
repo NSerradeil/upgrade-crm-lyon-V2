@@ -7868,30 +7868,86 @@ const JULES_TYPE_MISSION = {
   admin:    {bg:JULES_GRIS,   color:JULES_NOIR},
 };
 
+const JULES_ETAT_RANG = {'en échec':0,'en cours':1,'attend un accord':2,'à relancer':3,'réponses':4,'en attente':5,'en pause':6,'au calme':7};
 function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
   const missMap = useMemo(()=>Object.fromEntries((missions||[]).map(m=>[m.id,m])),[missions]);
   const campMap = useMemo(()=>Object.fromEntries((campagnes||[]).map(c=>[c.id,c])),[campagnes]);
+  const [q,setQ] = useState('');
+  const [fNat,setFNat] = useState('all');
+  const [fType,setFType] = useState('all');
+  const [tri,setTri] = useState({cle:'etat', dir:1});   // par défaut : ce qui bouge en haut
+
+  // Une ligne enrichie de tout ce qui sert à trier/filtrer.
+  const lignes = useMemo(()=>(backlog||[]).map(l=>{
+    const m=missMap[l.id], camp=campMap[l.id];
+    const natCle=julesNatureCle((m&&m.kind)||l.kind);
+    const typ=(l.categorie && JULES_TYPE_MISSION[l.categorie]) ? l.categorie : null;
+    const p=julesPouls(l, camp);
+    const total=(l.nb_due||0)+(l.nb_claimed||0)+(l.nb_waiting_go||0)+(l.nb_failed||0)+(l.nb_done||0);
+    const pct=total?Math.round((l.nb_done||0)/total*100):0;
+    return {l, camp, natCle, nat:JULES_NATURE_MISSION[natCle], typ, p, pct,
+            warn:(l.nb_failed||0)>0||(l.nb_waiting_go||0)>0};
+  }),[backlog,missMap,campMap]);
+
+  const vues = useMemo(()=>{
+    let r=lignes;
+    const qq=q.trim().toLowerCase();
+    if(qq) r=r.filter(x=>julesTitre(x.l.titre).toLowerCase().includes(qq));
+    if(fNat!=='all') r=r.filter(x=>x.natCle===fNat);
+    if(fType!=='all') r=r.filter(x=> fType==='sans' ? !x.typ : x.typ===fType);
+    const val={mission:x=>julesTitre(x.l.titre).toLowerCase(), nature:x=>x.nat.label,
+               type:x=>x.typ||'zzz', etat:x=>JULES_ETAT_RANG[x.p.mot]??9, avancement:x=>x.pct};
+    const f=val[tri.cle]||val.mission;
+    return [...r].sort((a,b)=>{const A=f(a),B=f(b); return (A<B?-1:A>B?1:0)*tri.dir;});
+  },[lignes,q,fNat,fType,tri]);
+
   if(!backlog||!backlog.length) return <div style={{fontSize:13, color:'#565861'}}>Aucune mission active.</div>;
   const th = {fontSize:10, textTransform:'uppercase', letterSpacing:'0.07em', color:'#565861', fontWeight:800,
               textAlign:'left', padding:'10px 12px', borderBottom:'2px solid '+JULES_NOIR, background:'#F4F3EE'};
   const td = {padding:'11px 12px', borderBottom:'1px solid '+JULES_GRIS, fontSize:13, verticalAlign:'middle'};
+  const sel = {border:'1.5px solid '+JULES_NOIR, background:'#fff', fontFamily:'Outfit,sans-serif', fontSize:12,
+               fontWeight:700, padding:'5px 8px', color:JULES_NOIR, cursor:'pointer'};
+  const trier = (cle) => setTri(t=> t.cle===cle ? {cle, dir:-t.dir} : {cle, dir:1});
+  const THtri = ({cle, children, w}) => (
+    <th style={{...th, width:w, cursor:'pointer', userSelect:'none'}} onClick={()=>trier(cle)}>
+      <span style={{display:'inline-flex', alignItems:'center', gap:4}}>{children}
+        <span style={{color:tri.cle===cle?JULES_NOIR:'#c9c9cc', fontSize:9}}>{tri.cle===cle?(tri.dir>0?'▲':'▼'):'▲'}</span>
+      </span>
+    </th>
+  );
   return (
-    <div style={{border:'2px solid '+JULES_NOIR, boxShadow:'4px 4px 0 '+JULES_GRIS, background:'#fff', overflowX:'auto'}}>
-      <table style={{width:'100%', borderCollapse:'collapse', minWidth:760}}>
-        <thead><tr>
-          <th style={th}>Mission</th><th style={th}>Nature</th><th style={th}>Type</th>
-          <th style={th}>État</th><th style={th}>Avancement</th><th style={th}>Prochaine action</th>
-        </tr></thead>
-        <tbody>
-          {backlog.map(l=>{
-            const m = missMap[l.id]; const camp = campMap[l.id];
-            const nat = JULES_NATURE_MISSION[julesNatureCle((m&&m.kind)||l.kind)];
-            const typ = (l.categorie && JULES_TYPE_MISSION[l.categorie]) ? l.categorie : null;
-            const p = julesPouls(l, camp);
-            const total = (l.nb_due||0)+(l.nb_claimed||0)+(l.nb_waiting_go||0)+(l.nb_failed||0)+(l.nb_done||0);
-            const pct = total ? Math.round((l.nb_done||0)/total*100) : 0;
-            const warn = (l.nb_failed||0)>0 || (l.nb_waiting_go||0)>0;
-            return (
+    <div>
+      {/* Barre de tri/filtre */}
+      <div style={{display:'flex', gap:8, flexWrap:'wrap', marginBottom:10, alignItems:'center'}}>
+        <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher une mission…"
+          style={{...sel, fontWeight:500, minWidth:200, flex:'1 1 200px'}}/>
+        <select value={fNat} onChange={e=>setFNat(e.target.value)} style={sel}>
+          <option value="all">Toute nature</option>
+          <option value="routine">Routine</option>
+          <option value="campagne">Campagne</option>
+          <option value="ponctuel">Ponctuel</option>
+        </select>
+        <select value={fType} onChange={e=>setFType(e.target.value)} style={sel}>
+          <option value="all">Tout type</option>
+          <option value="chasse">Chasse</option>
+          <option value="veille">Veille</option>
+          <option value="relance">Relance</option>
+          <option value="pilotage">Pilotage</option>
+          <option value="admin">Admin</option>
+          <option value="sans">Sans type</option>
+        </select>
+        <span style={{fontSize:11.5, color:JULES_GRIS_F, fontWeight:700, marginLeft:'auto'}}>{vues.length}/{lignes.length}</span>
+      </div>
+      <div style={{border:'2px solid '+JULES_NOIR, boxShadow:'4px 4px 0 '+JULES_GRIS, background:'#fff', overflowX:'auto'}}>
+        <table style={{width:'100%', borderCollapse:'collapse', minWidth:760}}>
+          <thead><tr>
+            <THtri cle="mission">Mission</THtri><THtri cle="nature">Nature</THtri><THtri cle="type">Type</THtri>
+            <THtri cle="etat">État</THtri><THtri cle="avancement">Avancement</THtri>
+            <th style={th}>Prochaine action</th>
+          </tr></thead>
+          <tbody>
+            {vues.length===0 ? <tr><td style={{...td, color:'#565861'}} colSpan={6}>Aucune mission dans ce filtre.</td></tr> :
+            vues.map(({l, camp, nat, typ, p, pct, warn})=>(
               <tr key={l.id} onClick={()=>onOuvrir(l)} style={{cursor:'pointer'}}
                   onMouseEnter={e=>e.currentTarget.style.background='#F4F3EE'}
                   onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
@@ -7914,10 +7970,10 @@ function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
                 </td>
                 <td style={td}><span style={{fontSize:11.5, color:'#565861'}}>{julesPhrase(l, camp)}</span></td>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
