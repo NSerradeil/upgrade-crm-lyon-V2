@@ -8612,7 +8612,11 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
       .order('due_at',{ascending:false}).limit(100)
       .then(r=>{ if(vivant) setTaches(r.error?[]:(r.data||[])); });
     return ()=>{ vivant=false; };
-  },[missionId,relance]);
+    // `mission.updated_at` fait partie des dépendances : modifier une mission peut CRÉER une
+    // tâche (champ « Traiter le » d'une ponctuelle), et sans ça la liste restait celle d'avant
+    // — Nicolas posait une heure, la tâche existait en base, et le panneau n'en montrait rien
+    // (constat 22/09). La modification se fait hors de ce panneau, donc `relance` ne bouge pas.
+  },[missionId,relance,mission&&mission.updated_at]);
   // Relancer relit la liste : sans ça la carte resterait affichée « done » alors qu'elle est
   // repartie en file, et Nicolas cliquerait une deuxième fois en croyant que rien n'a bougé.
   // On relit dans tous les cas, succès ou échec : la base fait foi, pas ce qu'on espérait.
@@ -9277,6 +9281,22 @@ function JulesModifierMission({ mission, onClose, onSave, saving }) {
   // une date de traitement, c'est ce qui CRÉE la tâche.
   const ponctuelle = !cad;
   const [quand,setQuand] = useState('');
+  // Le champ se rouvrait VIDE même quand une tâche était planifiée : on croyait que rien
+  // n'avait été enregistré (constat Nicolas 22/09). Il montre désormais l'échéance déjà en
+  // file, et la modifier replanifie au lieu de créer un doublon.
+  useEffect(()=>{
+    if(!ponctuelle) return;
+    let vivant=true;
+    sb.from('agent_tasks').select('due_at').eq('mission_id',mission.id).eq('statut','due')
+      .order('due_at',{ascending:true}).limit(1)
+      .then(r=>{
+        if(!vivant || r.error || !r.data || !r.data.length) return;
+        const d=new Date(r.data[0].due_at);
+        d.setMinutes(d.getMinutes()-d.getTimezoneOffset());
+        setQuand(d.toISOString().slice(0,16));
+      });
+    return ()=>{ vivant=false; };
+  },[mission.id,ponctuelle]);
   const champ = JULES_CHAMP;
   return (
     <Modal title="Modifier la mission" onClose={onClose}
@@ -9320,9 +9340,8 @@ function JulesModifierMission({ mission, onClose, onSave, saving }) {
           <input type="datetime-local" value={quand} onChange={e=>setQuand(e.target.value)}
             style={{...champ, width:240}}/>
           <div style={{fontSize:11.5, color:'#565861', marginTop:5, lineHeight:1.5}}>
-            Une mission ponctuelle ne se lance pas toute seule : tant qu'aucune tâche n'existe,
-            la priorité n'ordonne rien. Poser une date ici crée la tâche — laisse vide pour ne
-            rien planifier.
+            {quand ? 'Une tâche est déjà planifiée à cette heure. La changer ici la replanifie.'
+                   : 'Une mission ponctuelle ne se lance pas toute seule : tant qu\'aucune tâche n\'existe, la priorité n\'ordonne rien. Poser une date ici crée la tâche — laisse vide pour ne rien planifier.'}
           </div>
         </Field>
       )}
