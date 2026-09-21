@@ -8065,6 +8065,12 @@ const JULES_TYPE_MISSION = {
   chasse:      {bg:JULES_VIOLET, color:'#fff'},  // legacy, le temps que les données migrent
 };
 
+// Le vocabulaire de catégories qu'on peut POSER à la main. `chasse` en est exclu : c'est
+// une valeur héritée qu'on laisse s'afficher le temps que les données migrent, pas une
+// valeur qu'on veut voir réapparaître.
+const JULES_CATEGORIES_SAISIE = ['business','recrutement','veille','relance','pilotage','admin','tech'];
+
+
 const JULES_ETAT_RANG = {'en échec':0,'en cours':1,'attend un accord':2,'à relancer':3,'réponses':4,'en attente':5,'en pause':6,'au calme':7};
 // Où en est une personne dans le parcours de la campagne (demande Nicolas 21/09 : « on ne
 // sait pas si on est au bout d'une séquence pour un contact »). Jusqu'ici la fiche affichait
@@ -8132,8 +8138,12 @@ function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
   const campMap = useMemo(()=>Object.fromEntries((campagnes||[]).map(c=>[c.id,c])),[campagnes]);
   const [q,setQ] = useState('');
   const [fNat,setFNat] = useState('all');
-  const [fType,setFType] = useState('all');
-  const [showTech,setShowTech] = useState(false);  // les missions tech (dev/roadmap) masquées par défaut
+  // Un SEUL filtre de type, en pastilles (demande Nicolas 21/09, même style que les besoins).
+  // Il remplace l'ancien menu déroulant + la case « Afficher tech » : deux commandes pour
+  // une seule question, et la case disparaissait quand il n'y avait aucune mission tech —
+  // donc impossible de comprendre pourquoi le filtre n'était plus là.
+  // 'metier' = tout sauf tech, c'est le défaut : le tech est du bruit pour un commercial.
+  const [fType,setFType] = useState('metier');
   const [tri,setTri] = useState({cle:'etat', dir:1});   // par défaut : ce qui bouge en haut
 
   // Une ligne enrichie de tout ce qui sert à trier/filtrer.
@@ -8155,15 +8165,31 @@ function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
     const qq=q.trim().toLowerCase();
     if(qq) r=r.filter(x=>julesTitre(x.l.titre).toLowerCase().includes(qq));
     if(fNat!=='all') r=r.filter(x=>x.natCle===fNat);
-    if(fType!=='all') r=r.filter(x=> fType==='sans' ? !x.typ : x.typ===fType);
-    // Tech masqué par défaut (dev/roadmap) — sauf case cochée, ou si on filtre exprès sur 'tech'.
-    if(!showTech && fType!=='tech') r=r.filter(x=>x.typ!=='tech');
+    if(fType==='metier')      r=r.filter(x=>x.typ!=='tech');   // défaut : le tech est du bruit
+    else if(fType==='sans')   r=r.filter(x=>!x.typ);
+    else if(fType!=='all')    r=r.filter(x=>x.typ===fType);
     const val={mission:x=>julesTitre(x.l.titre).toLowerCase(), nature:x=>x.nat.label,
                type:x=>x.typ||'zzz', etat:x=>JULES_ETAT_RANG[x.p.mot]??9, avancement:x=>x.pct};
     const f=val[tri.cle]||val.mission;
     return [...r].sort((a,b)=>{const A=f(a),B=f(b); return (A<B?-1:A>B?1:0)*tri.dir;});
-  },[lignes,q,fNat,fType,showTech,tri]);
-  const nbTech = useMemo(()=>lignes.filter(x=>x.typ==='tech').length,[lignes]);
+  },[lignes,q,fNat,fType,tri]);
+  // Un compteur par pastille : une pastille sans son chiffre oblige à cliquer pour savoir
+  // s'il y a quelque chose derrière. On n'affiche que les pastilles qui ont du contenu,
+  // sauf les deux premières (Métier / Tous) qui sont les points d'entrée.
+  const compte = useMemo(()=>{
+    const c = {metier:0, all:lignes.length, sans:0};
+    for(const x of lignes){
+      if(x.typ!=='tech') c.metier++;
+      if(!x.typ) c.sans++; else c[x.typ] = (c[x.typ]||0) + 1;
+    }
+    return c;
+  },[lignes]);
+  const PASTILLES = useMemo(()=>[
+    {cle:'metier', label:'MÉTIER'},
+    {cle:'all',    label:'TOUS'},
+    ...JULES_CATEGORIES_SAISIE.map(c=>({cle:c, label:c.toUpperCase()})),
+    {cle:'sans',   label:'SANS TYPE'},
+  ].filter(b=>['metier','all'].includes(b.cle) || (compte[b.cle]||0) > 0),[compte]);
 
   if(!backlog||!backlog.length) return <div style={{fontSize:13, color:'#565861'}}>Aucune mission active.</div>;
   const th = {fontSize:10, textTransform:'uppercase', letterSpacing:'0.07em', color:'#565861', fontWeight:800,
@@ -8191,30 +8217,34 @@ function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
           <option value="campagne">Campagne</option>
           <option value="ponctuel">Ponctuel</option>
         </select>
-        <select value={fType} onChange={e=>setFType(e.target.value)} style={sel}>
-          <option value="all">Tout type</option>
-          <option value="business">Business</option>
-          <option value="recrutement">Recrutement</option>
-          <option value="veille">Veille</option>
-          <option value="relance">Relance</option>
-          <option value="pilotage">Pilotage</option>
-          <option value="admin">Admin</option>
-          <option value="tech">Tech</option>
-          <option value="sans">Sans type</option>
-        </select>
-        {nbTech>0&&(
-          <button type="button" onClick={()=>setShowTech(v=>!v)} aria-pressed={showTech}
-            style={{display:'inline-flex', alignItems:'center', gap:7, border:'1.5px solid '+JULES_NOIR,
-                    background:showTech?JULES_NOIR:'#fff', color:showTech?'#fff':JULES_NOIR,
-                    fontFamily:'Outfit,sans-serif', fontSize:11.5, fontWeight:700, padding:'5px 10px',
-                    cursor:'pointer', minHeight:32, userSelect:'none'}}>
-            <span style={{width:13, height:13, flexShrink:0, border:'1.5px solid '+(showTech?'#fff':JULES_NOIR),
-                          background:showTech?'#fff':'transparent', color:JULES_NOIR, display:'grid', placeItems:'center',
-                          fontSize:10, fontWeight:800, lineHeight:1}}>{showTech?'✓':''}</span>
-            Afficher tech ({nbTech})
-          </button>
-        )}
         <span style={{fontSize:11.5, color:JULES_GRIS_F, fontWeight:700, marginLeft:'auto'}}>{vues.length}/{lignes.length}</span>
+      </div>
+      {/* Pastilles de TYPE (demande Nicolas 21/09, repris de la barre des besoins). Une
+          pastille active prend la couleur de son type — la même que le badge de la colonne
+          Type — pour qu'on lise le filtre courant sans relire le libellé. */}
+      <div style={{display:'flex', gap:6, flexWrap:'wrap', marginBottom:12}}>
+        {PASTILLES.map(b=>{
+          const actif = fType===b.cle;
+          const teinte = JULES_TYPE_MISSION[b.cle];
+          const fond = !actif ? '#fff'
+                     : b.cle==='metier' ? JULES_JAUNE
+                     : teinte ? teinte.bg : JULES_NOIR;
+          const encre = !actif ? JULES_GRIS_F
+                      : b.cle==='metier' ? JULES_NOIR
+                      : teinte ? teinte.color : '#fff';
+          return (
+            <button key={b.cle} type="button" onClick={()=>setFType(b.cle)} aria-pressed={actif}
+              style={{background:fond, color:encre,
+                      border:'2px solid '+(actif?'transparent':'#E4E4E6'),
+                      padding:'5px 11px', fontFamily:'Outfit,sans-serif', fontSize:11,
+                      fontWeight:700, letterSpacing:'0.04em', borderRadius:0, cursor:'pointer',
+                      whiteSpace:'nowrap', minHeight:32, transition:'all 80ms ease'}}
+              onMouseEnter={e=>{if(!actif){e.currentTarget.style.borderColor=JULES_NOIR; e.currentTarget.style.color=JULES_NOIR;}}}
+              onMouseLeave={e=>{if(!actif){e.currentTarget.style.borderColor='#E4E4E6'; e.currentTarget.style.color=JULES_GRIS_F;}}}>
+              {b.label}{b.cle==='all'?'':' '+(compte[b.cle]||0)}
+            </button>
+          );
+        })}
       </div>
       <div style={{border:'2px solid '+JULES_NOIR, boxShadow:'4px 4px 0 '+JULES_GRIS, background:'#fff', overflowX:'auto'}}>
         <table style={{width:'100%', borderCollapse:'collapse', minWidth:760}}>
@@ -9109,11 +9139,6 @@ function JulesNouvelleMission({ onClose, onSave, saving, onDiscuter }) {
 
 // Modifier une mission : le strict nécessaire. Le titre et le contexte sont souvent repris
 // d'un import et méritent d'être réécrits proprement ; la priorité se règle à la main.
-// Le vocabulaire de catégories qu'on peut POSER à la main. `chasse` en est exclu : c'est
-// une valeur héritée qu'on laisse s'afficher le temps que les données migrent, pas une
-// valeur qu'on veut voir réapparaître.
-const JULES_CATEGORIES_SAISIE = ['business','recrutement','veille','relance','pilotage','admin','tech'];
-
 function JulesModifierMission({ mission, onClose, onSave, saving }) {
   const [titre,setTitre] = useState(mission.titre||'');
   const [priorite,setPriorite] = useState(mission.priorite||2);
