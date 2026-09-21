@@ -7416,22 +7416,70 @@ function useJulesData() {
   return {data,pending,nbNouveautes,appliquer,rechargerMaintenant,erreur,chargement,dernierEssai};
 }
 
-// Titre de bandeau : bordure basse de 4 px, majuscules, interlettrage. Repliable sur mobile.
-function JulesBandeau({ titre, compteur, ouvert, onToggle, repliable=true, children }) {
+// ── Criticité d'une entrée du parapheur (spec §5.1) ───────────────────────────
+// Rouge si Jules l'a marquée critique, OU filet de sécurité sur l'âge : une demande qui
+// dort depuis plus de JULES_SEUIL_CRITIQUE_H heures remonte d'elle-même.
+const JULES_SEUIL_CRITIQUE_H = 24;
+function julesAgeHeures(iso){ if(!iso) return 0; return (Date.now()-new Date(iso).getTime())/3.6e6; }
+function julesApproCritique(a){ return !!a.critique || julesAgeHeures(a.created_at) > JULES_SEUIL_CRITIQUE_H; }
+// Deux familles de couleur (spec §3.2) : un GO se donne d'un clic (vert), une décision/blocage
+// demande un échange (bleu). La criticité (rouge) se superpose, elle ne remplace pas la famille.
+function julesApproEchanger(a){ return a.nature==='decision' || a.nature==='bloque'; }
+function julesApproTeinte(a){
+  if(julesApproCritique(a)) return JULES_ROUGE;
+  return julesApproEchanger(a) ? JULES_BLEU : JULES_VERT;
+}
+const JULES_SLACK_PATH = 'M6 15a2 2 0 1 1-2-2h2v2zm1 0a2 2 0 0 1 4 0v5a2 2 0 1 1-4 0v-5zM9 6a2 2 0 1 1 2-2v2H9zm0 1a2 2 0 0 1 0 4H4a2 2 0 1 1 0-4h5zm9 2a2 2 0 1 1 2 2h-2V9zm-1 0a2 2 0 0 1-4 0V4a2 2 0 1 1 4 0v5zm-2 9a2 2 0 1 1-2 2v-2h2zm0-1a2 2 0 0 1 0-4h5a2 2 0 1 1 0 4h-5z';
+
+// Bandeau d'accueil : dit ce que la page permet + trois compteurs qui mènent aux trois zones.
+function JulesAccueil({ data, onJump }) {
+  const kpi = (n, label, couleur, cle) => (
+    <button onClick={()=>onJump(cle)}
+      style={{flex:'1 1 120px', minWidth:110, textAlign:'left', border:'2px solid '+JULES_NOIR,
+              background:'#fff', padding:'9px 12px', cursor:'pointer', fontFamily:'Outfit,sans-serif',
+              display:'flex', flexDirection:'column', gap:2, transition:'transform 80ms ease'}}
+      onMouseEnter={e=>{e.currentTarget.style.transform='translate(-2px,-2px)';e.currentTarget.style.boxShadow='3px 3px 0 '+JULES_GRIS;}}
+      onMouseLeave={e=>{e.currentTarget.style.transform='none';e.currentTarget.style.boxShadow='none';}}>
+      <span style={{fontSize:24, fontWeight:800, lineHeight:1, color:couleur, fontFamily:'Outfit,sans-serif'}}>{n}</span>
+      <span style={{fontSize:10.5, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.05em', color:'#565861'}}>{label}</span>
+    </button>
+  );
   return (
-    <section style={{border:'2px solid '+JULES_NOIR, background:'#fff', marginBottom:16, boxShadow:'4px 4px 0 '+JULES_GRIS}}>
-      <button onClick={repliable?onToggle:undefined}
-        style={{width:'100%', minHeight:44, display:'flex', alignItems:'center', justifyContent:'space-between',
-                gap:8, padding:'10px 14px', background:'#fff', border:'none', borderBottom:'4px solid '+JULES_NOIR,
-                cursor:repliable?'pointer':'default', fontFamily:'Outfit,sans-serif'}}>
-        <span style={{fontSize:13, fontWeight:800, color:JULES_NOIR, textTransform:'uppercase', letterSpacing:'0.12em'}}>
-          {titre}{compteur!=null&&compteur>0?' ('+compteur+')':''}
+    <div style={{border:'2px solid '+JULES_NOIR, boxShadow:'5px 5px 0 '+JULES_GRIS, background:'#fff',
+                 padding:'14px 16px', display:'flex', gap:16, flexWrap:'wrap', alignItems:'center'}}>
+      <div style={{display:'flex', alignItems:'center', gap:12, flex:'1 1 260px', minWidth:0}}>
+        <span style={{width:44, height:44, flex:'none', background:JULES_JAUNE, border:'2px solid '+JULES_NOIR,
+                      boxShadow:'3px 3px 0 '+JULES_NOIR, display:'grid', placeItems:'center'}}>
+          <Icon d={ICONS.robot} size={26}/>
         </span>
-        {repliable&&<span style={{display:'inline-flex', transform:ouvert?'rotate(90deg)':'none', transition:'transform 120ms ease'}}>
-          <Icon d={ICONS.chevronRight} size={16}/>
-        </span>}
-      </button>
-      {(!repliable||ouvert)&&<div style={{padding:14}}>{children}</div>}
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:24, fontWeight:800, letterSpacing:'-0.01em', lineHeight:1, color:JULES_NOIR}}>Jules</div>
+          <div style={{fontSize:12.5, color:'#565861', fontWeight:500, marginTop:3}}>
+            Ton IA d'automation : elle chasse, veille et relance pendant que tu vends. Ici tu vois ce qu'elle fait et tu tranches.
+          </div>
+        </div>
+      </div>
+      <div style={{display:'flex', gap:10, flex:'1 1 340px', flexWrap:'wrap'}}>
+        {kpi(data.parapheur.length, 'Attendent ton go', JULES_ROUGE, 'attend')}
+        {kpi(data.encours.length,  'Tournent là',       JULES_BLEU,  'tourne')}
+        {kpi(data.backlog.length,  'Missions actives',  JULES_VIOLET,'missions')}
+      </div>
+    </div>
+  );
+}
+
+// Conteneur d'une zone : un titre net, un compteur, un indice — plus de bandeaux repliables
+// jumeaux (spec §3). L'id sert d'ancre aux compteurs du bandeau d'accueil.
+function JulesZone({ id, titre, compteur, hint, action, children }) {
+  return (
+    <section id={id} style={{marginTop:26, scrollMarginTop:12}}>
+      <div style={{display:'flex', alignItems:'baseline', gap:10, marginBottom:12, flexWrap:'wrap'}}>
+        <h2 style={{fontSize:15, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.05em', color:JULES_NOIR, margin:0}}>{titre}</h2>
+        {compteur!=null&&compteur>0&&<span style={{background:JULES_NOIR, color:'#fff', fontSize:11, fontWeight:800, padding:'1px 8px', borderRadius:999}}>{compteur}</span>}
+        {hint&&<span style={{fontSize:11.5, color:JULES_GRIS_F, fontWeight:600, marginLeft:'auto'}}>{hint}</span>}
+      </div>
+      {action&&<div style={{marginBottom:12}}>{action}</div>}
+      {children}
     </section>
   );
 }
@@ -7521,75 +7569,202 @@ function julesAge(iso) {
   return Math.round(min/1440)+' j';
 }
 
-function JulesParapheur({ entrees, onAccorder, onAjuster, onRefuser, onRepondre, actionEnCours }) {
-  if(!entrees.length) return <div style={{fontSize:13, color:'#565861'}}>Rien n'attend ta décision.</div>;
+// Boutons d'action d'une entrée (réutilisés sur la carte ET dans le volet de détail).
+// Les gestes ne changent pas (spec §4 « CRM = clics ») : GO = accorder/ajuster ; décision ou
+// blocage = trancher/donner l'info via le modal existant (ses boutons d'options + texte).
+function JulesActionsAppro({ a, occupe, onAccorder, onAjuster, onRefuser, onRepondre }) {
   return (
-    <div style={{display:'flex', flexDirection:'column', gap:10}}>
-      {entrees.map(a=>{
-        const n = JULES_NATURE_STYLE[a.nature]||JULES_NATURE_STYLE.go;
-        const occupe = actionEnCours===a.id;
-        return (
-          <div key={a.id} style={{border:'2px solid '+JULES_NOIR, background:'#fff', padding:12,
-                                  boxShadow:'4px 4px 0 '+n.bg}}>
-            <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:6}}>
-              <ColorBadge label={n.label} bg={n.bg} color={n.color}/>
-              <span style={{fontSize:11, fontWeight:700, color:'#565861', textTransform:'uppercase',
-                            letterSpacing:'0.06em'}}>depuis {julesAge(a.created_at)}</span>
-            </div>
-            <div style={{fontSize:14, fontWeight:700, color:JULES_NOIR, marginBottom:4}}>{julesTitre(a.titre)}</div>
-            {a.detail&&<div style={{fontSize:12, color:'#565861', marginBottom:10}}><JulesTexteRiche texte={a.detail}/></div>}
-            {/* Les gestes dépendent de la nature. Un blocage n'attend pas un « oui », il
-                attend l'information qui manque ; une décision attend un arbitrage, pas un accord. */}
-            <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
-              {a.nature==='go' ? (
-                <>
-                  <span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
-                    <BtnAction onClick={()=>onAccorder(a)} icon={ICONS.check} label="Accorder"
-                               variant="success" disabled={occupe}/>
-                  </span>
-                  <span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
-                    <BtnAction onClick={()=>onAjuster(a)} icon={ICONS.edit} label="Ajuster"
-                               variant="edit" disabled={occupe}/>
-                  </span>
-                </>
-              ) : (
-                <span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
-                  <BtnAction onClick={()=>onRepondre(a)} icon={ICONS.edit}
-                             label={a.nature==='bloque'?'Donner l\'info':'Trancher'}
-                             variant="primary" disabled={occupe}/>
-                </span>
-              )}
-              <span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
-                <BtnAction onClick={()=>onRefuser(a)} icon={ICONS.close}
-                           label={a.nature==='go'?'Refuser':'Abandonner'}
-                           variant="danger" disabled={occupe}/>
-              </span>
-            </div>
-          </div>
-        );
-      })}
+    <div style={{display:'flex', gap:8, flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
+      {a.nature==='go' ? (
+        <>
+          <span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
+            <BtnAction onClick={()=>onAccorder(a)} icon={ICONS.check} label="Accorder" variant="success" disabled={occupe}/>
+          </span>
+          <span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
+            <BtnAction onClick={()=>onAjuster(a)} icon={ICONS.edit} label="Ajuster" variant="edit" disabled={occupe}/>
+          </span>
+        </>
+      ) : (
+        <span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
+          <BtnAction onClick={()=>onRepondre(a)} icon={ICONS.edit}
+                     label={a.nature==='bloque'?'Donner l\'info':'Trancher'} variant="primary" disabled={occupe}/>
+        </span>
+      )}
+      <span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
+        <BtnAction onClick={()=>onRefuser(a)} icon={ICONS.close}
+                   label={a.nature==='go'?'Refuser':'Abandonner'} variant="danger" disabled={occupe}/>
+      </span>
     </div>
   );
 }
 
-function JulesEncours({ encours, dueToday }) {
-  if(!encours.length && !dueToday.length)
-    return <div style={{fontSize:13, color:'#565861'}}>Rien ne tourne, rien n'est dû aujourd'hui.</div>;
+// Le parapheur en petites cartes (spec §3.2). Couleur = ce qu'on attend de toi. Le détail long
+// passe dans le volet (onOuvrir) : la carte reste lisible en un coup d'œil.
+const JULES_FILTRES = [
+  {cle:'tout',     label:'Tout'},
+  {cle:'echanger', label:'Échanger', dot:JULES_BLEU},
+  {cle:'go',       label:'Go / No-go', dot:JULES_VERT},
+  {cle:'critique', label:'Critique', dot:JULES_ROUGE},
+];
+function JulesParapheur({ entrees, onAccorder, onAjuster, onRefuser, onRepondre, onOuvrir, actionEnCours }) {
+  const [filtre,setFiltre] = useState('tout');
+  if(!entrees.length) return <div style={{fontSize:13, color:'#565861'}}>Rien n'attend ta décision.</div>;
+  const gardees = entrees.filter(a=>{
+    if(filtre==='tout') return true;
+    if(filtre==='critique') return julesApproCritique(a);
+    if(filtre==='echanger') return julesApproEchanger(a);
+    if(filtre==='go') return a.nature==='go';
+    return true;
+  });
+  const tag = (a)=> a.nature==='go' ? 'Go / No-go' : a.nature==='bloque' ? 'Bloqué' : 'Décision';
   return (
-    <div style={{display:'flex', flexDirection:'column', gap:10}}>
-      {encours.map(t=>(
-        <div key={t.id} style={{border:'2px solid '+JULES_NOIR, background:'#fff', padding:12,
-                                boxShadow:'4px 4px 0 '+JULES_VERT, display:'flex', alignItems:'center', gap:10}}>
-          <span className="jules-pouls" style={{width:10, height:10, background:JULES_VERT, flexShrink:0}}/>
-          <div style={{minWidth:0, flex:1}}>
-            <div title={julesTitre(t.titre)} style={{fontSize:13, fontWeight:700, color:JULES_NOIR, ...JULES_UNE_LIGNE}}>{julesTitre(t.titre)}</div>
-            <div style={{fontSize:11, color:'#565861', textTransform:'uppercase', letterSpacing:'0.06em'}}>
-              {t.mission_titre||'sans mission'} · depuis {julesAge(t.heartbeat_at)}
-              {t.heartbeat_age_s>900&&<span style={{color:JULES_ROUGE, fontWeight:800}}> · sans signe de vie</span>}
+    <div>
+      <div style={{display:'flex', gap:7, marginBottom:12, flexWrap:'wrap'}}>
+        {JULES_FILTRES.map(f=>{
+          const on = filtre===f.cle;
+          return <button key={f.cle} onClick={()=>setFiltre(f.cle)}
+            style={{border:'1.5px solid '+JULES_NOIR, background:on?JULES_NOIR:'#fff', color:on?'#fff':JULES_NOIR,
+                    fontFamily:'Outfit,sans-serif', fontSize:11.5, fontWeight:700, padding:'4px 10px', cursor:'pointer',
+                    display:'flex', alignItems:'center', gap:6, minHeight:32}}>
+            {f.dot&&<span style={{width:9, height:9, borderRadius:'50%', background:f.dot, flexShrink:0}}/>}{f.label}
+          </button>;
+        })}
+      </div>
+      {!gardees.length ? <div style={{fontSize:13, color:'#565861'}}>Rien dans ce filtre.</div> :
+      <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(272px,1fr))', gap:12}}>
+        {gardees.map(a=>{
+          const teinte = julesApproTeinte(a);
+          const critique = julesApproCritique(a);
+          const occupe = actionEnCours===a.id;
+          return (
+            <div key={a.id} onClick={()=>onOuvrir(a)}
+              style={{position:'relative', border:'2px solid '+JULES_NOIR, background:'#fff', boxShadow:'4px 4px 0 '+teinte,
+                      padding:'12px 13px 12px 17px', cursor:'pointer', display:'flex', flexDirection:'column', gap:8,
+                      transition:'transform 80ms ease'}}
+              onMouseEnter={e=>e.currentTarget.style.transform='translate(-2px,-2px)'}
+              onMouseLeave={e=>e.currentTarget.style.transform='none'}>
+              <span style={{position:'absolute', left:0, top:0, bottom:0, width:6, background:teinte}}/>
+              <div style={{display:'flex', alignItems:'center', gap:7, flexWrap:'wrap'}}>
+                <span style={{fontSize:9.5, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.05em',
+                              padding:'2px 7px', border:'1.5px solid '+teinte, background:teinte, color:'#fff'}}>{tag(a)}</span>
+                {critique&&<span style={{fontSize:9.5, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.05em',
+                              padding:'2px 7px', border:'1.5px solid '+JULES_ROUGE, color:JULES_ROUGE}}>Urgent</span>}
+                <span style={{marginLeft:'auto', fontSize:10.5, color:JULES_GRIS_F, fontWeight:700}}>depuis {julesAge(a.created_at)}</span>
+              </div>
+              <div style={{fontSize:13.5, fontWeight:800, color:JULES_NOIR, lineHeight:1.25}}>{julesTitre(a.titre)}</div>
+              {a.detail&&<div style={{fontSize:12, color:'#565861', lineHeight:1.35, display:'-webkit-box',
+                            WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden'}}>{julesTitre(a.detail)}</div>}
+              <JulesActionsAppro a={a} occupe={occupe}
+                onAccorder={onAccorder} onAjuster={onAjuster} onRefuser={onRefuser} onRepondre={onRepondre}/>
             </div>
+          );
+        })}
+      </div>}
+    </div>
+  );
+}
+
+// Volet de détail d'une entrée du parapheur (spec §3.2/§3.5) : tout le contexte + les mêmes
+// gestes. La conversation libre (« les mots ») passera par Slack au sous-projet 360.
+function JulesApercuAppro({ entree, onClose, onAccorder, onAjuster, onRefuser, onRepondre, occupe }) {
+  const a = entree;
+  const teinte = julesApproTeinte(a);
+  const tag = a.nature==='go' ? 'Go / No-go' : a.nature==='bloque' ? 'Bloqué' : 'Décision';
+  return (
+    <SidePanel title={julesTitre(a.titre)} onClose={onClose}
+      badge={<span style={{display:'inline-flex', gap:6}}>
+        <ColorBadge label={tag} bg={teinte} color="#fff"/>
+        {julesApproCritique(a)&&<ColorBadge label="Urgent" bg={JULES_ROUGE} color="#fff"/>}
+      </span>}
+      actions={<JulesActionsAppro a={a} occupe={occupe}
+        onAccorder={onAccorder} onAjuster={onAjuster} onRefuser={onRefuser} onRepondre={onRepondre}/>}>
+      <Field label={'Depuis '+julesAge(a.created_at)}>
+        {a.detail ? <div style={{fontSize:13, color:'#333', lineHeight:1.55}}><JulesTexteRiche texte={a.detail}/></div>
+                  : <div style={{fontSize:13, color:'#565861'}}>Pas de détail supplémentaire.</div>}
+      </Field>
+      <div style={{border:'2px dashed '+JULES_NOIR, padding:'11px 12px', fontSize:12, color:'#565861', display:'flex', gap:9}}>
+        <span>🔁</span>
+        <div><b style={{color:JULES_NOIR}}>Renvoi 360.</b> {a.nature==='go'
+          ? 'Au GO, Jules exécute et logue l\'action ; il t\'écrira en DM s\'il a besoin de toi.'
+          : 'Réponds par un clic ci-dessus. Pour en discuter librement, ça passera par Slack (à venir).'}</div>
+      </div>
+    </SidePanel>
+  );
+}
+
+// La frise du jour (spec §3.3) : 7h→19h, un pin par passage cyclique, coloré par son état.
+// On voit d'un coup d'œil si la ronde a tourné, ou si le scan a planté.
+const JULES_FRISE_DEB = 7, JULES_FRISE_FIN = 19;
+const JULES_ETAT_COULEUR = {done:JULES_VERT, running:JULES_BLEU, failed:JULES_ROUGE, pending:JULES_GRIS_F};
+const JULES_ETAT_CAP     = {done:'✓', running:'●', failed:'✕', pending:''};
+function julesFrisePct(iso){
+  const d=new Date(iso); const h=d.getHours()+d.getMinutes()/60;
+  const p=(h-JULES_FRISE_DEB)/(JULES_FRISE_FIN-JULES_FRISE_DEB)*100;
+  return Math.max(0, Math.min(100, p));
+}
+function JulesFrise({ journee }) {
+  if(!journee || !journee.length)
+    return <div style={{fontSize:13, color:'#565861'}}>Aucun passage cyclique prévu aujourd'hui.</div>;
+  const now=new Date(); const nowH=now.getHours()+now.getMinutes()/60;
+  const nowPct=(nowH-JULES_FRISE_DEB)/(JULES_FRISE_FIN-JULES_FRISE_DEB)*100;
+  const heures=[]; for(let h=JULES_FRISE_DEB; h<=JULES_FRISE_FIN; h+=2) heures.push(h);
+  return (
+    <div style={{border:'2px solid '+JULES_NOIR, boxShadow:'4px 4px 0 '+JULES_GRIS, background:'#fff', padding:'22px 10px 14px', overflowX:'auto'}}>
+      <div style={{position:'relative', minWidth:620, height:104, margin:'0 14px'}}>
+        <div style={{position:'absolute', left:0, right:0, top:52, height:3, background:JULES_NOIR}}/>
+        {heures.map(h=>{ const p=(h-JULES_FRISE_DEB)/(JULES_FRISE_FIN-JULES_FRISE_DEB)*100; return (
+          <React.Fragment key={h}>
+            <div style={{position:'absolute', top:47, left:p+'%', width:1.5, height:13, background:JULES_GRIS, transform:'translateX(-50%)'}}/>
+            <div style={{position:'absolute', top:60, left:p+'%', transform:'translateX(-50%)', fontSize:9.5, color:JULES_GRIS_F, fontWeight:700}}>{h}h</div>
+          </React.Fragment>
+        );})}
+        {nowPct>=0&&nowPct<=100&&(
+          <div style={{position:'absolute', top:20, bottom:20, left:nowPct+'%', width:2, background:JULES_ROUGE, transform:'translateX(-50%)'}}>
+            <span style={{position:'absolute', top:-15, left:'50%', transform:'translateX(-50%)', fontSize:8.5, fontWeight:800, color:JULES_ROUGE, whiteSpace:'nowrap', textTransform:'uppercase', letterSpacing:'0.05em'}}>maintenant</span>
           </div>
+        )}
+        {journee.map((r,i)=>{
+          const col=JULES_ETAT_COULEUR[r.etat]||JULES_GRIS_F; const haut=i%2===0;
+          return (
+            <div key={r.mission_id+r.prevu_at} title={julesTitre(r.titre)}
+                 style={{position:'absolute', top:52, left:julesFrisePct(r.prevu_at)+'%', transform:'translate(-50%,-50%)', textAlign:'center'}}>
+              <div style={{position:'absolute', left:'50%', transform:'translateX(-50%)', width:88, fontSize:10, fontWeight:800,
+                           lineHeight:1.15, color:JULES_NOIR, ...(haut?{bottom:26}:{top:26})}}>
+                {julesTitre(r.titre)}
+                <span style={{display:'block', fontSize:9, color:JULES_GRIS_F, fontWeight:700}}>{extractTime(r.prevu_at)}</span>
+              </div>
+              <div className={r.etat==='running'?'jules-pouls':''}
+                   style={{width:30, height:30, border:'2px solid '+(r.etat==='pending'?JULES_GRIS_F:col),
+                           borderStyle:r.etat==='pending'?'dashed':'solid', background:r.etat==='pending'?'#fff':col,
+                           color:r.etat==='pending'?JULES_GRIS_F:'#fff', display:'grid', placeItems:'center',
+                           fontWeight:800, fontSize:13, boxShadow:'2px 2px 0 '+JULES_GRIS}}>{JULES_ETAT_CAP[r.etat]}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function JulesEncours({ journee, encours, dueToday }) {
+  return (
+    <div style={{display:'flex', flexDirection:'column', gap:14}}>
+      <JulesFrise journee={journee}/>
+      {encours.length>0&&(
+        <div style={{display:'flex', gap:9, flexWrap:'wrap'}}>
+          {encours.map(t=>(
+            <div key={t.id} title={julesTitre(t.titre)} style={{border:'2px solid '+JULES_NOIR, background:'#fff',
+                    padding:'8px 12px', display:'flex', alignItems:'center', gap:9, fontSize:12, fontWeight:700, maxWidth:'100%'}}>
+              <span className={t.heartbeat_age_s>900?'':'jules-pouls'} style={{width:9, height:9, borderRadius:'50%', flexShrink:0,
+                    background:t.heartbeat_age_s>900?JULES_ROUGE:JULES_BLEU}}/>
+              <span style={{minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(t.titre)}</span>
+              <span style={{color:JULES_GRIS_F, flexShrink:0}}>
+                {t.heartbeat_age_s>900?'sans signe de vie':'depuis '+julesAge(t.heartbeat_at)}
+              </span>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
       {dueToday.length>0&&(
         <div style={{borderTop:'2px solid '+JULES_GRIS, paddingTop:10}}>
           {/* La vue agent_v_due_today prend tout ce qui est dû AVANT demain : un retard de
@@ -7665,75 +7840,81 @@ function julesPhrase(l, campagne) {
   return 'Rien de prévu pour l\'instant.';
 }
 
-function JulesLigneMission({ ligne, campagne, onOuvrir }) {
-  const p = julesPouls(ligne, campagne);
-  return (
-    <button onClick={()=>onOuvrir(ligne)}
-      style={{width:'100%', minHeight:44, textAlign:'left', background:'#fff', border:'2px solid '+JULES_NOIR,
-              boxShadow:'4px 4px 0 '+p.couleur, padding:12, marginBottom:10, cursor:'pointer',
-              fontFamily:'Outfit,sans-serif', transition:'transform 80ms ease'}}
-      onMouseEnter={e=>e.currentTarget.style.transform='translate(-2px,-2px)'}
-      onMouseLeave={e=>e.currentTarget.style.transform='none'}>
-      <div style={{display:'flex', alignItems:'center', gap:9}}>
-        <span className={p.pulse?'jules-pouls':''}
-              style={{width:10, height:10, background:p.couleur, flexShrink:0}}/>
-        <span title={julesTitre(ligne.titre)} style={{fontSize:14, fontWeight:800, color:JULES_NOIR, flex:1, minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(ligne.titre)}</span>
-        <span style={{fontSize:10, fontWeight:800, color:'#565861', textTransform:'uppercase',
-                      letterSpacing:'0.1em', flexShrink:0}}>{p.mot}</span>
-      </div>
-      <div style={{fontSize:12, color:'#565861', marginTop:5, marginLeft:19}}>
-        {julesPhrase(ligne, campagne)}
-      </div>
-    </button>
-  );
+// Nature d'une mission = sa récurrence (spec §3.4), distincte du Type (l'intention métier).
+// campagne (suivi de personnes) · routine (cadence) · ponctuel (one-shot).
+const JULES_NATURE_MISSION = {
+  campagne: {label:'Campagne', glyph:'◈', bg:JULES_VIOLET, color:'#fff'},
+  routine:  {label:'Routine',  glyph:'⟳', bg:JULES_BLEU,   color:'#fff'},
+  ponctuel: {label:'Ponctuel', glyph:'•', bg:'#fff',        color:JULES_NOIR},
+};
+function julesNatureCle(k){ return k==='campagne'?'campagne' : k==='recurring'?'routine' : 'ponctuel'; }
+// Type = intention métier. Pas de champ dédié en base (spec §3.4) : dérivé au mieux du type de
+// tâche et du titre. « — » quand on ne sait pas. Un champ explicite serait une amélioration.
+const JULES_TYPE_MISSION = {
+  chasse:  {bg:JULES_VIOLET, color:'#fff'},
+  veille:  {bg:JULES_BLEU,   color:'#fff'},
+  relance: {bg:JULES_JAUNE,  color:JULES_NOIR},
+  admin:   {bg:JULES_GRIS,   color:JULES_NOIR},
+};
+function julesTypeMission(m){
+  const s=(((m&&m.task_type)||'')+' '+((m&&m.titre)||'')).toLowerCase();
+  if(/chass|sourc|profil|candidat|lead|prospect/.test(s)) return 'chasse';
+  if(/veille|scan|plateforme|osint/.test(s))              return 'veille';
+  if(/relanc|cra|\bbl\b|réceptio|receptio/.test(s))       return 'relance';
+  if(/brief|ronde|report|bilan|admin|synth/.test(s))      return 'admin';
+  return null;
 }
 
 function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
-  const kindOf = useMemo(()=>Object.fromEntries((missions||[]).map(m=>[m.id,m.kind])),[missions]);
+  const missMap = useMemo(()=>Object.fromEntries((missions||[]).map(m=>[m.id,m])),[missions]);
   const campMap = useMemo(()=>Object.fromEntries((campagnes||[]).map(c=>[c.id,c])),[campagnes]);
-  const fam = useMemo(()=>{
-    const f={campagnes:[], ponctuelles:[], routines:[]};
-    (backlog||[]).forEach(l=>{
-      const k=kindOf[l.id]||l.kind;
-      if(k==='campagne')       f.campagnes.push(l);
-      else if(k==='recurring') f.routines.push(l);
-      else                     f.ponctuelles.push(l);
-    });
-    return f;
-  },[backlog,kindOf]);
-  // Une routine qui se passe bien n'est pas une information : repliée par défaut,
-  // dépliée seulement si l'une déraille (spec §3.3).
-  const routineDeraille = fam.routines.some(l=>l.nb_failed>0||l.nb_waiting_go>0);
-  // Les trois familles se replient de la même façon et partent toutes dépliées : la spec
-  // repliait les routines « parce qu'une routine qui va bien n'est pas une information »,
-  // mais une famille repliée quand les autres ne le sont pas se lit comme un bug.
-  const [ouvertes,setOuvertes] = useState({campagnes:true, ponctuelles:true, routines:true});
-  const basculeFamille = (k) => setOuvertes(o=>({...o,[k]:!o[k]}));
-  const rend = (l) => <JulesLigneMission key={l.id} ligne={l} campagne={campMap[l.id]} onOuvrir={onOuvrir}/>;
-  const titreFamille = (cle,t,n,alerte) => (
-    <button onClick={()=>basculeFamille(cle)} aria-expanded={!!ouvertes[cle]}
-      style={{display:'flex', alignItems:'center', gap:7, background:'none', border:'none', padding:0,
-              minHeight:44, cursor:'pointer', fontFamily:'Outfit,sans-serif', fontSize:11, fontWeight:800,
-              color:JULES_NOIR, textTransform:'uppercase', letterSpacing:'0.12em', marginTop:6}}>
-      <span style={{display:'inline-flex', transform:ouvertes[cle]?'rotate(90deg)':'none',
-                    transition:'transform 120ms ease'}}><Icon d={ICONS.chevronRight} size={13}/></span>
-      {t} ({n}){alerte&&<span style={{color:JULES_ROUGE}}> · une routine déraille</span>}
-    </button>
-  );
-  const famille = (cle,t,liste,alerte) => liste.length>0 && (
-    <div style={{marginBottom:6}}>
-      {titreFamille(cle,t,liste.length,alerte)}
-      {ouvertes[cle]&&<div style={{marginTop:8}}>{liste.map(rend)}</div>}
-    </div>
-  );
-  if(!fam.campagnes.length&&!fam.ponctuelles.length&&!fam.routines.length)
-    return <div style={{fontSize:13, color:'#565861'}}>Aucune mission active.</div>;
+  if(!backlog||!backlog.length) return <div style={{fontSize:13, color:'#565861'}}>Aucune mission active.</div>;
+  const th = {fontSize:10, textTransform:'uppercase', letterSpacing:'0.07em', color:'#565861', fontWeight:800,
+              textAlign:'left', padding:'10px 12px', borderBottom:'2px solid '+JULES_NOIR, background:'#F4F3EE'};
+  const td = {padding:'11px 12px', borderBottom:'1px solid '+JULES_GRIS, fontSize:13, verticalAlign:'middle'};
   return (
-    <div>
-      {/* Aucune campagne active : la famille n'apparaît pas du tout (spec §8). */}
-      {famille('campagnes','Campagnes',fam.campagnes,false)}
-      {famille('ponctuelles','Ponctuelles',fam.ponctuelles,false)}
-      {famille('routines','Routines',fam.routines,routineDeraille)}
+    <div style={{border:'2px solid '+JULES_NOIR, boxShadow:'4px 4px 0 '+JULES_GRIS, background:'#fff', overflowX:'auto'}}>
+      <table style={{width:'100%', borderCollapse:'collapse', minWidth:760}}>
+        <thead><tr>
+          <th style={th}>Mission</th><th style={th}>Nature</th><th style={th}>Type</th>
+          <th style={th}>État</th><th style={th}>Avancement</th><th style={th}>Prochaine action</th>
+        </tr></thead>
+        <tbody>
+          {backlog.map(l=>{
+            const m = missMap[l.id]; const camp = campMap[l.id];
+            const nat = JULES_NATURE_MISSION[julesNatureCle((m&&m.kind)||l.kind)];
+            const typ = julesTypeMission(m||l);
+            const p = julesPouls(l, camp);
+            const total = (l.nb_due||0)+(l.nb_claimed||0)+(l.nb_waiting_go||0)+(l.nb_failed||0)+(l.nb_done||0);
+            const pct = total ? Math.round((l.nb_done||0)/total*100) : 0;
+            const warn = (l.nb_failed||0)>0 || (l.nb_waiting_go||0)>0;
+            return (
+              <tr key={l.id} onClick={()=>onOuvrir(l)} style={{cursor:'pointer'}}
+                  onMouseEnter={e=>e.currentTarget.style.background='#F4F3EE'}
+                  onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                <td style={td}><span style={{fontWeight:800, color:JULES_NOIR}}>{julesTitre(l.titre)}</span></td>
+                <td style={td}><span style={{display:'inline-flex', alignItems:'center', gap:5, fontSize:11, fontWeight:700, color:'#565861'}}>
+                  <span style={{width:19, height:19, border:'1.5px solid '+JULES_NOIR, display:'grid', placeItems:'center',
+                                fontSize:11, background:nat.bg, color:nat.color}}>{nat.glyph}</span>{nat.label}
+                </span></td>
+                <td style={td}>{typ
+                  ? <span style={{fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.04em', padding:'2px 8px',
+                            border:'1.5px solid '+JULES_NOIR, background:JULES_TYPE_MISSION[typ].bg, color:JULES_TYPE_MISSION[typ].color}}>{typ}</span>
+                  : <span style={{color:JULES_GRIS_F}}>—</span>}</td>
+                <td style={td}><span style={{display:'inline-flex', alignItems:'center', gap:6, fontWeight:700, fontSize:12, color:JULES_NOIR}}>
+                  <span className={p.pulse?'jules-pouls':''} style={{width:9, height:9, borderRadius:'50%', background:p.couleur, flexShrink:0}}/>{p.mot}
+                </span></td>
+                <td style={td}>
+                  <div style={{height:8, width:110, maxWidth:'34vw', background:JULES_GRIS, border:'1.5px solid '+JULES_NOIR, position:'relative'}}>
+                    <span style={{position:'absolute', left:0, top:0, bottom:0, width:pct+'%', background:warn?JULES_JAUNE:JULES_VERT}}/>
+                  </div>
+                </td>
+                <td style={td}><span style={{fontSize:11.5, color:'#565861'}}>{julesPhrase(l, camp)}</span></td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -8319,11 +8500,14 @@ function TabJules({ profile, prefs }) {
     catch(e){ toast(e.message, 'error'); }        // l'état affiché n'a pas bougé
     finally { setOccupe(null); }
   },[recharger]);
-  // Sous 768 px, seul le parapheur est déployé (spec §6) : les deux autres bandeaux partent repliés.
-  const [replie,setReplie] = useState(()=> window.innerWidth<768 ? {encours:true,missions:true} : {});
-  // Le parapheur se replie comme les autres — cohérence de l'écran — mais il n'est jamais
-  // replié au départ : ce qui attend Nicolas ne se cache pas tout seul.
-  const bascule = (k) => setReplie(r=>({...r,[k]:!r[k]}));
+  const [apercu,setApercu] = useState(null);   // entrée du parapheur ouverte dans le volet
+  const jump = (id) => { const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:'smooth', block:'start'}); };
+  // Gestes du parapheur, partagés par la carte et le volet. On ferme le volet avant d'ouvrir un
+  // modal ou d'agir : l'entrée peut disparaître après coup (relue depuis la base).
+  const approOnAccorder = a=>{ setApercu(null); agir(a.id,()=>julesActions.accorder(a)); };
+  const approOnAjuster  = a=>{ setApercu(null); setAAjuster(a); };
+  const approOnRefuser  = a=>{ setApercu(null); setARefuser(a); };
+  const approOnRepondre = a=>{ setApercu(null); setARepondre(a); };
   if(!J.data&&J.chargement) return <Loader label="Lecture de l'état de Jules…"/>;
   if(!J.data) return (
     <div className="tab-content">
@@ -8356,27 +8540,27 @@ function TabJules({ profile, prefs }) {
           {J.nbNouveautes} nouveauté{J.nbNouveautes>1?'s':''} — toucher pour actualiser
         </button>
       )}
-      <JulesBandeau titre="Ce qui t'attend" compteur={J.data.parapheur.length}
-        ouvert={!replie.parapheur} onToggle={()=>bascule('parapheur')}>
+      <JulesAccueil data={J.data} onJump={jump}/>
+      <JulesZone id="attend" titre="Ce qui t'attend" compteur={J.data.parapheur.length}
+        hint="Couleur = ce qu'on attend de toi · clique une carte pour le détail">
         <JulesParapheur entrees={J.data.parapheur}
-          onAccorder={a=>agir(a.id,()=>julesActions.accorder(a))}
-          onAjuster={a=>setAAjuster(a)}
-          onRefuser={a=>setARefuser(a)}
-          onRepondre={a=>setARepondre(a)}
-          actionEnCours={occupe}/>
-      </JulesBandeau>
-      <JulesBandeau titre="Ce qui tourne" compteur={J.data.encours.length}
-        ouvert={!replie.encours} onToggle={()=>bascule('encours')}>
-        <JulesEncours encours={J.data.encours} dueToday={J.data.dueToday}/>
-      </JulesBandeau>
-      <JulesBandeau titre="Missions" compteur={J.data.backlog.length}
-        ouvert={!replie.missions} onToggle={()=>bascule('missions')}>
-        <div style={{marginBottom:12}}>
-          <BtnAction onClick={()=>setCreation(true)} icon={ICONS.add} label="Nouvelle mission" variant="primary"/>
-        </div>
+          onAccorder={approOnAccorder} onAjuster={approOnAjuster}
+          onRefuser={approOnRefuser} onRepondre={approOnRepondre}
+          onOuvrir={a=>setApercu(a)} actionEnCours={occupe}/>
+      </JulesZone>
+      <JulesZone id="tourne" titre="Ce qui tourne" compteur={J.data.encours.length}
+        hint="La journée de Jules · fait ✓ · en cours ● · planté ✕">
+        <JulesEncours journee={J.data.journee} encours={J.data.encours} dueToday={J.data.dueToday}/>
+      </JulesZone>
+      <JulesZone id="missions" titre="Missions" compteur={J.data.backlog.length}
+        hint="Le fond de commerce que Jules pilote en continu"
+        action={<BtnAction onClick={()=>setCreation(true)} icon={ICONS.add} label="Nouvelle mission" variant="primary"/>}>
         <JulesMissions campagnes={J.data.campagnes} backlog={J.data.backlog}
           missions={J.data.missions} onOuvrir={m=>setDetailId(m.id)}/>
-      </JulesBandeau>
+      </JulesZone>
+      {apercu&&<JulesApercuAppro entree={apercu} occupe={occupe} onClose={()=>setApercu(null)}
+        onAccorder={approOnAccorder} onAjuster={approOnAjuster}
+        onRefuser={approOnRefuser} onRepondre={approOnRepondre}/>}
       {detailId&&<JulesDetail missionId={detailId} data={J.data} onClose={()=>setDetailId(null)}
         occupe={occupe}
         actions={{basculerPause:m=>agir(m.id,()=>julesActions.basculerPause(m)),
