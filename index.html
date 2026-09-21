@@ -8601,29 +8601,80 @@ const JULES_CHAMP = {width:'100%', border:'2px solid '+JULES_NOIR, padding:'8px 
 
 // Répondre à un blocage ou trancher une décision. Si l'entrée porte des options, elles
 // deviennent des boutons : c'est le geste le plus court. Sinon, texte libre.
+// Une option de carte, en case à cocher plutôt qu'en bouton — même vocabulaire visuel que
+// le toggle « Afficher tech » (carré plein + ✓), pas de case native qui casserait la DA.
+function JulesCase({ coche, label, onToggle, disabled }) {
+  return (
+    <button onClick={onToggle} disabled={disabled} type="button"
+      style={{display:'inline-flex', alignItems:'center', gap:7, minHeight:44, textAlign:'left',
+              background:coche?JULES_NOIR:'#fff', color:coche?'#fff':JULES_NOIR,
+              border:'2px solid '+JULES_NOIR, boxShadow:coche?'4px 4px 0 #4A7FE5':'4px 4px 0 '+JULES_GRIS,
+              padding:'8px 12px', borderRadius:0, fontFamily:'Outfit,sans-serif', fontSize:12, fontWeight:700,
+              letterSpacing:'0.03em', textTransform:'uppercase', cursor:disabled?'not-allowed':'pointer',
+              opacity:disabled?0.5:1, transition:'all 80ms ease'}}
+      onMouseEnter={e=>{if(!disabled)e.currentTarget.style.transform='translate(-2px,-2px)';}}
+      onMouseLeave={e=>{e.currentTarget.style.transform='none';}}>
+      <span style={{width:15, height:15, flexShrink:0, border:'1.5px solid '+(coche?'#fff':JULES_NOIR),
+                    background:coche?'#fff':'transparent', color:JULES_NOIR, display:'grid', placeItems:'center',
+                    fontSize:11, fontWeight:800, lineHeight:1}}>{coche?'✓':''}</span>
+      {label}
+    </button>
+  );
+}
+
 function JulesRepondre({ entree, onClose, onSave, saving }) {
   const [texte,setTexte] = useState('');
+  const [coches,setCoches] = useState([]);
   const champRef = useJulesFocusSansScroll();
-  const options = Array.isArray(entree.options) ? entree.options
-                : (entree.options && Array.isArray(entree.options.options)) ? entree.options.options : [];
+  const brut = entree.options;
+  const options = Array.isArray(brut) ? brut
+                : (brut && Array.isArray(brut.options)) ? brut.options : [];
+  // Multi-décisions : une carte qui porte PLUSIEURS arbitrages distincts (constat Nicolas
+  // 21/09 sur « Envoi Clara — 2 arbitrages » : 4 boutons plats qui ressemblaient à un choix
+  // unique). Jules le déclare explicitement en déposant `options: { multi: true, options: [...] }` ;
+  // sinon rien ne change — une liste simple reste des boutons qui tranchent en un clic,
+  // et c'est bien ce qu'on veut pour l'immense majorité des cartes.
+  const multi = !!(brut && !Array.isArray(brut) && brut.multi);
+  const libelle = (o) => typeof o==='string' ? o : (o.label||o.titre||JSON.stringify(o));
+  const basculer = (lib) => setCoches(c => c.includes(lib) ? c.filter(x=>x!==lib) : [...c, lib]);
+  // En multi, la réponse est la liste cochée ; le champ libre reste facultatif et vient en
+  // complément. En simple, le comportement d'origine est strictement conservé.
+  const reponse = multi
+    ? [coches.join(' + '), texte.trim()].filter(Boolean).join(' — ')
+    : texte.trim();
   const bloque = entree.nature==='bloque';
   return (
     <Modal title={bloque?'Donner l\'information qui manque':'Trancher'} onClose={onClose}
-      footer={<ModalFooter onClose={onClose} saving={saving} disabled={!texte.trim()} label="Envoyer à Jules"
-        onSave={()=>onSave(texte.trim())}/>}>
+      footer={<ModalFooter onClose={onClose} saving={saving} disabled={!reponse}
+        label={multi ? (coches.length>1 ? 'Envoyer les '+coches.length+' décisions' : 'Envoyer à Jules') : 'Envoyer à Jules'}
+        onSave={()=>onSave(reponse)}/>}>
       <div style={{fontSize:14, fontWeight:700, color:JULES_NOIR, marginBottom:6}}>{julesTitre(entree.titre)}</div>
       {entree.detail&&<div style={{fontSize:12, color:'#565861', marginBottom:12}}><JulesTexteRiche texte={entree.detail}/></div>}
-      {options.length>0&&(
+      {options.length>0&&(multi ? (
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11, fontWeight:800, color:'#565861', textTransform:'uppercase',
+                       letterSpacing:'0.05em', marginBottom:7}}>
+            Plusieurs décisions — coche tout ce que tu accordes
+          </div>
+          <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+            {options.map((o,i)=>{
+              const lib = libelle(o);
+              return <JulesCase key={i} label={lib} coche={coches.includes(lib)}
+                                onToggle={()=>basculer(lib)} disabled={saving}/>;
+            })}
+          </div>
+        </div>
+      ) : (
         <div style={{display:'flex', gap:8, flexWrap:'wrap', marginBottom:12}}>
           {options.map((o,i)=>{
-            const lib = typeof o==='string' ? o : (o.label||o.titre||JSON.stringify(o));
+            const lib = libelle(o);
             return <span key={i} style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
               <BtnAction onClick={()=>onSave(lib)} label={lib} variant="edit" disabled={saving}/>
             </span>;
           })}
         </div>
-      )}
-      <Field label={bloque?'Ce qu\'il te manquait':'Ta réponse'}>
+      ))}
+      <Field label={multi ? 'À ajouter (facultatif)' : (bloque?'Ce qu\'il te manquait':'Ta réponse')}>
         <textarea ref={champRef} value={texte} onChange={e=>setTexte(e.target.value)} rows={5}
           placeholder={bloque?'Ex : réf BPM002946, TJM plafond 570.':'Ex : pousse Marie en premier, puis Lucas.'}
           style={{...JULES_CHAMP, minHeight:110, lineHeight:1.5}}/>
