@@ -7572,9 +7572,10 @@ function julesAge(iso) {
 // Boutons d'action d'une entrée (réutilisés sur la carte ET dans le volet de détail).
 // Les gestes ne changent pas (spec §4 « CRM = clics ») : GO = accorder/ajuster ; décision ou
 // blocage = trancher/donner l'info via le modal existant (ses boutons d'options + texte).
-function JulesActionsAppro({ a, occupe, onAccorder, onAjuster, onRefuser, onRepondre }) {
+function JulesActionsAppro({ a, occupe, onAccorder, onAjuster, onRefuser, onRepondre, onDiscuter }) {
   return (
     <div style={{display:'flex', gap:8, flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
+      {onDiscuter&&<JulesSlackBtn onClick={()=>onDiscuter({kind:'approval', ref_id:a.id, titre:a.titre})} label="Slack"/>}
       {a.nature==='go' ? (
         <>
           <span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
@@ -7606,7 +7607,7 @@ const JULES_FILTRES = [
   {cle:'go',       label:'Go / No-go', dot:JULES_VERT},
   {cle:'critique', label:'Critique', dot:JULES_ROUGE},
 ];
-function JulesParapheur({ entrees, onAccorder, onAjuster, onRefuser, onRepondre, onOuvrir, actionEnCours }) {
+function JulesParapheur({ entrees, onAccorder, onAjuster, onRefuser, onRepondre, onOuvrir, onDiscuter, actionEnCours }) {
   const [filtre,setFiltre] = useState('tout');
   if(!entrees.length) return <div style={{fontSize:13, color:'#565861'}}>Rien n'attend ta décision.</div>;
   const gardees = entrees.filter(a=>{
@@ -7654,7 +7655,7 @@ function JulesParapheur({ entrees, onAccorder, onAjuster, onRefuser, onRepondre,
               <div style={{fontSize:13.5, fontWeight:800, color:JULES_NOIR, lineHeight:1.25}}>{julesTitre(a.titre)}</div>
               {a.detail&&<div style={{fontSize:12, color:'#565861', lineHeight:1.35, display:'-webkit-box',
                             WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden'}}>{julesTitre(a.detail)}</div>}
-              <JulesActionsAppro a={a} occupe={occupe}
+              <JulesActionsAppro a={a} occupe={occupe} onDiscuter={onDiscuter}
                 onAccorder={onAccorder} onAjuster={onAjuster} onRefuser={onRefuser} onRepondre={onRepondre}/>
             </div>
           );
@@ -7666,7 +7667,7 @@ function JulesParapheur({ entrees, onAccorder, onAjuster, onRefuser, onRepondre,
 
 // Volet de détail d'une entrée du parapheur (spec §3.2/§3.5) : tout le contexte + les mêmes
 // gestes. La conversation libre (« les mots ») passera par Slack au sous-projet 360.
-function JulesApercuAppro({ entree, onClose, onAccorder, onAjuster, onRefuser, onRepondre, occupe }) {
+function JulesApercuAppro({ entree, onClose, onAccorder, onAjuster, onRefuser, onRepondre, onDiscuter, occupe }) {
   const a = entree;
   const teinte = julesApproTeinte(a);
   const tag = a.nature==='go' ? 'Go / No-go' : a.nature==='bloque' ? 'Bloqué' : 'Décision';
@@ -7676,7 +7677,7 @@ function JulesApercuAppro({ entree, onClose, onAccorder, onAjuster, onRefuser, o
         <ColorBadge label={tag} bg={teinte} color="#fff"/>
         {julesApproCritique(a)&&<ColorBadge label="Urgent" bg={JULES_ROUGE} color="#fff"/>}
       </span>}
-      actions={<JulesActionsAppro a={a} occupe={occupe}
+      actions={<JulesActionsAppro a={a} occupe={occupe} onDiscuter={onDiscuter}
         onAccorder={onAccorder} onAjuster={onAjuster} onRefuser={onRefuser} onRepondre={onRepondre}/>}>
       <Field label={'Depuis '+julesAge(a.created_at)}>
         {a.detail ? <div style={{fontSize:13, color:'#333', lineHeight:1.55}}><JulesTexteRiche texte={a.detail}/></div>
@@ -7978,6 +7979,29 @@ function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
   );
 }
 
+// Relais CRM → Slack : écrit une amorce (db/39). Le pont la poste dans le DM de Nicolas et
+// relance Jules avec le contexte. Le CRM ne parle jamais à Slack directement.
+async function julesDiscuter({ kind, ref_id=null, mission_id=null, titre, contexte=null }) {
+  const { data, error } = await sb.from('agent_slack_amorces')
+    .insert({kind, ref_id, mission_id, titre, contexte}).select('id');
+  if(error) throw new Error('Amorce non créée : '+error.message);
+  if(!data||!data.length) throw new Error('Amorce non créée.');
+  return data[0];
+}
+// Bouton « Discuter dans Slack » réutilisé partout (carte, mission, tâche, nouvelle mission).
+function JulesSlackBtn({ onClick, label='Discuter dans Slack', disabled=false }) {
+  return (
+    <button type="button" onClick={e=>{e.stopPropagation(); onClick();}} disabled={disabled}
+      title="Jules t'écrira dans ton DM Slack pour en discuter"
+      style={{display:'inline-flex', alignItems:'center', gap:6, fontFamily:'Outfit,sans-serif',
+              fontSize:11.5, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.03em',
+              padding:'6px 11px', border:'2px solid #4A154B', background:'#4A154B', color:'#fff',
+              cursor:disabled?'default':'pointer', opacity:disabled?0.5:1, minHeight:32}}>
+      <svg viewBox="0 0 24 24" width={13} height={13} fill="currentColor" style={{flexShrink:0}}><path d={JULES_SLACK_PATH}/></svg> {label}
+    </button>
+  );
+}
+
 // Les quatre gestes autorisés depuis l'écran. Le reste continue par Slack (spec §2).
 // Aucune mise à jour optimiste : on écrit, on vérifie, on relit. Si l'écriture échoue,
 // l'écran reste exactement dans l'état précédent et un message explicite le dit.
@@ -8154,7 +8178,7 @@ const JULES_SEQ_STATUT_STYLE = {
 // agent_tasks n'est pas chargée globalement : une mission peut en porter beaucoup et elles ne
 // servent qu'ici (« le seul endroit où les tâches sont listées », spec §3.4). Lecture à l'ouverture,
 // ce qui borne le trafic du sondage des 30 s.
-function JulesDetail({ missionId, data, onClose, actions, occupe }) {
+function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
   const mission = useMemo(()=>(data.missions||[]).find(m=>m.id===missionId),[data.missions,missionId]);
   const [taches,setTaches] = useState(null);
   const [detailOuvert,setDetailOuvert] = useState(null);   // id de la tâche dépliée, une seule à la fois
@@ -8196,6 +8220,8 @@ function JulesDetail({ missionId, data, onClose, actions, occupe }) {
                    variant="edit" disabled={occupe===mission.id}/>
         <BtnAction onClick={()=>actions.fermer(mission)} icon={ICONS.close} label="Clôturer"
                    variant="danger" disabled={occupe===mission.id}/>
+        {discuter&&<JulesSlackBtn label="Discuter"
+          onClick={()=>discuter({kind:'mission', ref_id:mission.id, mission_id:mission.id, titre:mission.titre})}/>}
       </span>}>
 
       <Field label="Configuration">
@@ -8261,6 +8287,14 @@ function JulesDetail({ missionId, data, onClose, actions, occupe }) {
                                 fontSize:11, color:occupe===t.id?JULES_GRIS_F:JULES_BLEU,
                                 textTransform:'uppercase', letterSpacing:'0.05em', minHeight:32}}>
                         {occupe===t.id?'relance…':'↻ relancer'}
+                      </button>
+                    )}
+                    {discuter&&(
+                      <button type="button" title="Rebondir sur cette tâche avec Jules (même mission)"
+                        onClick={()=>discuter({kind:'task', ref_id:t.id, mission_id:t.mission_id||mission.id, titre:t.titre})}
+                        style={{background:'none', border:'none', padding:0, cursor:'pointer', fontSize:11,
+                                color:'#4A154B', fontWeight:800, textTransform:'uppercase', letterSpacing:'0.05em', minHeight:32}}>
+                        ⤷ rebondir dans slack
                       </button>
                     )}
                   </div>
@@ -8447,7 +8481,7 @@ function JulesCadence({ jours, heures, onJours, onHeures }) {
 
 // Créer une mission. Trois types, et c'est tout : une campagne se configure ensuite
 // au dialogue avec Jules, qui remplit sa cible, ses gabarits et ses quotas.
-function JulesNouvelleMission({ onClose, onSave, saving }) {
+function JulesNouvelleMission({ onClose, onSave, saving, onDiscuter }) {
   const [titre,setTitre] = useState('');
   const champRef = useJulesFocusSansScroll();
   const [kind,setKind] = useState('oneshot');
@@ -8471,11 +8505,15 @@ function JulesNouvelleMission({ onClose, onSave, saving }) {
   const cadenceOk = !recurrente || (jours.length>0 && heuresPropres.length>0);
   return (
     <Modal title="Nouvelle mission" onClose={onClose}
-      footer={<ModalFooter onClose={onClose} saving={saving} label="Créer"
-        disabled={!titre.trim()||!cadenceOk||!typeOk}
-        onSave={()=>onSave({titre:titre.trim(), kind, priorite:Number(priorite), contexte,
-                            cadence:recurrente?cadence():null, task_type:recurrente?taskType:null,
-                            task_payload:recurrente?payloadPour():null})}/>}>
+      footer={<>
+        {onDiscuter&&<span style={{marginRight:'auto'}}><JulesSlackBtn label="En discuter avec Jules"
+          onClick={()=>{ onDiscuter({kind:'mission_create', titre:titre.trim()||'Nouvelle mission', contexte:contexte.trim()||null}); onClose(); }}/></span>}
+        <ModalFooter onClose={onClose} saving={saving} label="Créer"
+          disabled={!titre.trim()||!cadenceOk||!typeOk}
+          onSave={()=>onSave({titre:titre.trim(), kind, priorite:Number(priorite), contexte,
+                              cadence:recurrente?cadence():null, task_type:recurrente?taskType:null,
+                              task_payload:recurrente?payloadPour():null})}/>
+      </>}>
       <Field label="Titre">
         <input ref={champRef} value={titre} onChange={e=>setTitre(e.target.value)} style={JULES_CHAMP}
           placeholder="Ex : Chasse BA senior Crédit Agricole"/>
@@ -8583,6 +8621,11 @@ function TabJules({ profile, prefs, deepLink }) {
   const approOnAjuster  = a=>{ setApercu(null); setAAjuster(a); };
   const approOnRefuser  = a=>{ setApercu(null); setARefuser(a); };
   const approOnRepondre = a=>{ setApercu(null); setARepondre(a); };
+  // Relais Slack : écrit une amorce, le pont poste dans le DM. Feedback immédiat, pas de rechargement.
+  const discuter = useCallback(async (payload)=>{
+    try{ await julesDiscuter(payload); toast('👍 Jules va t\'écrire dans Slack, réponds-lui là-bas.'); }
+    catch(e){ toast(e.message, 'error'); }
+  },[]);
   // Consomme le deep-link une fois les données lues : ouvre le volet de l'appro ou la mission.
   const deepLinkFait = useRef(false);
   useEffect(()=>{
@@ -8630,7 +8673,7 @@ function TabJules({ profile, prefs, deepLink }) {
         hint="Couleur = ce qu'on attend de toi · clique une carte pour le détail">
         <JulesParapheur entrees={J.data.parapheur}
           onAccorder={approOnAccorder} onAjuster={approOnAjuster}
-          onRefuser={approOnRefuser} onRepondre={approOnRepondre}
+          onRefuser={approOnRefuser} onRepondre={approOnRepondre} onDiscuter={discuter}
           onOuvrir={a=>setApercu(a)} actionEnCours={occupe}/>
       </JulesZone>
       <JulesZone id="tourne" titre="Ce qui tourne" compteur={J.data.encours.length}
@@ -8646,9 +8689,9 @@ function TabJules({ profile, prefs, deepLink }) {
       </JulesZone>
       {apercu&&<JulesApercuAppro entree={apercu} occupe={occupe} onClose={()=>setApercu(null)}
         onAccorder={approOnAccorder} onAjuster={approOnAjuster}
-        onRefuser={approOnRefuser} onRepondre={approOnRepondre}/>}
+        onRefuser={approOnRefuser} onRepondre={approOnRepondre} onDiscuter={discuter}/>}
       {detailId&&<JulesDetail missionId={detailId} data={J.data} onClose={()=>setDetailId(null)}
-        occupe={occupe}
+        occupe={occupe} discuter={discuter}
         actions={{basculerPause:m=>agir(m.id,()=>julesActions.basculerPause(m)),
                   arreterSuivi:s=>agir(s.id,()=>julesActions.arreterSuivi(s)),
                   relancerTache:t=>agir(t.id,()=>julesActions.relancerTache(t)),
@@ -8686,7 +8729,7 @@ function TabJules({ profile, prefs, deepLink }) {
         saving={occupe===aAjuster.id}
         onSave={txt=>{ const a=aAjuster; setAAjuster(null);
           agir(a.id,()=>julesActions.ajuster(a,txt)); }}/>}
-      {creation&&<JulesNouvelleMission onClose={()=>setCreation(false)}
+      {creation&&<JulesNouvelleMission onClose={()=>setCreation(false)} onDiscuter={discuter}
         saving={occupe==='creation'}
         onSave={champs=>{ setCreation(false);
           agir('creation',()=>julesActions.creerMission(champs)); }}/>}
