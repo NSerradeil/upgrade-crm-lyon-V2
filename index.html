@@ -7721,12 +7721,17 @@ function julesFriseNiveaux(lignes){
   const derniers=[];             // derniers[k] = position % du dernier libellé posé au niveau k
   return lignes.map(r=>{
     const p=julesFrisePct(r.prevu_at);
+    // Ce qui est FAIT ne porte plus de titre : c'est derrière nous, son nom n'apprend rien
+    // et c'est lui qui encombrait la matinée (neuf ponctuelles avant midi le 21/09). Il reste
+    // une pastille verte — le survol et le clic donnent le détail.
+    const etiquete = r.etat !== 'done';
+    if(!etiquete) return {...r, pct:p, niveau:0, etiquete:false};
     let k=0; while(derniers[k]!==undefined && p-derniers[k] < JULES_FRISE_ECART) k++;
     derniers[k]=p;
-    return {...r, pct:p, niveau:k};
+    return {...r, pct:p, niveau:k, etiquete:true};
   });
 }
-function JulesFrise({ journee, onOuvrir }) {
+function JulesFrise({ journee, onPin }) {
   if(!journee || !journee.length)
     return <div style={{fontSize:13, color:'#565861'}}>Rien de daté aujourd'hui.</div>;
   const now=new Date(); const nowH=now.getHours()+now.getMinutes()/60;
@@ -7743,7 +7748,7 @@ function JulesFrise({ journee, onOuvrir }) {
   const MARGE = 26;             // demi-hauteur minimale d'un couloir (rail + pastille)
   // Chaque couloir prend juste la place dont ses libellés ont besoin, haut et bas séparément.
   const mesures = parFamille.map(f=>{
-    const nivs=f.lignes.map(l=>l.niveau);
+    const nivs=f.lignes.filter(l=>l.etiquete).map(l=>l.niveau);
     const haut = Math.max(0, ...nivs.filter(k=>k%2===0).map(k=>k/2+1));
     const bas  = Math.max(0, ...nivs.filter(k=>k%2===1).map(k=>(k-1)/2+1));
     return {dessus:Math.max(MARGE, haut*CRAN+8), dessous:Math.max(MARGE, bas*CRAN+8)};
@@ -7777,18 +7782,18 @@ function JulesFrise({ journee, onOuvrir }) {
             {f.lignes.map((r,i)=>{
               const col=JULES_ETAT_COULEUR[r.etat]||JULES_GRIS_F; const pend=r.etat==='pending';
               const haut=r.niveau%2===0; const cran=haut? r.niveau/2 : (r.niveau-1)/2;
-              const cliquable = !!(onOuvrir && r.mission_id);
+              const cliquable = !!onPin;
               return (
-                <button key={f.cle+'-'+r.mission_id+r.prevu_at+i} onClick={()=>cliquable&&onOuvrir(r.mission_id)}
+                <button key={f.cle+'-'+r.mission_id+r.prevu_at+i} onClick={()=>cliquable&&onPin({...r, famille:f.cle})}
                   title={julesTitre(r.titre)+' — '+JULES_ETAT_MOT[r.etat]+' — '+extractTime(r.prevu_at)}
                   style={{position:'absolute', top:m.dessus, left:r.pct+'%', transform:'translate(-50%,-50%)', zIndex:2,
                           background:'none', border:'none', padding:0, cursor:cliquable?'pointer':'default', fontFamily:'Outfit,sans-serif'}}>
-                  <span style={{position:'absolute', left:'50%', transform:'translateX(-50%)', width:104, textAlign:'center',
+                  {r.etiquete&&<span style={{position:'absolute', left:'50%', transform:'translateX(-50%)', width:104, textAlign:'center',
                                 fontSize:10, fontWeight:800, lineHeight:1.15, color:JULES_NOIR,
                                 ...(haut?{bottom:18+cran*CRAN}:{top:18+cran*CRAN})}}>
                     <span style={{display:'block', ...JULES_UNE_LIGNE}}>{julesTitre(r.titre)}</span>
                     <span style={{display:'block', fontFamily:'IBM Plex Mono,monospace', fontSize:9, color:JULES_GRIS_F, fontWeight:600}}>{extractTime(r.prevu_at)}</span>
-                  </span>
+                  </span>}
                   <span className={r.etat==='running'?'jules-pouls':''}
                     style={{display:'grid', placeItems:'center', width:22, height:22, borderRadius:'50%',
                             background:pend?'#fff':col, color:pend?JULES_GRIS_F:'#fff',
@@ -7813,10 +7818,37 @@ function JulesFrise({ journee, onOuvrir }) {
   );
 }
 
-function JulesEncours({ journee, encours, dueToday, onOuvrir }) {
+// Le volet d'un pin de la frise : une pastille sans détail est une impasse (constat de
+// Nicolas 21/09 — « des bulles que je ne peux pas cliquer »). Toutes en ouvrent un, y
+// compris les relances de campagne, qui n'ont pas toujours de mission derrière elles.
+const JULES_FAMILLE_MOT = {ponctuelle:'Ponctuelle', routine:'Routine', campagne:'Campagne'};
+function JulesApercuPin({ pin, onClose, onOuvrirMission, mission }) {
+  const teinte = JULES_ETAT_COULEUR[pin.etat]||JULES_GRIS_F;
+  return (
+    <SidePanel title={julesTitre(pin.titre)} onClose={onClose}
+      badge={<span style={{display:'inline-flex', gap:6}}>
+        <ColorBadge label={JULES_FAMILLE_MOT[pin.famille]||'Passage'}
+          bg={(JULES_FRISE_FAMILLES.find(f=>f.cle===pin.famille)||{}).teinte||JULES_NOIR} color="#fff"/>
+        <ColorBadge label={JULES_ETAT_MOT[pin.etat]||pin.etat} bg={teinte} color="#fff"/>
+      </span>}
+      actions={mission ? <BtnAction onClick={()=>onOuvrirMission(pin.mission_id)} icon={ICONS.eye}
+                           label="Ouvrir la mission" variant="primary"/> : null}>
+      <Field label="Heure prévue">
+        <span style={{fontFamily:'IBM Plex Mono,monospace', fontSize:15, fontWeight:700, color:JULES_NOIR}}>
+          {extractTime(pin.prevu_at)||'—'}</span>
+      </Field>
+      <Field label="Mission rattachée">
+        {mission ? <span style={{fontSize:13, color:JULES_NOIR, fontWeight:700}}>{julesTitre(mission.titre)}</span>
+                 : <span style={{fontSize:13, color:'#565861'}}>Aucune — c'est une relance suivie au fil de la campagne.</span>}
+      </Field>
+    </SidePanel>
+  );
+}
+
+function JulesEncours({ journee, encours, dueToday, onOuvrir, onPin, discuter }) {
   return (
     <div style={{display:'flex', flexDirection:'column', gap:14}}>
-      <JulesFrise journee={journee} onOuvrir={onOuvrir}/>
+      <JulesFrise journee={journee} onPin={onPin}/>
       {encours.length>0&&(
         <div style={{display:'flex', gap:9, flexWrap:'wrap'}}>
           {encours.map(t=>(
@@ -7832,43 +7864,32 @@ function JulesEncours({ journee, encours, dueToday, onOuvrir }) {
           ))}
         </div>
       )}
-      {dueToday.some(x=>extractDate(x.due) && extractDate(x.due) < TODAY)&&(
-        <div style={{borderTop:'2px solid '+JULES_NOIR, paddingTop:12, marginTop:2}}>
-          <div style={{fontSize:12, fontWeight:800, color:JULES_NOIR, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:10}}>
-            Ce qui traîne <span style={{color:JULES_GRIS_F, fontWeight:600, textTransform:'none', letterSpacing:0}}>— les échéances de Jules non tenues ; celles du jour sont sur la frise</span>
+      {(()=>{
+        // Ce qui est dû AUJOURD'HUI est déjà sur la frise : ici, seulement le retard (une seule
+        // liste, pas de faux sous-menu). Chaque ligne est actionnable → on rebondit dans Slack.
+        const jour = (x) => extractDate(x.due);
+        const retard = dueToday.filter(x=>jour(x) && jour(x) < TODAY)
+                               .sort((a,b)=>String(a.due).localeCompare(String(b.due)));
+        if(!retard.length) return null;
+        return (
+          <div style={{borderTop:'2px solid '+JULES_NOIR, paddingTop:12, marginTop:2}}>
+            <div style={{fontSize:12, fontWeight:800, color:JULES_ROUGE, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:10}}>
+              En retard ({retard.length}) <span style={{color:JULES_GRIS_F, fontWeight:600, textTransform:'none', letterSpacing:0}}>— échéances non tenues ; celles du jour sont sur la frise</span>
+            </div>
+            <div style={{display:'flex', flexDirection:'column'}}>
+              {retard.slice(0,12).map(d=>(
+                <div key={String(d.kind)+d.id} style={{display:'flex', gap:10, alignItems:'center', padding:'5px 0', borderBottom:'1px solid '+JULES_GRIS}}>
+                  <span style={{fontFamily:'IBM Plex Mono,monospace', fontSize:11, fontWeight:700, color:JULES_ROUGE, width:46, flexShrink:0}}>
+                    {jour(d) ? jour(d).slice(8,10)+'/'+jour(d).slice(5,7) : (julesHeure(d.due)||'')}</span>
+                  <span title={julesTitre(d.titre)} style={{flex:1, fontSize:13, color:JULES_NOIR, minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(d.titre)}</span>
+                  {discuter&&<JulesSlackBtn small label="Discuter" onClick={()=>discuter({kind:d.kind==='task'?'task':'free', ref_id:d.id, titre:d.titre})}/>}
+                </div>
+              ))}
+              {retard.length>12&&<div style={{fontSize:11, color:'#565861', marginTop:6}}>et {retard.length-12} autre{retard.length-12>1?'s':''}.</div>}
+            </div>
           </div>
-          {/* Ce qui est dû AUJOURD'HUI est déjà sur la frise (couloirs ponctuelles/campagnes) :
-              le répéter ici en texte faisait deux listes à comparer. Il ne reste donc que le
-              retard, qui n'a pas sa place sur une frise 7h→19h et appelle une autre réaction. */}
-          {(()=>{
-            const jour = (x) => extractDate(x.due);
-            const retard = dueToday.filter(x=>jour(x) && jour(x) < TODAY);
-            const bloc = (titre, liste, couleur, suffixe) => liste.length>0 && (
-              <div style={{marginBottom:10}}>
-                <div style={{fontSize:11, fontWeight:800, color:couleur, textTransform:'uppercase',
-                             letterSpacing:'0.12em', marginBottom:6}}>{titre} ({liste.length}){suffixe}</div>
-                {(()=>{
-                  return [...liste].sort((a,b)=>String(a.due).localeCompare(String(b.due))).slice(0,10).map(d=>{
-                    const h = julesHeure(d.due);
-                    return (
-                      <div key={String(d.kind)+d.id} style={{display:'flex', gap:8, alignItems:'baseline', padding:'3px 0'}}>
-                        {/* Un retard de trois semaines affiché « 17:02 » se lit comme ce matin :
-                            on montre la date, l'heure seule ne suffit qu'au jour même. */}
-                        <span style={{fontSize:11, fontWeight:700, color:JULES_ROUGE, width:52, flexShrink:0}}>
-                          {jour(d) ? jour(d).slice(8,10)+'/'+jour(d).slice(5,7) : (h||'')}</span>
-                        <span title={julesTitre(d.titre)} style={{fontSize:13, color:JULES_NOIR, minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(d.titre)}</span>
-                      </div>
-                    );
-                  });
-                })()}
-                {liste.length>10&&<div style={{fontSize:11, color:'#565861', marginTop:4}}>
-                  et {liste.length-10} autre{liste.length-10>1?'s':''}.</div>}
-              </div>
-            );
-            return bloc('En retard', retard, JULES_ROUGE, '');
-          })()}
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
@@ -8666,6 +8687,7 @@ function TabJules({ profile, prefs, deepLink }) {
     finally { setOccupe(null); }
   },[recharger]);
   const [apercu,setApercu] = useState(null);   // entrée du parapheur ouverte dans le volet
+  const [pin,setPin] = useState(null);        // pin de la frise ouvert dans le volet
   const jump = (id) => { const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:'smooth', block:'start'}); };
   // Gestes du parapheur, partagés par la carte et le volet. On ferme le volet avant d'ouvrir un
   // modal ou d'agir : l'entrée peut disparaître après coup (relue depuis la base).
@@ -8731,7 +8753,7 @@ function TabJules({ profile, prefs, deepLink }) {
       <JulesZone id="tourne" titre="Ce qui tourne" compteur={J.data.encours.length}
         hint="La journée de Jules · fait ✓ · en cours ● · planté ✕">
         <JulesEncours journee={J.data.journee} encours={J.data.encours} dueToday={J.data.dueToday}
-          onOuvrir={id=>setDetailId(id)}/>
+          onOuvrir={id=>setDetailId(id)} onPin={p=>setPin(p)} discuter={discuter}/>
       </JulesZone>
       <JulesZone id="missions" titre="Missions" compteur={J.data.backlog.length}
         hint="Le fond de commerce que Jules pilote en continu"
@@ -8739,6 +8761,9 @@ function TabJules({ profile, prefs, deepLink }) {
         <JulesMissions campagnes={J.data.campagnes} backlog={J.data.backlog}
           missions={J.data.missions} onOuvrir={m=>setDetailId(m.id)}/>
       </JulesZone>
+      {pin&&<JulesApercuPin pin={pin} onClose={()=>setPin(null)}
+        mission={(J.data.missions||[]).find(m=>m.id===pin.mission_id)}
+        onOuvrirMission={id=>{ setPin(null); setDetailId(id); }}/>}
       {apercu&&<JulesApercuAppro entree={apercu} occupe={occupe} onClose={()=>setApercu(null)}
         onAccorder={approOnAccorder} onAjuster={approOnAjuster}
         onRefuser={approOnRefuser} onRepondre={approOnRepondre} onDiscuter={discuter}/>}
