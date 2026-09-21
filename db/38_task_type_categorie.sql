@@ -24,13 +24,15 @@ update public.agent_task_types set categorie = v.cat from (values
 ) as v(type, cat) where public.agent_task_types.type = v.type;
 
 -- Backlog : on rattache la catégorie du task_type de la mission (null pour un one-shot sans type).
+-- categorie ajoutée EN DERNIER : CREATE OR REPLACE VIEW n'autorise que l'ajout en fin.
 create or replace view public.agent_v_backlog as
-  select m.id, m.titre, m.kind, m.statut, m.priorite, m.contexte, m.updated_at, tt.categorie,
+  select m.id, m.titre, m.kind, m.statut, m.priorite, m.contexte, m.updated_at,
          count(t.id) filter (where t.statut = 'due')        as nb_due,
          count(t.id) filter (where t.statut = 'claimed')    as nb_claimed,
          count(t.id) filter (where t.statut = 'waiting_go') as nb_waiting_go,
          count(t.id) filter (where t.statut = 'failed')     as nb_failed,
-         count(t.id) filter (where t.statut = 'done')       as nb_done
+         count(t.id) filter (where t.statut = 'done')       as nb_done,
+         tt.categorie
     from public.agent_missions m
     left join public.agent_tasks t on t.mission_id = m.id
     left join public.agent_task_types tt on tt.type = m.task_type
