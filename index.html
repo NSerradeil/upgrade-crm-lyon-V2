@@ -8778,10 +8778,6 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
                   <span style={{fontSize:11, color:JULES_GRIS_F, textTransform:'uppercase', letterSpacing:'0.05em'}}>
                     {parc.faits}/{parc.total} · {ouEnEst}{s.next_due_at?' · '+extractDate(s.next_due_at):''}
                   </span>
-                  {['active','replied'].includes(s.statut)&&<span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
-                    <BtnAction onClick={()=>setASortir(s)} icon={ICONS.stop} label="Sortir"
-                               variant={s.statut==='replied'?'success':'danger'} disabled={occupe===s.id}/>
-                  </span>}
                 </div>
                 <div style={{display:'flex', gap:12, alignItems:'center', marginTop:6, flexWrap:'wrap'}}>
                   <button type="button" onClick={()=>setSeqOuvert(deplie?null:s.id)} aria-expanded={deplie}
@@ -8791,6 +8787,15 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
                   </button>
                   {discuter&&<JulesSlackBtn small label="Discuter"
                     onClick={()=>discuter({kind:'free', ref_id:s.id, mission_id:s.mission_id||mission.id, titre:s.target_label+' — '+mission.titre})}/>}
+                  {/* « Sortir » vit sur la ligne d'actions, pas dans l'en-tête (Nicolas 22/09) :
+                      en en-tête il passait à la ligne ou non selon la longueur du nom, donc la
+                      carte ne ressemblait jamais à la précédente. Ici sa place est fixe. */}
+                  {['active','replied'].includes(s.statut)&&(
+                    <span style={{display:'inline-flex', minHeight:44, alignItems:'center', marginLeft:'auto'}}>
+                      <BtnAction onClick={()=>setASortir(s)} icon={ICONS.stop} label="Sortir"
+                                 variant={s.statut==='replied'?'success':'danger'} disabled={occupe===s.id}/>
+                    </span>
+                  )}
                 </div>
                 {deplie&&(
                   <div style={{marginTop:6, borderTop:'1px solid '+JULES_GRIS, paddingTop:6, fontSize:12, color:'#565861', lineHeight:1.5}}>
