@@ -7394,9 +7394,10 @@ function useJulesData() {
         if(!vivant) return;
         setErreur('');
         setDernierEssai(new Date().toLocaleTimeString('fr-FR'));
-        setData(prev=>{ if(!prev){ setPending(null); return d; }
-                        if(empreinte(prev)!==empreinte(d)) setPending(d); else setPending(null);
-                        return prev; });
+        // Auto-apply (règle Nicolas 21/09) : on applique directement les données au sondage,
+        // au lieu d'attendre un tap « nouveautés » — fini les vues périmées (« c'est toujours là »).
+        setPending(null);
+        setData(d);
       } catch(e){ if(vivant) setErreur(e.message); }
     };
     const id=setInterval(tick,30000);
