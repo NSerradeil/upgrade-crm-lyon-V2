@@ -7712,6 +7712,20 @@ const JULES_FRISE_FAMILLES = [
   {cle:'routine',    mot:'Routines',    teinte:JULES_NOIR},
   {cle:'campagne',   mot:'Campagnes',   teinte:JULES_BLEU},
 ];
+// Placement anti-collision des libellés : deux pins proches dans le temps ont des libellés
+// qui se recouvrent (cas vécu 21/09 : cinq ponctuelles entre 9h et 10h30, illisibles). On
+// empile donc par niveaux, alternés au-dessus/au-dessous du rail, en descendant d'un cran
+// seulement quand le niveau courant est déjà occupé à cette heure-là.
+const JULES_FRISE_ECART = 12;   // % de la largeur : encombrement horizontal d'un libellé
+function julesFriseNiveaux(lignes){
+  const derniers=[];             // derniers[k] = position % du dernier libellé posé au niveau k
+  return lignes.map(r=>{
+    const p=julesFrisePct(r.prevu_at);
+    let k=0; while(derniers[k]!==undefined && p-derniers[k] < JULES_FRISE_ECART) k++;
+    derniers[k]=p;
+    return {...r, pct:p, niveau:k};
+  });
+}
 function JulesFrise({ journee, onOuvrir }) {
   if(!journee || !journee.length)
     return <div style={{fontSize:13, color:'#565861'}}>Rien de daté aujourd'hui.</div>;
@@ -7720,55 +7734,71 @@ function JulesFrise({ journee, onOuvrir }) {
   const heures=[]; for(let h=JULES_FRISE_DEB; h<=JULES_FRISE_FIN; h+=2) heures.push(h);
   // Une famille absente garde son couloir : un couloir vide DIT quelque chose (aucune
   // campagne ne tourne aujourd'hui), là où le masquer ferait croire à un oubli.
-  const parFamille = JULES_FRISE_FAMILLES.map(f=>({...f,
-    lignes:(journee||[]).filter(r=>(r.famille||'routine')===f.cle)
-                        .sort((a,b)=>String(a.prevu_at).localeCompare(String(b.prevu_at)))}));
-  const COULOIR = 92;   // hauteur d'un couloir : de quoi poser le libellé au-dessus du rail
-  const RAIL    = 62;   // ordonnée du rail dans le couloir
+  const parFamille = JULES_FRISE_FAMILLES.map(f=>{
+    const lignes=(journee||[]).filter(r=>(r.famille||'routine')===f.cle)
+                              .sort((a,b)=>String(a.prevu_at).localeCompare(String(b.prevu_at)));
+    return {...f, lignes:julesFriseNiveaux(lignes)};
+  });
+  const CRAN = 30;              // hauteur d'un cran de libellé
+  const MARGE = 26;             // demi-hauteur minimale d'un couloir (rail + pastille)
+  // Chaque couloir prend juste la place dont ses libellés ont besoin, haut et bas séparément.
+  const mesures = parFamille.map(f=>{
+    const nivs=f.lignes.map(l=>l.niveau);
+    const haut = Math.max(0, ...nivs.filter(k=>k%2===0).map(k=>k/2+1));
+    const bas  = Math.max(0, ...nivs.filter(k=>k%2===1).map(k=>(k-1)/2+1));
+    return {dessus:Math.max(MARGE, haut*CRAN+8), dessous:Math.max(MARGE, bas*CRAN+8)};
+  });
+  const hauteurs = mesures.map(m=>m.dessus+m.dessous);
+  const GOUTTIERE = 96;         // la colonne des noms de couloir, hors du rail
   return (
     <div style={{border:'2px solid '+JULES_NOIR, boxShadow:'4px 4px 0 '+JULES_GRIS, background:'#fff', padding:'16px 26px 14px', overflowX:'auto'}}>
-      <div style={{position:'relative', minWidth:560, margin:'0 8px'}}>
-        {/* Le trait « maintenant » traverse les trois couloirs d'un seul tenant. */}
-        {nowPct>=0&&nowPct<=100&&(
-          <div style={{position:'absolute', top:14, height:COULOIR*JULES_FRISE_FAMILLES.length-8, left:nowPct+'%',
-                       width:2, background:JULES_ROUGE, transform:'translateX(-50%)', zIndex:3, pointerEvents:'none'}}>
-            <span style={{position:'absolute', top:-13, left:'50%', transform:'translateX(-50%)', fontSize:8, fontWeight:800,
-                          color:JULES_ROUGE, whiteSpace:'nowrap', textTransform:'uppercase', letterSpacing:'0.05em'}}>maintenant</span>
-          </div>
-        )}
-        {parFamille.map((f,fi)=>(
-          <div key={f.cle} style={{position:'relative', height:COULOIR}}>
-            <div style={{position:'absolute', left:0, top:RAIL-13, fontSize:9.5, fontWeight:800, color:f.teinte,
-                         textTransform:'uppercase', letterSpacing:'0.09em', background:'#fff', paddingRight:8, zIndex:2}}>{f.mot}</div>
-            <div style={{position:'absolute', left:0, right:0, top:RAIL, height:f.cle==='routine'?3:2,
+      <div style={{position:'relative', minWidth:560+GOUTTIERE, paddingLeft:GOUTTIERE}}>
+        {parFamille.map((f,fi)=>{
+          const m=mesures[fi];
+          return (
+          <div key={f.cle} style={{position:'relative', height:hauteurs[fi]}}>
+            <div style={{position:'absolute', left:-GOUTTIERE, top:m.dessus-7, width:GOUTTIERE-12, textAlign:'right',
+                         fontSize:9.5, fontWeight:800, color:f.teinte, textTransform:'uppercase', letterSpacing:'0.09em'}}>{f.mot}</div>
+            <div style={{position:'absolute', left:0, right:0, top:m.dessus, height:f.cle==='routine'?3:2,
                          background:f.teinte, opacity:f.lignes.length?1:0.25}}/>
+            {/* Le trait « maintenant », répété par couloir : il reste ainsi aligné sur le rail,
+                quelle que soit la gouttière des noms. */}
+            {nowPct>=0&&nowPct<=100&&(
+              <div style={{position:'absolute', top:0, bottom:0, left:nowPct+'%', width:2, background:JULES_ROUGE,
+                           transform:'translateX(-50%)', zIndex:1, pointerEvents:'none'}}>
+                {fi===0&&<span style={{position:'absolute', top:-11, left:'50%', transform:'translateX(-50%)', fontSize:8, fontWeight:800,
+                              color:JULES_ROUGE, whiteSpace:'nowrap', textTransform:'uppercase', letterSpacing:'0.05em'}}>maintenant</span>}
+              </div>
+            )}
             {!f.lignes.length&&(
-              <div style={{position:'absolute', left:'50%', top:RAIL-18, transform:'translateX(-50%)', fontSize:10.5,
+              <div style={{position:'absolute', left:'50%', top:m.dessus-17, transform:'translateX(-50%)', fontSize:10.5,
                            color:JULES_GRIS_F, fontWeight:700, background:'#fff', padding:'0 8px'}}>rien aujourd'hui</div>
             )}
             {f.lignes.map((r,i)=>{
-              const col=JULES_ETAT_COULEUR[r.etat]||JULES_GRIS_F; const pend=r.etat==='pending'; const haut=i%2===0;
+              const col=JULES_ETAT_COULEUR[r.etat]||JULES_GRIS_F; const pend=r.etat==='pending';
+              const haut=r.niveau%2===0; const cran=haut? r.niveau/2 : (r.niveau-1)/2;
               const cliquable = !!(onOuvrir && r.mission_id);
               return (
                 <button key={f.cle+'-'+r.mission_id+r.prevu_at+i} onClick={()=>cliquable&&onOuvrir(r.mission_id)}
-                  title={julesTitre(r.titre)+' — '+JULES_ETAT_MOT[r.etat]}
-                  style={{position:'absolute', top:RAIL, left:julesFrisePct(r.prevu_at)+'%', transform:'translate(-50%,-50%)',
+                  title={julesTitre(r.titre)+' — '+JULES_ETAT_MOT[r.etat]+' — '+extractTime(r.prevu_at)}
+                  style={{position:'absolute', top:m.dessus, left:r.pct+'%', transform:'translate(-50%,-50%)', zIndex:2,
                           background:'none', border:'none', padding:0, cursor:cliquable?'pointer':'default', fontFamily:'Outfit,sans-serif'}}>
-                  <span style={{position:'absolute', left:'50%', transform:'translateX(-50%)', width:96, textAlign:'center',
-                                fontSize:10, fontWeight:800, lineHeight:1.15, color:JULES_NOIR, ...(haut?{bottom:22}:{top:22})}}>
+                  <span style={{position:'absolute', left:'50%', transform:'translateX(-50%)', width:104, textAlign:'center',
+                                fontSize:10, fontWeight:800, lineHeight:1.15, color:JULES_NOIR,
+                                ...(haut?{bottom:18+cran*CRAN}:{top:18+cran*CRAN})}}>
                     <span style={{display:'block', ...JULES_UNE_LIGNE}}>{julesTitre(r.titre)}</span>
                     <span style={{display:'block', fontFamily:'IBM Plex Mono,monospace', fontSize:9, color:JULES_GRIS_F, fontWeight:600}}>{extractTime(r.prevu_at)}</span>
                   </span>
                   <span className={r.etat==='running'?'jules-pouls':''}
-                    style={{display:'grid', placeItems:'center', width:24, height:24, borderRadius:'50%',
+                    style={{display:'grid', placeItems:'center', width:22, height:22, borderRadius:'50%',
                             background:pend?'#fff':col, color:pend?JULES_GRIS_F:'#fff',
                             border:'2px solid '+(pend?JULES_GRIS_F:col), borderStyle:pend?'dashed':'solid',
-                            fontSize:12.5, fontWeight:800, boxShadow:'2px 2px 0 '+JULES_GRIS}}>{JULES_ETAT_CAP[r.etat]}</span>
+                            fontSize:12, fontWeight:800, boxShadow:'2px 2px 0 '+JULES_GRIS}}>{JULES_ETAT_CAP[r.etat]}</span>
                 </button>
               );
             })}
           </div>
-        ))}
+        );})}
         {/* Une seule règle horaire, sous le dernier couloir. */}
         <div style={{position:'relative', height:22}}>
           {heures.map(h=>{ const p=(h-JULES_FRISE_DEB)/(JULES_FRISE_FIN-JULES_FRISE_DEB)*100; return (
