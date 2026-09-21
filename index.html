@@ -7758,14 +7758,19 @@ function JulesApercuAppro({ entree, onClose, onAccorder, onAjuster, onRefuser, o
 // La frise du jour (spec §3.3) : 7h→19h, un pin par passage cyclique, coloré par son état.
 // On voit d'un coup d'œil si la ronde a tourné, ou si le scan a planté.
 const JULES_FRISE_DEB = 7, JULES_FRISE_FIN = 19;
-const JULES_ETAT_COULEUR = {done:JULES_VERT, running:JULES_BLEU, failed:JULES_ROUGE, pending:JULES_GRIS_F};
-const JULES_ETAT_CAP     = {done:'✓', running:'●', failed:'✕', pending:''};
+// `waiting` = la tâche attend le GO de Nicolas (db/46). Elle avait le même état que
+// `running`, donc la frise la montrait « en cours » avec le pouls bleu — alors que c'est
+// l'inverse qu'il faut lire : sur `running` il n'y a rien à faire, sur `waiting` c'est
+// Nicolas qui bloque la file. Jaune + « ? », comme partout ailleurs dans le cockpit pour
+// ce qui attend son accord.
+const JULES_ETAT_COULEUR = {done:JULES_VERT, running:JULES_BLEU, waiting:JULES_JAUNE, failed:JULES_ROUGE, pending:JULES_GRIS_F};
+const JULES_ETAT_CAP     = {done:'✓', running:'●', waiting:'?', failed:'✕', pending:''};
 function julesFrisePct(iso){
   const d=new Date(iso); const h=d.getHours()+d.getMinutes()/60;
   const p=(h-JULES_FRISE_DEB)/(JULES_FRISE_FIN-JULES_FRISE_DEB)*100;
   return Math.max(0, Math.min(100, p));
 }
-const JULES_ETAT_MOT = {done:'fait', running:'en cours', failed:'planté', pending:'à venir'};
+const JULES_ETAT_MOT = {done:'fait', running:'en cours', waiting:'attend ton GO', failed:'planté', pending:'à venir'};
 // Trois couloirs (21/09) : les ponctuelles du jour, le rythme des routines, les campagnes.
 // Ils partagent une seule règle horaire en bas et un seul trait « maintenant » : on lit la
 // journée en une colonne de temps, mais on distingue d'un coup d'œil ce qui relève de quoi.
@@ -7928,7 +7933,14 @@ function JulesApercuPin({ pin, onClose, onOuvrirMission, mission, events, discut
                 {tache.attempts>0?` · ${tache.attempts} tentative${tache.attempts>1?'s':''}`:''}
                 {tache.heartbeat_at?` · signe de vie il y a ${julesAge(tache.heartbeat_at)}`:''}</div>
               {resultTxt && <div style={{marginTop:6, borderLeft:'3px solid '+JULES_GRIS, paddingLeft:10, whiteSpace:'pre-wrap', color:'#333'}}>{resultTxt}</div>}
-              {!resultTxt && pin.etat==='running' && <div style={{marginTop:4}}>Jules travaille dessus — pas encore de compte-rendu.</div>}
+              {!resultTxt && pin.etat==='running' && tache.statut!=='waiting_go' && <div style={{marginTop:4}}>Jules travaille dessus — pas encore de compte-rendu.</div>}
+              {/* Filet : tant que db/46 n'est pas appliquée, la vue rend encore 'running' sur une
+                  tâche waiting_go. On lit alors le VRAI statut de la tâche, déjà chargé ici. */}
+              {!resultTxt && (pin.etat==='waiting' || tache.statut==='waiting_go') && (
+                <div style={{marginTop:4, fontWeight:700, color:JULES_NOIR}}>
+                  Jules ne travaille PAS dessus : il attend ton accord pour continuer.
+                </div>
+              )}
             </div>
           ) : <div style={{fontSize:12.5, color:JULES_GRIS_F}}>Lecture…</div>}
         </Field>
@@ -9069,7 +9081,7 @@ function TabJules({ profile, prefs, deepLink }) {
           onOuvrir={a=>setApercu(a)} actionEnCours={occupe} events={J.data.events}/>
       </JulesZone>
       <JulesZone id="tourne" titre="Ce qui tourne" compteur={J.data.encours.length}
-        hint="La journée de Jules · fait ✓ · en cours ● · planté ✕">
+        hint="La journée de Jules · fait ✓ · en cours ● · attend ton GO ? · planté ✕">
         <JulesEncours journee={J.data.journee} encours={J.data.encours} dueToday={J.data.dueToday}
           onOuvrir={id=>setDetailId(id)} onPin={p=>setPin(p)} discuter={discuter}/>
       </JulesZone>
