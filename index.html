@@ -8430,9 +8430,10 @@ const julesActions = {
   },
   async modifierMission(m, champs) {
     const maj = {titre:champs.titre, priorite:champs.priorite, contexte:champs.contexte};
-    // `categorie` peut valoir null (retirer le type) : on teste la PRÉSENCE de la clé, pas
+    // `categorie` et `cadence` peuvent valoir null : on teste la PRÉSENCE de la clé, pas
     // sa vérité, sinon « sans type » ne serait jamais enregistrable.
     if ('categorie' in champs) maj.categorie = champs.categorie;
+    if ('cadence' in champs)   maj.cadence = champs.cadence;
     const { data, error } = await sb.from('agent_missions')
       .update(maj)
       .eq('id', m.id).select('id');
@@ -8440,6 +8441,47 @@ const julesActions = {
     if(!data||!data.length) throw new Error('Mission introuvable — rien n\'a été écrit.');
     await sb.from('agent_events').insert({actor:'crm', kind:'mission.updated',
       mission_id:m.id, message:champs.titre});
+    // Changer la cadence ne suffit PAS (piège vécu par Nicolas le 21/09 : il avait écrit la
+    // nouvelle heure dans le contexte, qui n'est que du texte, et la tâche du lendemain
+    // gardait son ancienne heure). Les tâches DÉJÀ EN FILE portent leur propre due_at : on
+    // les réaligne sur l'heure de cadence la plus proche, le même jour. Sans ça, on modifie
+    // une mission en croyant l'avoir déplacée, et elle repart à l'ancienne heure.
+    const heures = ((champs.cadence||{}).times)||[];
+    if(heures.length){
+      const { data: futures } = await sb.from('agent_tasks')
+        .select('id,due_at,titre').eq('mission_id', m.id).eq('statut','due')
+        .gte('due_at', new Date().toISOString());
+      for(const t of (futures||[])){
+        const d = new Date(t.due_at);
+        const min = d.getHours()*60 + d.getMinutes();
+        let best=null, ecart=Infinity;
+        for(const h of heures){
+          const [hh,mm] = h.split(':').map(Number);
+          const e = Math.abs(hh*60+mm - min);
+          if(e < ecart){ ecart=e; best=[hh,mm]; }
+        }
+        if(!best || ecart===0) continue;
+        const neuf = new Date(d); neuf.setHours(best[0], best[1], 0, 0);
+        const titre = t.titre && /\d{2}:\d{2}$/.test(t.titre)
+          ? t.titre.replace(/\d{2}:\d{2}$/, String(best[0]).padStart(2,'0')+':'+String(best[1]).padStart(2,'0'))
+          : t.titre;
+        await sb.from('agent_tasks').update({due_at:neuf.toISOString(), titre}).eq('id', t.id).eq('statut','due');
+        await sb.from('agent_events').insert({actor:'crm', kind:'task.replanifiee',
+          task_id:t.id, mission_id:m.id,
+          message:`${titre} — réalignée sur la nouvelle cadence`});
+      }
+    }
+  },
+  // Replanifier UNE tâche (Nicolas 21/09 : « donne un moyen quand on modifie une campagne
+  // ou une tâche de VRAIMENT la modifier »). Il n'existait aucun moyen de déplacer une
+  // tâche déjà en file — il fallait la clore et en recréer une.
+  async replanifierTache(t, iso) {
+    const { data, error } = await sb.from('agent_tasks')
+      .update({due_at:iso}).eq('id', t.id).eq('statut','due').select('id');
+    if(error) throw new Error('Replanification refusée : '+error.message);
+    if(!data||!data.length) throw new Error('Cette tâche n\'est plus « à faire » — rien n\'a été écrit.');
+    await sb.from('agent_events').insert({actor:'crm', kind:'task.replanifiee',
+      task_id:t.id, mission_id:t.mission_id, message:t.titre});
   },
   // Fermer une mission. Jamais de suppression : la mission et son historique restent en base,
   // elles sortent seulement du backlog (la vue ne montre que active et paused).
@@ -8539,6 +8581,7 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
   const [detailOuvert,setDetailOuvert] = useState(null);   // id de la tâche dépliée
   const [aSortir,setASortir] = useState(null);            // séquence qu'on sort, avec sa raison
   const [aTerminer,setATerminer] = useState(null);        // tâche que Nicolas clôt à la main, une seule à la fois
+  const [aReplanifier,setAReplanifier] = useState(null);  // tâche dont on déplace l'échéance
   const [relance,setRelance] = useState(0);                // incrémenté après une relance → relit la liste
   useEffect(()=>{
     let vivant=true;
@@ -8656,7 +8699,7 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
                     &&Math.abs(new Date(t.updated_at)-new Date(t.due_at))>5*60000
                     &&' · passée '+extractDate(t.updated_at)+' '+extractTime(t.updated_at)}
                 </div>
-                {(detail||rejouable||terminable)&&(
+                {(detail||rejouable||terminable||t.statut==='due')&&(
                   <div style={{display:'flex', gap:12, alignItems:'center', marginTop:6, flexWrap:'wrap'}}>
                     {detail&&(
                       <button type="button" onClick={()=>setDetailOuvert(deplie?null:t.id)}
@@ -8674,6 +8717,15 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
                                 fontSize:11, color:occupe===t.id?JULES_GRIS_F:JULES_BLEU,
                                 textTransform:'uppercase', letterSpacing:'0.05em', minHeight:32}}>
                         {occupe===t.id?'relance…':'↻ relancer'}
+                      </button>
+                    )}
+                    {t.statut==='due'&&(
+                      <button type="button" onClick={()=>setAReplanifier(t)} disabled={occupe===t.id}
+                        style={{background:'none', border:'none', padding:0,
+                                cursor:occupe===t.id?'default':'pointer',
+                                fontSize:11, color:occupe===t.id?JULES_GRIS_F:JULES_BLEU,
+                                textTransform:'uppercase', letterSpacing:'0.05em', minHeight:32}}>
+                        ⏱ replanifier
                       </button>
                     )}
                     {terminable&&(
@@ -8801,6 +8853,10 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
       {aSortir&&<JulesSortirSequence seq={aSortir} onClose={()=>setASortir(null)}
         saving={occupe===aSortir.id}
         onSave={raison=>{ const sq=aSortir; setASortir(null); actions.arreterSuivi(sq, raison); }}/>}
+      {aReplanifier&&<JulesReplanifierTache tache={aReplanifier} onClose={()=>setAReplanifier(null)}
+        saving={occupe===aReplanifier.id}
+        onSave={async iso=>{ const tk=aReplanifier; setAReplanifier(null);
+          await actions.replanifierTache(tk, iso); setRelance(n=>n+1); }}/>}
       {aTerminer&&<JulesTerminerTache tache={aTerminer} onClose={()=>setATerminer(null)}
         saving={occupe===aTerminer.id}
         onSave={async note=>{ const tk=aTerminer; setATerminer(null);
@@ -8843,6 +8899,36 @@ function JulesSortirSequence({ seq, onClose, onSave, saving }) {
         <textarea ref={champRef} value={texte} onChange={e=>setTexte(e.target.value)} rows={3}
           placeholder="Ex : m'a dit qu'elle venait de signer ailleurs."
           style={{...JULES_CHAMP, minHeight:70, lineHeight:1.5}}/>
+      </Field>
+    </Modal>
+  );
+}
+
+// Déplacer l'échéance d'une tâche déjà en file (Nicolas 21/09 : « donne un moyen quand on
+// modifie une campagne ou une tâche de VRAIMENT la modifier »). Jusqu'ici il n'existait
+// aucun moyen de replanifier : il fallait clore la tâche et en recréer une à la main.
+function JulesReplanifierTache({ tache, onClose, onSave, saving }) {
+  // <input type="datetime-local"> attend une heure LOCALE sans fuseau, alors que due_at est
+  // en UTC. On convertit dans les deux sens, sinon on décale la tâche de deux heures sans
+  // que personne ne le voie.
+  const versLocal = (iso) => { const d=new Date(iso); d.setMinutes(d.getMinutes()-d.getTimezoneOffset());
+                               return d.toISOString().slice(0,16); };
+  const [quand,setQuand] = useState(versLocal(tache.due_at));
+  const champRef = useJulesFocusSansScroll();
+  const valide = !!quand && !isNaN(new Date(quand).getTime());
+  return (
+    <Modal title="Replanifier cette tâche" onClose={onClose}
+      footer={<ModalFooter onClose={onClose} saving={saving} disabled={!valide} label="Replanifier"
+        onSave={()=>onSave(new Date(quand).toISOString())}/>}>
+      <div style={{fontSize:13, fontWeight:700, color:JULES_NOIR, marginBottom:6}}>{julesTitre(tache.titre)}</div>
+      <div style={{fontSize:12, color:'#565861', marginBottom:10, lineHeight:1.5}}>
+        Actuellement due le {extractDate(tache.due_at)} à {extractTime(tache.due_at)}.
+        L'ordonnanceur la prendra à la nouvelle heure. Pour déplacer TOUTES les occurrences
+        d'une routine, c'est la cadence de la mission qu'il faut changer, pas cette tâche-ci.
+      </div>
+      <Field label="Nouvelle échéance">
+        <input ref={champRef} type="datetime-local" value={quand} onChange={e=>setQuand(e.target.value)}
+          style={{...JULES_CHAMP, width:240}}/>
       </Field>
     </Modal>
   );
@@ -9147,12 +9233,22 @@ function JulesModifierMission({ mission, onClose, onSave, saving }) {
   const [priorite,setPriorite] = useState(mission.priorite||2);
   const [categorie,setCategorie] = useState(mission.categorie||'');
   const [contexte,setContexte] = useState(mission.contexte||'');
+  // La cadence : c'est ELLE que lit l'ordonnanceur. Elle n'était modifiable nulle part, donc
+  // « modifier » une routine ne changeait jamais son heure — on ne pouvait que l'écrire dans
+  // le contexte, qui n'est que du texte (piège vécu par Nicolas le 21/09 sur le scan).
+  const cad = mission.cadence || null;
+  const [jours,setJours] = useState((cad&&cad.days)||[1,2,3,4,5]);
+  const [heures,setHeures] = useState(((cad&&cad.times)||['09:00']));
+  const cadenceModifiable = !!cad;
+  const heuresPropres = heures.map(x=>String(x||'').trim()).filter(Boolean);
+  const cadenceOk = !cadenceModifiable || (heuresPropres.length>0 && jours.length>0);
   const champ = JULES_CHAMP;
   return (
     <Modal title="Modifier la mission" onClose={onClose}
-      footer={<ModalFooter onClose={onClose} saving={saving} disabled={!titre.trim()}
+      footer={<ModalFooter onClose={onClose} saving={saving} disabled={!titre.trim()||!cadenceOk}
         onSave={()=>onSave({titre:titre.trim(), priorite:Number(priorite),
-                            categorie: categorie || null, contexte})}/>}>
+                            categorie: categorie || null, contexte,
+                            ...(cadenceModifiable ? {cadence:{...cad, days:jours, times:heuresPropres}} : {})})}/>}>
       <Field label="Titre">
         <input value={titre} onChange={e=>setTitre(e.target.value)} style={champ}/>
       </Field>
@@ -9172,6 +9268,15 @@ function JulesModifierMission({ mission, onClose, onSave, saving }) {
           {JULES_CATEGORIES_SAISIE.map(c=><option key={c} value={c}>{c}</option>)}
         </select>
       </Field>
+      {cadenceModifiable&&(
+        <>
+          <JulesCadence jours={jours} heures={heures} onJours={setJours} onHeures={setHeures}/>
+          <div style={{fontSize:11.5, color:'#565861', marginTop:-6, marginBottom:12, lineHeight:1.5}}>
+            C'est cette cadence que lit l'ordonnanceur, pas le contexte. Les tâches déjà en
+            file seront réalignées sur la nouvelle heure.
+          </div>
+        </>
+      )}
       <Field label="Contexte">
         <textarea value={contexte} onChange={e=>setContexte(e.target.value)} rows={8}
           style={{...champ, minHeight:140, lineHeight:1.5}}/>
