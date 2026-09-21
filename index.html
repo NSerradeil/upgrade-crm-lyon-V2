@@ -9276,7 +9276,9 @@ function JulesModifierMission({ mission, onClose, onSave, saving }) {
       {cadenceModifiable&&(
         <>
           <JulesCadence jours={jours} heures={heures} onJours={setJours} onHeures={setHeures}/>
-          <div style={{fontSize:11.5, color:'#565861', marginTop:-6, marginBottom:12, lineHeight:1.5}}>
+          {/* Pas de marge négative ici : elle remontait ce texte SOUS le bouton « Ajouter
+              une heure » de JulesCadence, qui le recouvrait (bug vu par Nicolas 22/09). */}
+          <div style={{fontSize:11.5, color:'#565861', marginTop:4, marginBottom:14, lineHeight:1.5}}>
             C'est cette cadence que lit l'ordonnanceur, pas le contexte. Les tâches déjà en
             file seront réalignées sur la nouvelle heure.
           </div>
