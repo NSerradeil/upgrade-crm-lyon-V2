@@ -8012,11 +8012,13 @@ function julesNatureCle(k){ return k==='campagne'?'campagne' : k==='recurring'?'
 // Type métier = catégorie contrôlée, portée par agent_task_types et exposée sur le backlog
 // (db/38). Plus de devinage : le CRM lit `categorie`. « — » si le type n'en porte pas.
 const JULES_TYPE_MISSION = {
-  chasse:   {bg:JULES_VIOLET, color:'#fff'},
-  veille:   {bg:JULES_BLEU,   color:'#fff'},
-  relance:  {bg:JULES_JAUNE,  color:JULES_NOIR},
-  pilotage: {bg:JULES_NOIR,   color:'#fff'},
-  admin:    {bg:JULES_GRIS,   color:JULES_NOIR},
+  business:    {bg:JULES_VIOLET, color:'#fff'},
+  recrutement: {bg:JULES_VERT,   color:'#fff'},
+  veille:      {bg:JULES_BLEU,   color:'#fff'},
+  relance:     {bg:JULES_JAUNE,  color:JULES_NOIR},
+  pilotage:    {bg:JULES_NOIR,   color:'#fff'},
+  admin:       {bg:JULES_GRIS,   color:JULES_NOIR},
+  chasse:      {bg:JULES_VIOLET, color:'#fff'},  // legacy, le temps que les données migrent
 };
 
 const JULES_ETAT_RANG = {'en échec':0,'en cours':1,'attend un accord':2,'à relancer':3,'réponses':4,'en attente':5,'en pause':6,'au calme':7};
@@ -8082,7 +8084,8 @@ function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
         </select>
         <select value={fType} onChange={e=>setFType(e.target.value)} style={sel}>
           <option value="all">Tout type</option>
-          <option value="chasse">Chasse</option>
+          <option value="business">Business</option>
+          <option value="recrutement">Recrutement</option>
           <option value="veille">Veille</option>
           <option value="relance">Relance</option>
           <option value="pilotage">Pilotage</option>
