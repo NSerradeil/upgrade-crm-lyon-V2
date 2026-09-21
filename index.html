@@ -8478,11 +8478,14 @@ const julesActions = {
     const horodate = new Date().toLocaleDateString('fr-FR');
     const note = [s.notes, `[${horodate}] Sorti par Nicolas : ${libelle}${texte?' — '+texte:''}`]
       .filter(Boolean).join('\n');
+    // 'replied' compte comme EN COURS : une réponse n'est pas une sortie (règle Nicolas
+    // 21/09), donc une personne qui a répondu est justement celle qu'on a besoin de sortir
+    // à la main. La restreindre à 'active' rendait le bouton inutilisable là où il sert le plus.
     const { data, error } = await sb.from('agent_sequences')
       .update({statut:cible, next_due_at:null, notes:note})
-      .eq('id', s.id).eq('statut','active').select('id');
+      .eq('id', s.id).in('statut',['active','replied']).select('id');
     if(error) throw new Error('Arrêt non enregistré : '+error.message);
-    if(!data||!data.length) throw new Error('Ce suivi n\'était plus actif — rien n\'a été écrit.');
+    if(!data||!data.length) throw new Error('Ce suivi était déjà sorti — rien n\'a été écrit.');
     await sb.from('agent_events').insert({actor:'crm',
       kind: cible === 'converted' ? 'sequence.converted' : 'sequence.stopped',
       sequence_id:s.id, mission_id:s.mission_id,
@@ -8723,9 +8726,9 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
                   <span style={{fontSize:11, color:JULES_GRIS_F, textTransform:'uppercase', letterSpacing:'0.05em'}}>
                     {parc.faits}/{parc.total} · {ouEnEst}{s.next_due_at?' · '+extractDate(s.next_due_at):''}
                   </span>
-                  {s.statut==='active'&&<span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
+                  {['active','replied'].includes(s.statut)&&<span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
                     <BtnAction onClick={()=>setASortir(s)} icon={ICONS.stop} label="Sortir"
-                               variant="danger" disabled={occupe===s.id}/>
+                               variant={s.statut==='replied'?'success':'danger'} disabled={occupe===s.id}/>
                   </span>}
                 </div>
                 <div style={{display:'flex', gap:12, alignItems:'center', marginTop:6, flexWrap:'wrap'}}>
