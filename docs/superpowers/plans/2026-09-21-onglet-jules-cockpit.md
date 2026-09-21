@@ -10,6 +10,19 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-21-onglet-jules-cockpit-design.md`
 
+> **STATUT 2026-09-21 — LIVRÉ EN PROD, validé par Nicolas.**
+> - CRM-DATA : db/35 (critique), db/36 (agent_v_journee), db/37 (frise = routines
+>   brief/ronde/scan/bilan), db/38 (categorie sur task_type), db/39 (agent_slack_amorces) — appliquées.
+> - CRM-UI : accueil + cartes couleur/volet + frise du jour à libellés + table missions
+>   triable/filtrable (Nature/Type). Le « Type » est une catégorie contrôlée (db/38), plus de devinage.
+> - 360 : deep-link `?tab=jules&appro|mission=<id>` ; boutons « Discuter dans Slack » (cartes,
+>   volet, mission, tâches, nouvelle mission) → amorce `agent_slack_amorces` → le pont
+>   `bin/jules-slack-bot.py` (boucle `amorce_poll`) poste dans le DM avec `[ctx-cockpit … mission_id=…]` ;
+>   la réponse en fil relance Jules → tâche créée dans la même mission par défaut.
+> - Modèle verrouillé : « CRM = clics, Slack = mots » (options in-app ; réponse libre → Slack).
+> - FIX-TUYAU (Task 13) : CLOS sans action — « EDF v35 » était un décalage de refresh, pas un trou
+>   (l'entrée était bien dans agent_v_parapheur en nature=decision).
+
 ## Global Constraints
 
 - **DA néo-brutaliste** : bords `2px solid`, ombres dures `4-5px 0`, police `Outfit`, palette `JULES_*` (déjà définie L7328-7335). Chiffres en `IBM Plex Mono`.
