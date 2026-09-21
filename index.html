@@ -7356,7 +7356,7 @@ function useJulesData() {
       sb.from('agent_missions').select('*').in('statut',['active','paused']).order('updated_at',{ascending:false}),
       sb.from('agent_sequences').select('*').order('next_due_at',{ascending:true,nullsFirst:false}),
       sb.from('agent_events').select('*').order('at',{ascending:false}).limit(200),
-      sb.from('agent_v_journee').select('mission_id,titre,prevu_at,etat').order('prevu_at'),
+      sb.from('agent_v_journee').select('*')  /* '*' et pas la liste : tant que db/40 n'est pas appliquée, famille est absente et tout retombe en 'routine' au lieu d'un 400 */.order('prevu_at'),
     ]);
     const ko = r.find(x=>x.error);
     if(ko) throw new Error(ko.error.message);
@@ -7373,7 +7373,7 @@ function useJulesData() {
     du: d.dueToday.map(t=>String(t.kind)+t.id).sort(),
     ba: d.backlog.map(m=>[m.id,m.statut,m.nb_due,m.nb_claimed,m.nb_waiting_go,m.nb_failed].join(':')).sort(),
     ca: d.campagnes.map(m=>[m.id,m.statut,m.nb_active,m.nb_replied,m.nb_due_today].join(':')).sort(),
-    jo: (d.journee||[]).map(x=>x.mission_id+String(x.prevu_at)+x.etat).sort(),
+    jo: (d.journee||[]).map(x=>x.famille+String(x.mission_id)+String(x.prevu_at)+x.etat).sort(),
   });
 
   const rechargerMaintenant = useCallback(async () => {
@@ -7704,49 +7704,80 @@ function julesFrisePct(iso){
   return Math.max(0, Math.min(100, p));
 }
 const JULES_ETAT_MOT = {done:'fait', running:'en cours', failed:'planté', pending:'à venir'};
+// Trois couloirs (21/09) : les ponctuelles du jour, le rythme des routines, les campagnes.
+// Ils partagent une seule règle horaire en bas et un seul trait « maintenant » : on lit la
+// journée en une colonne de temps, mais on distingue d'un coup d'œil ce qui relève de quoi.
+const JULES_FRISE_FAMILLES = [
+  {cle:'ponctuelle', mot:'Ponctuelles', teinte:JULES_VIOLET},
+  {cle:'routine',    mot:'Routines',    teinte:JULES_NOIR},
+  {cle:'campagne',   mot:'Campagnes',   teinte:JULES_BLEU},
+];
 function JulesFrise({ journee, onOuvrir }) {
   if(!journee || !journee.length)
-    return <div style={{fontSize:13, color:'#565861'}}>Aucun passage cyclique prévu aujourd'hui.</div>;
+    return <div style={{fontSize:13, color:'#565861'}}>Rien de daté aujourd'hui.</div>;
   const now=new Date(); const nowH=now.getHours()+now.getMinutes()/60;
   const nowPct=(nowH-JULES_FRISE_DEB)/(JULES_FRISE_FIN-JULES_FRISE_DEB)*100;
   const heures=[]; for(let h=JULES_FRISE_DEB; h<=JULES_FRISE_FIN; h+=2) heures.push(h);
-  // Peu de passages (les routines du jour) : on remet le libellé SUR la pastille, en alternant
-  // haut/bas, et le symbole d'état dans la pastille (cohérent avec la légende ✓ ● ✕).
+  // Une famille absente garde son couloir : un couloir vide DIT quelque chose (aucune
+  // campagne ne tourne aujourd'hui), là où le masquer ferait croire à un oubli.
+  const parFamille = JULES_FRISE_FAMILLES.map(f=>({...f,
+    lignes:(journee||[]).filter(r=>(r.famille||'routine')===f.cle)
+                        .sort((a,b)=>String(a.prevu_at).localeCompare(String(b.prevu_at)))}));
+  const COULOIR = 92;   // hauteur d'un couloir : de quoi poser le libellé au-dessus du rail
+  const RAIL    = 62;   // ordonnée du rail dans le couloir
   return (
-    <div style={{border:'2px solid '+JULES_NOIR, boxShadow:'4px 4px 0 '+JULES_GRIS, background:'#fff', padding:'24px 26px 18px', overflowX:'auto'}}>
-      <div style={{position:'relative', minWidth:560, height:118, margin:'0 8px'}}>
-        <div style={{position:'absolute', left:0, right:0, top:59, height:3, background:JULES_NOIR}}/>
-        {heures.map(h=>{ const p=(h-JULES_FRISE_DEB)/(JULES_FRISE_FIN-JULES_FRISE_DEB)*100; return (
-          <React.Fragment key={h}>
-            <div style={{position:'absolute', top:54, left:p+'%', width:1.5, height:13, background:JULES_GRIS, transform:'translateX(-50%)'}}/>
-            <div style={{position:'absolute', top:67, left:p+'%', transform:'translateX(-50%)', fontSize:9.5, color:JULES_GRIS_F, fontWeight:700}}>{h}h</div>
-          </React.Fragment>
-        );})}
+    <div style={{border:'2px solid '+JULES_NOIR, boxShadow:'4px 4px 0 '+JULES_GRIS, background:'#fff', padding:'16px 26px 14px', overflowX:'auto'}}>
+      <div style={{position:'relative', minWidth:560, margin:'0 8px'}}>
+        {/* Le trait « maintenant » traverse les trois couloirs d'un seul tenant. */}
         {nowPct>=0&&nowPct<=100&&(
-          <div style={{position:'absolute', top:26, bottom:26, left:nowPct+'%', width:2, background:JULES_ROUGE, transform:'translateX(-50%)'}}>
-            <span style={{position:'absolute', top:-14, left:'50%', transform:'translateX(-50%)', fontSize:8, fontWeight:800, color:JULES_ROUGE, whiteSpace:'nowrap', textTransform:'uppercase', letterSpacing:'0.05em'}}>maintenant</span>
+          <div style={{position:'absolute', top:14, height:COULOIR*JULES_FRISE_FAMILLES.length-8, left:nowPct+'%',
+                       width:2, background:JULES_ROUGE, transform:'translateX(-50%)', zIndex:3, pointerEvents:'none'}}>
+            <span style={{position:'absolute', top:-13, left:'50%', transform:'translateX(-50%)', fontSize:8, fontWeight:800,
+                          color:JULES_ROUGE, whiteSpace:'nowrap', textTransform:'uppercase', letterSpacing:'0.05em'}}>maintenant</span>
           </div>
         )}
-        {journee.map((r,i)=>{
-          const col=JULES_ETAT_COULEUR[r.etat]||JULES_GRIS_F; const pend=r.etat==='pending'; const haut=i%2===0;
-          return (
-            <button key={r.mission_id+r.prevu_at} onClick={()=>onOuvrir&&onOuvrir(r.mission_id)}
-              title={julesTitre(r.titre)+' — '+JULES_ETAT_MOT[r.etat]}
-              style={{position:'absolute', top:59, left:julesFrisePct(r.prevu_at)+'%', transform:'translate(-50%,-50%)',
-                      background:'none', border:'none', padding:0, cursor:onOuvrir?'pointer':'default', fontFamily:'Outfit,sans-serif'}}>
-              <span style={{position:'absolute', left:'50%', transform:'translateX(-50%)', width:96, textAlign:'center',
-                            fontSize:10.5, fontWeight:800, lineHeight:1.15, color:JULES_NOIR, ...(haut?{bottom:26}:{top:26})}}>
-                {julesTitre(r.titre)}
-                <span style={{display:'block', fontFamily:'IBM Plex Mono,monospace', fontSize:9, color:JULES_GRIS_F, fontWeight:600}}>{extractTime(r.prevu_at)}</span>
-              </span>
-              <span className={r.etat==='running'?'jules-pouls':''}
-                style={{display:'grid', placeItems:'center', width:28, height:28, borderRadius:'50%',
-                        background:pend?'#fff':col, color:pend?JULES_GRIS_F:'#fff',
-                        border:'2px solid '+(pend?JULES_GRIS_F:col), borderStyle:pend?'dashed':'solid',
-                        fontSize:14, fontWeight:800, boxShadow:'2px 2px 0 '+JULES_GRIS}}>{JULES_ETAT_CAP[r.etat]}</span>
-            </button>
-          );
-        })}
+        {parFamille.map((f,fi)=>(
+          <div key={f.cle} style={{position:'relative', height:COULOIR}}>
+            <div style={{position:'absolute', left:0, top:RAIL-13, fontSize:9.5, fontWeight:800, color:f.teinte,
+                         textTransform:'uppercase', letterSpacing:'0.09em', background:'#fff', paddingRight:8, zIndex:2}}>{f.mot}</div>
+            <div style={{position:'absolute', left:0, right:0, top:RAIL, height:f.cle==='routine'?3:2,
+                         background:f.teinte, opacity:f.lignes.length?1:0.25}}/>
+            {!f.lignes.length&&(
+              <div style={{position:'absolute', left:'50%', top:RAIL-18, transform:'translateX(-50%)', fontSize:10.5,
+                           color:JULES_GRIS_F, fontWeight:700, background:'#fff', padding:'0 8px'}}>rien aujourd'hui</div>
+            )}
+            {f.lignes.map((r,i)=>{
+              const col=JULES_ETAT_COULEUR[r.etat]||JULES_GRIS_F; const pend=r.etat==='pending'; const haut=i%2===0;
+              const cliquable = !!(onOuvrir && r.mission_id);
+              return (
+                <button key={f.cle+'-'+r.mission_id+r.prevu_at+i} onClick={()=>cliquable&&onOuvrir(r.mission_id)}
+                  title={julesTitre(r.titre)+' — '+JULES_ETAT_MOT[r.etat]}
+                  style={{position:'absolute', top:RAIL, left:julesFrisePct(r.prevu_at)+'%', transform:'translate(-50%,-50%)',
+                          background:'none', border:'none', padding:0, cursor:cliquable?'pointer':'default', fontFamily:'Outfit,sans-serif'}}>
+                  <span style={{position:'absolute', left:'50%', transform:'translateX(-50%)', width:96, textAlign:'center',
+                                fontSize:10, fontWeight:800, lineHeight:1.15, color:JULES_NOIR, ...(haut?{bottom:22}:{top:22})}}>
+                    <span style={{display:'block', ...JULES_UNE_LIGNE}}>{julesTitre(r.titre)}</span>
+                    <span style={{display:'block', fontFamily:'IBM Plex Mono,monospace', fontSize:9, color:JULES_GRIS_F, fontWeight:600}}>{extractTime(r.prevu_at)}</span>
+                  </span>
+                  <span className={r.etat==='running'?'jules-pouls':''}
+                    style={{display:'grid', placeItems:'center', width:24, height:24, borderRadius:'50%',
+                            background:pend?'#fff':col, color:pend?JULES_GRIS_F:'#fff',
+                            border:'2px solid '+(pend?JULES_GRIS_F:col), borderStyle:pend?'dashed':'solid',
+                            fontSize:12.5, fontWeight:800, boxShadow:'2px 2px 0 '+JULES_GRIS}}>{JULES_ETAT_CAP[r.etat]}</span>
+                </button>
+              );
+            })}
+          </div>
+        ))}
+        {/* Une seule règle horaire, sous le dernier couloir. */}
+        <div style={{position:'relative', height:22}}>
+          {heures.map(h=>{ const p=(h-JULES_FRISE_DEB)/(JULES_FRISE_FIN-JULES_FRISE_DEB)*100; return (
+            <React.Fragment key={h}>
+              <div style={{position:'absolute', top:0, left:p+'%', width:1.5, height:6, background:JULES_GRIS, transform:'translateX(-50%)'}}/>
+              <div style={{position:'absolute', top:8, left:p+'%', transform:'translateX(-50%)', fontSize:9.5, color:JULES_GRIS_F, fontWeight:700}}>{h}h</div>
+            </React.Fragment>
+          );})}
+        </div>
       </div>
     </div>
   );
@@ -7771,33 +7802,30 @@ function JulesEncours({ journee, encours, dueToday, onOuvrir }) {
           ))}
         </div>
       )}
-      {dueToday.length>0&&(
+      {dueToday.some(x=>extractDate(x.due) && extractDate(x.due) < TODAY)&&(
         <div style={{borderTop:'2px solid '+JULES_NOIR, paddingTop:12, marginTop:2}}>
           <div style={{fontSize:12, fontWeight:800, color:JULES_NOIR, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:10}}>
-            Échéances du jour <span style={{color:JULES_GRIS_F, fontWeight:600, textTransform:'none', letterSpacing:0}}>— les tâches datées de Jules (relances, envois programmés)</span>
+            Ce qui traîne <span style={{color:JULES_GRIS_F, fontWeight:600, textTransform:'none', letterSpacing:0}}>— les échéances de Jules non tenues ; celles du jour sont sur la frise</span>
           </div>
-          {/* La vue agent_v_due_today prend tout ce qui est dû AVANT demain : un retard de
-              trois semaines s'y affichait comme une échéance du jour. On sépare, parce que
-              « en retard » et « prévu aujourd'hui » n'appellent pas la même réaction. */}
+          {/* Ce qui est dû AUJOURD'HUI est déjà sur la frise (couloirs ponctuelles/campagnes) :
+              le répéter ici en texte faisait deux listes à comparer. Il ne reste donc que le
+              retard, qui n'a pas sa place sur une frise 7h→19h et appelle une autre réaction. */}
           {(()=>{
             const jour = (x) => extractDate(x.due);
             const retard = dueToday.filter(x=>jour(x) && jour(x) < TODAY);
-            const aujourdhui = dueToday.filter(x=>!jour(x) || jour(x) >= TODAY);
             const bloc = (titre, liste, couleur, suffixe) => liste.length>0 && (
               <div style={{marginBottom:10}}>
                 <div style={{fontSize:11, fontWeight:800, color:couleur, textTransform:'uppercase',
                              letterSpacing:'0.12em', marginBottom:6}}>{titre} ({liste.length}){suffixe}</div>
                 {(()=>{
-                  const avecHeure = liste.filter(d=>julesHeure(d.due));
-                  const sansHeure = liste.filter(d=>!julesHeure(d.due));
-                  const colonne = avecHeure.length>0;
-                  return [...avecHeure, ...sansHeure].slice(0,10).map(d=>{
+                  return [...liste].sort((a,b)=>String(a.due).localeCompare(String(b.due))).slice(0,10).map(d=>{
                     const h = julesHeure(d.due);
                     return (
                       <div key={String(d.kind)+d.id} style={{display:'flex', gap:8, alignItems:'baseline', padding:'3px 0'}}>
-                        {colonne&&(h
-                          ? <span style={{fontSize:11, fontWeight:700, color:JULES_NOIR, width:42, flexShrink:0}}>{h}</span>
-                          : <span aria-hidden="true" style={{width:42, flexShrink:0}}/>)}
+                        {/* Un retard de trois semaines affiché « 17:02 » se lit comme ce matin :
+                            on montre la date, l'heure seule ne suffit qu'au jour même. */}
+                        <span style={{fontSize:11, fontWeight:700, color:JULES_ROUGE, width:52, flexShrink:0}}>
+                          {jour(d) ? jour(d).slice(8,10)+'/'+jour(d).slice(5,7) : (h||'')}</span>
                         <span title={julesTitre(d.titre)} style={{fontSize:13, color:JULES_NOIR, minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(d.titre)}</span>
                       </div>
                     );
@@ -7807,10 +7835,7 @@ function JulesEncours({ journee, encours, dueToday, onOuvrir }) {
                   et {liste.length-10} autre{liste.length-10>1?'s':''}.</div>}
               </div>
             );
-            return <>
-              {bloc('En retard', retard, JULES_ROUGE, ' — dues avant aujourd\'hui')}
-              {bloc('Aujourd\'hui', aujourdhui, JULES_NOIR, '')}
-            </>;
+            return bloc('En retard', retard, JULES_ROUGE, '');
           })()}
         </div>
       )}
@@ -7989,15 +8014,18 @@ async function julesDiscuter({ kind, ref_id=null, mission_id=null, titre, contex
   return data[0];
 }
 // Bouton « Discuter dans Slack » réutilisé partout (carte, mission, tâche, nouvelle mission).
-function JulesSlackBtn({ onClick, label='Discuter dans Slack', disabled=false }) {
+function JulesSlackBtn({ onClick, label='Discuter dans Slack', disabled=false, small=false }) {
+  const s = small
+    ? {fontSize:9.5, padding:'3px 8px', minHeight:26, gap:4, border:'1.5px solid #4A154B', icon:11}
+    : {fontSize:11.5, padding:'6px 11px', minHeight:32, gap:6, border:'2px solid #4A154B', icon:13};
   return (
     <button type="button" onClick={e=>{e.stopPropagation(); onClick();}} disabled={disabled}
       title="Jules t'écrira dans ton DM Slack pour en discuter"
-      style={{display:'inline-flex', alignItems:'center', gap:6, fontFamily:'Outfit,sans-serif',
-              fontSize:11.5, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.03em',
-              padding:'6px 11px', border:'2px solid #4A154B', background:'#4A154B', color:'#fff',
-              cursor:disabled?'default':'pointer', opacity:disabled?0.5:1, minHeight:32}}>
-      <svg viewBox="0 0 24 24" width={13} height={13} fill="currentColor" style={{flexShrink:0}}><path d={JULES_SLACK_PATH}/></svg> {label}
+      style={{display:'inline-flex', alignItems:'center', gap:s.gap, fontFamily:'Outfit,sans-serif',
+              fontSize:s.fontSize, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.03em',
+              padding:s.padding, border:s.border, background:'#4A154B', color:'#fff',
+              cursor:disabled?'default':'pointer', opacity:disabled?0.5:1, minHeight:s.minHeight}}>
+      <svg viewBox="0 0 24 24" width={s.icon} height={s.icon} fill="currentColor" style={{flexShrink:0}}><path d={JULES_SLACK_PATH}/></svg> {label}
     </button>
   );
 }
@@ -8289,14 +8317,8 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
                         {occupe===t.id?'relance…':'↻ relancer'}
                       </button>
                     )}
-                    {discuter&&(
-                      <button type="button" title="Rebondir sur cette tâche avec Jules (même mission)"
-                        onClick={()=>discuter({kind:'task', ref_id:t.id, mission_id:t.mission_id||mission.id, titre:t.titre})}
-                        style={{background:'none', border:'none', padding:0, cursor:'pointer', fontSize:11,
-                                color:'#4A154B', fontWeight:800, textTransform:'uppercase', letterSpacing:'0.05em', minHeight:32}}>
-                        ⤷ rebondir dans slack
-                      </button>
-                    )}
+                    {discuter&&<JulesSlackBtn small label="Discuter"
+                      onClick={()=>discuter({kind:'task', ref_id:t.id, mission_id:t.mission_id||mission.id, titre:t.titre})}/>}
                   </div>
                 )}
                 {deplie&&detail&&(
