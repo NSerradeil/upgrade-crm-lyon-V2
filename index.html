@@ -8018,6 +8018,7 @@ const JULES_TYPE_MISSION = {
   relance:     {bg:JULES_JAUNE,  color:JULES_NOIR},
   pilotage:    {bg:JULES_NOIR,   color:'#fff'},
   admin:       {bg:JULES_GRIS,   color:JULES_NOIR},
+  tech:        {bg:'#5B5F7B',    color:'#fff'},   // dev/roadmap/infra (admin only)
   chasse:      {bg:JULES_VIOLET, color:'#fff'},  // legacy, le temps que les données migrent
 };
 
@@ -8028,6 +8029,7 @@ function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
   const [q,setQ] = useState('');
   const [fNat,setFNat] = useState('all');
   const [fType,setFType] = useState('all');
+  const [showTech,setShowTech] = useState(false);  // les missions tech (dev/roadmap) masquées par défaut
   const [tri,setTri] = useState({cle:'etat', dir:1});   // par défaut : ce qui bouge en haut
 
   // Une ligne enrichie de tout ce qui sert à trier/filtrer.
@@ -8050,11 +8052,14 @@ function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
     if(qq) r=r.filter(x=>julesTitre(x.l.titre).toLowerCase().includes(qq));
     if(fNat!=='all') r=r.filter(x=>x.natCle===fNat);
     if(fType!=='all') r=r.filter(x=> fType==='sans' ? !x.typ : x.typ===fType);
+    // Tech masqué par défaut (dev/roadmap) — sauf case cochée, ou si on filtre exprès sur 'tech'.
+    if(!showTech && fType!=='tech') r=r.filter(x=>x.typ!=='tech');
     const val={mission:x=>julesTitre(x.l.titre).toLowerCase(), nature:x=>x.nat.label,
                type:x=>x.typ||'zzz', etat:x=>JULES_ETAT_RANG[x.p.mot]??9, avancement:x=>x.pct};
     const f=val[tri.cle]||val.mission;
     return [...r].sort((a,b)=>{const A=f(a),B=f(b); return (A<B?-1:A>B?1:0)*tri.dir;});
-  },[lignes,q,fNat,fType,tri]);
+  },[lignes,q,fNat,fType,showTech,tri]);
+  const nbTech = useMemo(()=>lignes.filter(x=>x.typ==='tech').length,[lignes]);
 
   if(!backlog||!backlog.length) return <div style={{fontSize:13, color:'#565861'}}>Aucune mission active.</div>;
   const th = {fontSize:10, textTransform:'uppercase', letterSpacing:'0.07em', color:'#565861', fontWeight:800,
@@ -8090,8 +8095,15 @@ function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
           <option value="relance">Relance</option>
           <option value="pilotage">Pilotage</option>
           <option value="admin">Admin</option>
+          <option value="tech">Tech</option>
           <option value="sans">Sans type</option>
         </select>
+        {nbTech>0&&(
+          <label style={{display:'inline-flex', alignItems:'center', gap:6, fontSize:11.5, fontWeight:700, color:'#565861', cursor:'pointer', userSelect:'none'}}>
+            <input type="checkbox" checked={showTech} onChange={e=>setShowTech(e.target.checked)}/>
+            Afficher tech ({nbTech})
+          </label>
+        )}
         <span style={{fontSize:11.5, color:JULES_GRIS_F, fontWeight:700, marginLeft:'auto'}}>{vues.length}/{lignes.length}</span>
       </div>
       <div style={{border:'2px solid '+JULES_NOIR, boxShadow:'4px 4px 0 '+JULES_GRIS, background:'#fff', overflowX:'auto'}}>
