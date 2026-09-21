@@ -1,7 +1,8 @@
--- 34_agent_approval_critique.sql — 2026-09-21
+-- 35_agent_approval_critique.sql — 2026-09-21
 -- Criticité explicite d'une approbation (défaut : non critique). L'onglet Jules colore la
 -- carte en rouge et la remonte en tête ; un filet côté UI bascule aussi sur l'âge (spec §5.1).
 -- Additif : n'altère aucune donnée existante (colonne à défaut false).
+-- (Numéro 35 : 34 est pris par 34_agent_playbook_brief.sql d'une autre session.)
 
 alter table public.agent_approvals
   add column if not exists critique boolean not null default false;

@@ -26,7 +26,7 @@
 ### Task 1 : Colonne `critique` sur `agent_approvals` + exposition parapheur
 
 **Files:**
-- Create: `db/34_agent_approval_critique.sql`
+- Create: `db/35_agent_approval_critique.sql`
 - Modify (référence, la vue est recréée dans le fichier) : `agent_v_parapheur` (déf. d'origine `db/25_agent_noyau.sql:209`)
 
 **Interfaces:**
@@ -35,7 +35,7 @@
 - [ ] **Step 1 : Écrire la migration**
 
 ```sql
--- db/34_agent_approval_critique.sql
+-- db/35_agent_approval_critique.sql
 -- Criticité explicite d'une approbation (défaut : non critique). L'UI colore en rouge et
 -- remonte en tête ; un filet côté UI bascule aussi sur l'âge (voir spec §5.1).
 alter table public.agent_approvals
@@ -68,14 +68,14 @@ Expected : la colonne existe ; la vue renvoie `critique` sans erreur.
 - [ ] **Step 5 : Commit**
 
 ```bash
-git add db/34_agent_approval_critique.sql
+git add db/35_agent_approval_critique.sql
 git commit -m "feat(db): criticité explicite des approbations, exposée au parapheur"
 ```
 
 ### Task 2 : Vue `agent_v_journee` (frise du jour)
 
 **Files:**
-- Create: `db/35_agent_v_journee.sql`
+- Create: `db/36_agent_v_journee.sql`
 
 **Interfaces:**
 - Produces: vue `agent_v_journee` — une ligne par occurrence cyclique **prévue aujourd'hui**, colonnes : `mission_id uuid, titre text, prevu_at timestamptz, etat text` avec `etat ∈ {done,running,failed,pending}`. L'UI place les pins par `prevu_at` et colore par `etat`.
@@ -83,7 +83,7 @@ git commit -m "feat(db): criticité explicite des approbations, exposée au para
 - [ ] **Step 1 : Écrire la migration**
 
 ```sql
--- db/35_agent_v_journee.sql
+-- db/36_agent_v_journee.sql
 -- Les passages cycliques du jour et leur état résolu. Une mission recurring a une cadence
 -- {"days":[1..7],"times":["07:00","16:00"]} (jours ISO lundi=1). On déplie les times du jour
 -- si le jour ISO courant est dans days, puis on rattache la tâche du jour (même mission,
@@ -137,7 +137,7 @@ Expected : une ligne par (mission recurring active dont le jour ISO tombe aujour
 - [ ] **Step 4 : Commit**
 
 ```bash
-git add db/35_agent_v_journee.sql
+git add db/36_agent_v_journee.sql
 git commit -m "feat(db): vue agent_v_journee — passages cycliques du jour et leur état"
 ```
 
