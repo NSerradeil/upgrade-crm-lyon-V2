@@ -8099,10 +8099,16 @@ function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
           <option value="sans">Sans type</option>
         </select>
         {nbTech>0&&(
-          <label style={{display:'inline-flex', alignItems:'center', gap:6, fontSize:11.5, fontWeight:700, color:'#565861', cursor:'pointer', userSelect:'none'}}>
-            <input type="checkbox" checked={showTech} onChange={e=>setShowTech(e.target.checked)}/>
+          <button type="button" onClick={()=>setShowTech(v=>!v)} aria-pressed={showTech}
+            style={{display:'inline-flex', alignItems:'center', gap:7, border:'1.5px solid '+JULES_NOIR,
+                    background:showTech?JULES_NOIR:'#fff', color:showTech?'#fff':JULES_NOIR,
+                    fontFamily:'Outfit,sans-serif', fontSize:11.5, fontWeight:700, padding:'5px 10px',
+                    cursor:'pointer', minHeight:32, userSelect:'none'}}>
+            <span style={{width:13, height:13, flexShrink:0, border:'1.5px solid '+(showTech?'#fff':JULES_NOIR),
+                          background:showTech?'#fff':'transparent', color:JULES_NOIR, display:'grid', placeItems:'center',
+                          fontSize:10, fontWeight:800, lineHeight:1}}>{showTech?'✓':''}</span>
             Afficher tech ({nbTech})
-          </label>
+          </button>
         )}
         <span style={{fontSize:11.5, color:JULES_GRIS_F, fontWeight:700, marginLeft:'auto'}}>{vues.length}/{lignes.length}</span>
       </div>
