@@ -8113,7 +8113,15 @@ function JulesDetail({ missionId, data, onClose, actions, occupe }) {
   // Le message (succès ou erreur) est porté par `agir`, comme pour tous les autres gestes.
   const relancer = async (t) => { await actions.relancerTache(t); setRelance(n=>n+1); };
   const seqs   = useMemo(()=>(data.sequences||[]).filter(s=>s.mission_id===missionId),[data.sequences,missionId]);
-  const events = useMemo(()=>(data.events||[]).filter(e=>e.mission_id===missionId).slice(0,40),[data.events,missionId]);
+  // Le journal ne redit pas ce que la liste des tâches montre déjà, juste au-dessus :
+  // `task.claimed` répète mot pour mot le titre d'une carte, et `task.done` le texte de son
+  // « voir le détail ». Filtrés ici, ils laissent la place à ce qu'on ne lit nulle part
+  // ailleurs — un report, un requeue, un quota bloqué, une mission mise en pause depuis Slack.
+  // Filtre d'AFFICHAGE seulement : agent_events garde tout, rien n'est supprimé en base.
+  const EVENTS_REDONDANTS = ['task.claimed','task.done'];
+  const events = useMemo(()=>(data.events||[])
+    .filter(e=>e.mission_id===missionId && !EVENTS_REDONDANTS.includes(e.kind))
+    .slice(0,40),[data.events,missionId]);
   if(!mission) return null;
   const enPause = mission.statut==='paused';
   const cfg = mission.config||{};
@@ -8167,6 +8175,14 @@ function JulesDetail({ missionId, data, onClose, actions, occupe }) {
                 <div style={{fontSize:11, color:JULES_GRIS_F, marginTop:3, textTransform:'uppercase', letterSpacing:'0.05em'}}>
                   {t.type} · due {extractDate(t.due_at)} {extractTime(t.due_at)}
                   {t.attempts>0&&' · '+t.attempts+' tentative'+(t.attempts>1?'s':'')}
+                  {/* L'heure RÉELLE d'exécution, que le journal portait avant d'être débruité.
+                      Affichée seulement si elle s'écarte de l'échéance de plus de 5 min : une
+                      ronde de 10h passée à 10h01 n'intéresse personne, une tâche rattrapée trois
+                      heures plus tard, si (cas vécu 21/09 : machine réveillée à 9h10, toutes les
+                      routines du matin exécutées d'un coup). */}
+                  {t.statut!=='due'&&t.updated_at&&t.due_at
+                    &&Math.abs(new Date(t.updated_at)-new Date(t.due_at))>5*60000
+                    &&' · passée '+extractDate(t.updated_at)+' '+extractTime(t.updated_at)}
                 </div>
                 {(detail||rejouable)&&(
                   <div style={{display:'flex', gap:12, alignItems:'center', marginTop:6, flexWrap:'wrap'}}>
@@ -8224,7 +8240,7 @@ function JulesDetail({ missionId, data, onClose, actions, occupe }) {
       )}
 
       <Field label="Journal">
-        {!events.length ? <div style={{fontSize:12, color:'#565861'}}>Aucun événement.</div>
+        {!events.length ? <div style={{fontSize:12, color:'#565861'}}>Rien à signaler — les passages de tâches sont dans la liste ci-dessus.</div>
          : <div style={{display:'flex', flexDirection:'column', gap:4}}>
             {events.map(e=>(
               <div key={e.id} style={{display:'flex', gap:8, alignItems:'baseline', fontSize:12}}>
