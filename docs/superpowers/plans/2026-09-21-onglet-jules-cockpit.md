@@ -188,13 +188,19 @@ git commit -m "feat(db): vue agent_v_journee — passages cycliques du jour et l
 - Consumes: `J.data.parapheur` (avec `critique`), `JulesVolet`, `julesActions` (dont `ajuster`).
 - Produces: `<JulesParapheur>` rend une grille de cartes ; clic corps → volet.
 
-Règles de couleur (bande gauche 6px) :
-- `nature==='go'` → **vert** (`JULES_VERT`), actions Accorder / **Ajuster** (geste existant) / Refuser.
-- `nature==='decision' || 'bloque'` → **bleu** (`JULES_BLEU`), action « Trancher » / « Donner l'info » + « Répondre dans Slack ».
-- **rouge** (`JULES_ROUGE`) en overlay si `critique === true` **OU** âge > seuil (constante `JULES_SEUIL_CRITIQUE_H = 24`, calculée sur `created_at`) → bande rouge + flag « urgent ».
+Règles de couleur (bande gauche 6px) + modèle §4 « CRM = clics, Slack = mots » :
+- `nature==='go'` → **vert** (`JULES_VERT`), actions in-app Accorder / **Ajuster** (geste
+  existant `onAjuster`) / Refuser.
+- `nature==='decision' || 'bloque'` → **bleu** (`JULES_BLEU`) : **boutons d'options in-app**
+  rendus depuis `a.options` (1 clic → décision, réutilise le flux `onRepondre`/`julesActions`
+  existant) + un bouton **« Répondre dans Slack »** (deep-link DM) pour la réponse LIBRE.
+  ⚠️ La zone texte libre in-app de l'ancien modal TRANCHER est retirée du parcours principal
+  (remplacée par la bascule Slack) — mais les **boutons d'options restent in-app**.
+- **rouge** (`JULES_ROUGE`) en overlay si `critique === true` **OU** âge > seuil (constante
+  `JULES_SEUIL_CRITIQUE_H = 24`, sur `created_at`) → bande rouge + flag « urgent ».
 
 - [ ] **Step 1** : Écrire la grille de cartes (`grid auto-fill minmax(268px,1fr)`), petites cartes (tag nature, âge, titre, contexte 2 lignes, boutons selon nature). Filtres chips Tout/Échanger/Go-no-go/Critique.
-- [ ] **Step 2** : Détail dans `JulesVolet` : ce que Jules attend, contexte/source, texte proposé, encart 360, actions en pied. Le geste « Ajuster » appelle le `onAjuster` existant (pas de réécriture).
+- [ ] **Step 2** : Détail dans `JulesVolet` : ce que Jules attend, contexte/source, texte proposé, encart 360, actions en pied. Clics in-app (options/Accorder/Ajuster/Refuser via `julesActions` existant) ; réponse libre → « Répondre dans Slack ». Ne pas réécrire les gestes existants.
 - [ ] **Step 3** : `node tests/check-babel.mjs`.
 - [ ] **Step 4** : Commit `feat(jules): parapheur en cartes couleur + volet`.
 

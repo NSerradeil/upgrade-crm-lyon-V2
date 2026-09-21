@@ -49,13 +49,14 @@ cliquables** qui scrollent vers la zone : *Attendent ton go* (parapheur), *Tourn
 ### 3.2 « Ce qui t'attend » — petites cartes + volet latéral
 - Grille de **petites cartes** (min 268px, auto-fill).
 - **Code couleur = type d'action** (bande latérale gauche 6px) :
-  - 🟢 **vert** = `nature='go'` → simple **go/no-go** (boutons Accorder / Ajuster / Refuser).
-  - 🔵 **bleu** = `nature='decision'` **ou** `'bloque'` → **échanger avec Jules**
-    (bouton « Répondre à Jules » → volet + deep-link Slack ; « Trancher » / « Donner l'info »).
+  - 🟢 **vert** = `nature='go'` → simple **go/no-go** in-app (Accorder / Ajuster / Refuser).
+  - 🔵 **bleu** = `nature='decision'` **ou** `'bloque'` → décision : **boutons d'options
+    in-app** (1 clic, depuis `options`) + **« Répondre dans Slack »** pour la réponse libre.
   - 🔴 **rouge** = **criticité** (overlay indépendant de la nature, voir §5.1).
 - Puces de filtre : Tout / Échanger / Go-no-go / Critique.
-- Clic sur le corps de la carte → **volet latéral** avec : ce que Jules attend, contexte &
-  source, texte proposé (citation), **encart renvoi 360**, et les actions en pied.
+- Clic sur le corps de la carte → **volet latéral** : ce que Jules attend, contexte & source,
+  texte proposé (citation), **encart renvoi 360**, actions en pied (clics in-app + bascule
+  Slack pour les mots). Conforme au modèle §4 « CRM = clics, Slack = mots ».
 
 ### 3.3 « Ce qui tourne » — frise du jour (validé : timeline, pas jauges)
 - **Frise horaire 7h→19h** avec un repère « maintenant ».
@@ -82,19 +83,27 @@ Panneau droit (min(440px,92vw), plein écran < 560px), scrim, fermeture Échap/c
 Remplace l'affichage inline de tout le détail. Toutes les actions d'écriture y sont
 disponibles (via `julesActions` existant, y compris « Ajuster » de l'autre chantier).
 
-## 4. Renvois 360 (validé : niveau maquette)
+## 4. Modèle d'interaction CRM ↔ Slack — **décidé : « CRM = clics, Slack = mots »**
 
-Portée décidée : **UI + wiring d'un bloc** (touche le pont Slack + playbooks).
+Principe non négociable (évite le doublon de chemins, cf. avertissement Nicolas 21/09) :
+le CRM **affiche et pilote** ; **l'échange en mots se fait dans Slack**.
 
-- **Outil → Jules/Slack** : chaque carte/mission porte un bouton **« Ouvrir dans Slack »**
-  (deep-link DM Jules pré-rempli avec le contexte de l'item) ; les items « échanger »
-  ouvrent « Répondre à Jules ». Le volet affiche « Jules va t'écrire » quand une décision
-  suivra en DM.
-- **Slack/parapheur → Outil** : quand Jules dépose une accroche/approbation, le message
-  Slack porte le **lead + un lien vers l'onglet** (« la suite est dans le cockpit »),
-  au lieu de re-déballer le détail (cohérent avec la règle concision Slack + JOINDRE).
-- **Deep-link** : format à définir en implémentation (URL de l'app avec `?tab=jules&appro=<id>`
-  pour ouvrir directement le volet du bon item ; le DM Slack pré-rempli via l'API Slack du bot).
+- **Dans le CRM (clics, sans sortir)** : Accorder / Refuser (go/no-go), et les **boutons
+  d'options structurés** d'une décision (ex. « Je regarde côté Lyon » / « J'attends Pierre »,
+  portés par `agent_approvals.options`). Un clic écrit la décision, Jules reprend la tâche liée.
+  **Exception conservée** : « Ajuster » (éditer le brouillon d'un `go` avant de l'accorder,
+  `JulesAjuster` — feature mergée) reste in-app : c'est éditer un brouillon, pas discuter.
+- **Dans Slack (mots)** : dès qu'il faut **écrire une réponse libre / discuter**, le CRM
+  bascule vers le **DM Jules pré-rempli** avec le contexte de l'item. La zone texte libre de
+  l'ancien modal TRANCHER est **remplacée** par un bouton « Répondre dans Slack » (on garde
+  les boutons d'options in-app). C'est LA voie de conversation — pas de saisie libre in-app.
+- **Slack/parapheur → Outil** : quand Jules dépose une approbation, le message Slack porte le
+  **lead + un lien vers l'onglet** (`?tab=jules&appro=<id>`, « la suite est dans le cockpit »)
+  au lieu de re-déballer le détail (cohérent règle concision Slack + JOINDRE).
+- **Outil → Jules** : encart « Jules va t'écrire » pour ce que **Jules initie** (livrable,
+  décision à venir), jamais pour dupliquer un geste faisable in-app.
+- **Deep-links** : app `?tab=jules&appro=<uuid>` / `&mission=<uuid>` ouvre directement le bon
+  volet ; DM Slack pré-rempli via l'API du bot Jules.
 
 ## 5. Ajouts de données (additifs, côté CRM/builder)
 
