@@ -7858,20 +7858,15 @@ const JULES_NATURE_MISSION = {
 function julesNatureCle(k){ return k==='campagne'?'campagne' : k==='recurring'?'routine' : 'ponctuel'; }
 // Type = intention métier. Pas de champ dédié en base (spec §3.4) : dérivé au mieux du type de
 // tâche et du titre. « — » quand on ne sait pas. Un champ explicite serait une amélioration.
+// Type métier = catégorie contrôlée, portée par agent_task_types et exposée sur le backlog
+// (db/38). Plus de devinage : le CRM lit `categorie`. « — » si le type n'en porte pas.
 const JULES_TYPE_MISSION = {
-  chasse:  {bg:JULES_VIOLET, color:'#fff'},
-  veille:  {bg:JULES_BLEU,   color:'#fff'},
-  relance: {bg:JULES_JAUNE,  color:JULES_NOIR},
-  admin:   {bg:JULES_GRIS,   color:JULES_NOIR},
+  chasse:   {bg:JULES_VIOLET, color:'#fff'},
+  veille:   {bg:JULES_BLEU,   color:'#fff'},
+  relance:  {bg:JULES_JAUNE,  color:JULES_NOIR},
+  pilotage: {bg:JULES_NOIR,   color:'#fff'},
+  admin:    {bg:JULES_GRIS,   color:JULES_NOIR},
 };
-function julesTypeMission(m){
-  const s=(((m&&m.task_type)||'')+' '+((m&&m.titre)||'')).toLowerCase();
-  if(/chass|sourc|profil|candidat|lead|prospect/.test(s)) return 'chasse';
-  if(/veille|scan|plateforme|osint/.test(s))              return 'veille';
-  if(/relanc|cra|\bbl\b|réceptio|receptio/.test(s))       return 'relance';
-  if(/brief|ronde|report|bilan|admin|synth/.test(s))      return 'admin';
-  return null;
-}
 
 function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
   const missMap = useMemo(()=>Object.fromEntries((missions||[]).map(m=>[m.id,m])),[missions]);
@@ -7891,7 +7886,7 @@ function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
           {backlog.map(l=>{
             const m = missMap[l.id]; const camp = campMap[l.id];
             const nat = JULES_NATURE_MISSION[julesNatureCle((m&&m.kind)||l.kind)];
-            const typ = julesTypeMission(m||l);
+            const typ = (l.categorie && JULES_TYPE_MISSION[l.categorie]) ? l.categorie : null;
             const p = julesPouls(l, camp);
             const total = (l.nb_due||0)+(l.nb_claimed||0)+(l.nb_waiting_go||0)+(l.nb_failed||0)+(l.nb_done||0);
             const pct = total ? Math.round((l.nb_done||0)/total*100) : 0;
