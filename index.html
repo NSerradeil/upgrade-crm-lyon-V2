@@ -8185,8 +8185,10 @@ function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
     return c;
   },[lignes]);
   const PASTILLES = useMemo(()=>[
-    {cle:'metier', label:'MÉTIER'},
+    // TOUS en premier (Nicolas 22/09) : c'est le point d'entrée neutre, il se lit avant le
+    // filtre par défaut plutôt qu'après.
     {cle:'all',    label:'TOUS'},
+    {cle:'metier', label:'MÉTIER'},
     ...JULES_CATEGORIES_SAISIE.map(c=>({cle:c, label:c.toUpperCase()})),
     {cle:'sans',   label:'SANS TYPE'},
   ].filter(b=>['metier','all'].includes(b.cle) || (compte[b.cle]||0) > 0),[compte]);
