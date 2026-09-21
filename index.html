@@ -7450,15 +7450,27 @@ function julesSuiviResolution(a, events){
   else                          { etat='en attente de ton info'; couleur=JULES_JAUNE; }  // → bouton « Donner l'info »
   return {etat, couleur, pulse, tech:julesBlocageTechnique(a), age: julesAge(last ? last.at : a.created_at)};
 }
+// Qui REGARDE la page (roadmap Nicolas 21/09). Aujourd'hui l'onglet Jules est ouvert par
+// des admins, qui peuvent lire « technique — à voir avec le builder » et agir en conséquence.
+// Demain les utilisateurs seront des COMMERCIAUX : un blocage technique ne doit pas leur
+// demander d'agir — ils n'ont rien à « donner », ça ne dépend pas d'eux. On expose donc le
+// rôle du profil aux composants du parapheur, sans le faire transiter par dix props.
+const JulesProfilCtx = React.createContext({ role: 'admin' });
+const useJulesEstAdmin = () => (React.useContext(JulesProfilCtx)||{}).role === 'admin';
+
 function JulesSuiviLigne({ a, events }){
   if(a.nature!=='bloque') return null;
+  const estAdmin = useJulesEstAdmin();
   const s = julesSuiviResolution(a, events);
+  // Pour un commercial, « à voir avec le builder » est du jargon qui sous-entend une action
+  // de sa part. On dit ce qui compte pour lui : c'est connu, c'est pris en charge.
+  const etat = (s.tech && !estAdmin) ? 'problème technique en cours de résolution' : s.etat;
   return (
     <div style={{display:'flex', alignItems:'center', gap:6, fontSize:11, fontWeight:700, color:'#565861'}}
          onClick={e=>e.stopPropagation()}>
       <span className={s.pulse?'jules-pouls':''} style={{width:8, height:8, borderRadius:'50%', background:s.couleur, flexShrink:0}}/>
       <span style={{textTransform:'uppercase', letterSpacing:'0.04em'}}>Suivi :</span>
-      <span style={{color:s.couleur}}>{s.tech?'🔧 ':''}{s.etat}</span>
+      <span style={{color:s.couleur}}>{s.tech?'🔧 ':''}{etat}</span>
       <span style={{color:JULES_GRIS_F, marginLeft:'auto'}}>MAJ il y a {s.age}</span>
     </div>
   );
@@ -7607,6 +7619,24 @@ function julesAge(iso) {
 // Les gestes ne changent pas (spec §4 « CRM = clics ») : GO = accorder/ajuster ; décision ou
 // blocage = trancher/donner l'info via le modal existant (ses boutons d'options + texte).
 function JulesActionsAppro({ a, occupe, onAccorder, onAjuster, onRefuser, onRepondre, onDiscuter }) {
+  const estAdmin = useJulesEstAdmin();
+  // Blocage TECHNIQUE vu par un commercial : aucun geste à lui demander — ni « Donner l'info »
+  // (il n'a pas l'info, ce n'est pas un manque métier), ni « Abandonner » (il abandonnerait un
+  // travail qui n'est pas perdu, juste en panne). On affiche un tag neutre, et on lui laisse
+  // Slack pour poser une question. La réparation est suivie côté Nicolas/builder.
+  if(a.nature==='bloque' && !estAdmin && julesBlocageTechnique(a)) {
+    return (
+      <div style={{display:'flex', gap:8, flexWrap:'wrap', alignItems:'center'}} onClick={e=>e.stopPropagation()}>
+        <span style={{display:'inline-flex', alignItems:'center', gap:6, minHeight:44, padding:'8px 12px',
+                      background:'#fff', color:JULES_NOIR, border:'2px solid '+JULES_NOIR,
+                      boxShadow:'4px 4px 0 '+JULES_BLEU, fontFamily:'Outfit,sans-serif', fontSize:12,
+                      fontWeight:700, letterSpacing:'0.03em', textTransform:'uppercase'}}>
+          🔧 Problème technique en cours de résolution
+        </span>
+        {onDiscuter&&<JulesSlackBtn onClick={()=>onDiscuter({kind:'approval', ref_id:a.id, titre:a.titre})} label="Slack"/>}
+      </div>
+    );
+  }
   return (
     <div style={{display:'flex', gap:8, flexWrap:'wrap'}} onClick={e=>e.stopPropagation()}>
       {onDiscuter&&<JulesSlackBtn onClick={()=>onDiscuter({kind:'approval', ref_id:a.id, titre:a.titre})} label="Slack"/>}
@@ -8931,6 +8961,7 @@ function TabJules({ profile, prefs, deepLink }) {
     </div>
   );
   return (
+    <JulesProfilCtx.Provider value={profile||{role:'admin'}}>
     <div className="tab-content">
       {J.erreur&&(
         <div style={{border:'2px solid '+JULES_ROUGE, boxShadow:'4px 4px 0 '+JULES_ROUGE, background:'#fff',
@@ -9035,6 +9066,7 @@ function TabJules({ profile, prefs, deepLink }) {
         </Modal>
       )}
     </div>
+    </JulesProfilCtx.Provider>
   );
 }
 
