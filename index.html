@@ -7702,43 +7702,59 @@ function julesFrisePct(iso){
   const p=(h-JULES_FRISE_DEB)/(JULES_FRISE_FIN-JULES_FRISE_DEB)*100;
   return Math.max(0, Math.min(100, p));
 }
-function JulesFrise({ journee }) {
+const JULES_ETAT_MOT = {done:'fait', running:'en cours', failed:'planté', pending:'à venir'};
+function JulesFrise({ journee, onOuvrir }) {
   if(!journee || !journee.length)
     return <div style={{fontSize:13, color:'#565861'}}>Aucun passage cyclique prévu aujourd'hui.</div>;
   const now=new Date(); const nowH=now.getHours()+now.getMinutes()/60;
   const nowPct=(nowH-JULES_FRISE_DEB)/(JULES_FRISE_FIN-JULES_FRISE_DEB)*100;
   const heures=[]; for(let h=JULES_FRISE_DEB; h<=JULES_FRISE_FIN; h+=2) heures.push(h);
   return (
-    <div style={{border:'2px solid '+JULES_NOIR, boxShadow:'4px 4px 0 '+JULES_GRIS, background:'#fff', padding:'22px 10px 14px', overflowX:'auto'}}>
-      <div style={{position:'relative', minWidth:620, height:104, margin:'0 14px'}}>
-        <div style={{position:'absolute', left:0, right:0, top:52, height:3, background:JULES_NOIR}}/>
-        {heures.map(h=>{ const p=(h-JULES_FRISE_DEB)/(JULES_FRISE_FIN-JULES_FRISE_DEB)*100; return (
-          <React.Fragment key={h}>
-            <div style={{position:'absolute', top:47, left:p+'%', width:1.5, height:13, background:JULES_GRIS, transform:'translateX(-50%)'}}/>
-            <div style={{position:'absolute', top:60, left:p+'%', transform:'translateX(-50%)', fontSize:9.5, color:JULES_GRIS_F, fontWeight:700}}>{h}h</div>
-          </React.Fragment>
-        );})}
-        {nowPct>=0&&nowPct<=100&&(
-          <div style={{position:'absolute', top:20, bottom:20, left:nowPct+'%', width:2, background:JULES_ROUGE, transform:'translateX(-50%)'}}>
-            <span style={{position:'absolute', top:-15, left:'50%', transform:'translateX(-50%)', fontSize:8.5, fontWeight:800, color:JULES_ROUGE, whiteSpace:'nowrap', textTransform:'uppercase', letterSpacing:'0.05em'}}>maintenant</span>
-          </div>
-        )}
-        {journee.map((r,i)=>{
-          const col=JULES_ETAT_COULEUR[r.etat]||JULES_GRIS_F; const haut=i%2===0;
-          return (
-            <div key={r.mission_id+r.prevu_at} title={julesTitre(r.titre)}
-                 style={{position:'absolute', top:52, left:julesFrisePct(r.prevu_at)+'%', transform:'translate(-50%,-50%)', textAlign:'center'}}>
-              <div style={{position:'absolute', left:'50%', transform:'translateX(-50%)', width:88, fontSize:10, fontWeight:800,
-                           lineHeight:1.15, color:JULES_NOIR, ...(haut?{bottom:26}:{top:26})}}>
-                {julesTitre(r.titre)}
-                <span style={{display:'block', fontSize:9, color:JULES_GRIS_F, fontWeight:700}}>{extractTime(r.prevu_at)}</span>
-              </div>
-              <div className={r.etat==='running'?'jules-pouls':''}
-                   style={{width:30, height:30, border:'2px solid '+(r.etat==='pending'?JULES_GRIS_F:col),
-                           borderStyle:r.etat==='pending'?'dashed':'solid', background:r.etat==='pending'?'#fff':col,
-                           color:r.etat==='pending'?JULES_GRIS_F:'#fff', display:'grid', placeItems:'center',
-                           fontWeight:800, fontSize:13, boxShadow:'2px 2px 0 '+JULES_GRIS}}>{JULES_ETAT_CAP[r.etat]}</div>
+    <div style={{border:'2px solid '+JULES_NOIR, boxShadow:'4px 4px 0 '+JULES_GRIS, background:'#fff'}}>
+      {/* Axe : uniquement des pastilles colorées par état, sans libellé (sinon ça se chevauche).
+          Le détail lisible est dans la liste dessous. */}
+      <div style={{padding:'20px 24px 14px', overflowX:'auto'}}>
+        <div style={{position:'relative', minWidth:520, height:34}}>
+          <div style={{position:'absolute', left:0, right:0, top:16, height:3, background:JULES_NOIR}}/>
+          {heures.map(h=>{ const p=(h-JULES_FRISE_DEB)/(JULES_FRISE_FIN-JULES_FRISE_DEB)*100; return (
+            <React.Fragment key={h}>
+              <div style={{position:'absolute', top:11, left:p+'%', width:1.5, height:13, background:JULES_GRIS, transform:'translateX(-50%)'}}/>
+              <div style={{position:'absolute', top:24, left:p+'%', transform:'translateX(-50%)', fontSize:9.5, color:JULES_GRIS_F, fontWeight:700}}>{h}h</div>
+            </React.Fragment>
+          );})}
+          {nowPct>=0&&nowPct<=100&&(
+            <div style={{position:'absolute', top:-4, height:24, left:nowPct+'%', width:2, background:JULES_ROUGE, transform:'translateX(-50%)'}}>
+              <span style={{position:'absolute', top:-13, left:'50%', transform:'translateX(-50%)', fontSize:8, fontWeight:800, color:JULES_ROUGE, whiteSpace:'nowrap', textTransform:'uppercase', letterSpacing:'0.05em'}}>maintenant</span>
             </div>
+          )}
+          {journee.map(r=>{
+            const col=JULES_ETAT_COULEUR[r.etat]||JULES_GRIS_F;
+            return <div key={r.mission_id+r.prevu_at} title={julesTitre(r.titre)+' — '+extractTime(r.prevu_at)}
+              className={r.etat==='running'?'jules-pouls':''}
+              style={{position:'absolute', top:16, left:julesFrisePct(r.prevu_at)+'%', transform:'translate(-50%,-50%)',
+                      width:13, height:13, borderRadius:'50%', background:r.etat==='pending'?'#fff':col,
+                      border:'2px solid '+(r.etat==='pending'?JULES_GRIS_F:col)}}/>;
+          })}
+        </div>
+      </div>
+      {/* La liste : lisible, scannable, cliquable → ouvre la mission. */}
+      <div style={{borderTop:'2px solid '+JULES_GRIS, padding:10, display:'grid',
+                   gridTemplateColumns:'repeat(auto-fill,minmax(232px,1fr))', gap:6}}>
+        {journee.map(r=>{
+          const col=JULES_ETAT_COULEUR[r.etat]||JULES_GRIS_F;
+          return (
+            <button key={'l'+r.mission_id+r.prevu_at} onClick={()=>onOuvrir&&onOuvrir(r.mission_id)}
+              title={julesTitre(r.titre)}
+              style={{display:'flex', alignItems:'center', gap:8, textAlign:'left', background:'none', border:'none',
+                      padding:'5px 6px', cursor:onOuvrir?'pointer':'default', fontFamily:'Outfit,sans-serif', minWidth:0}}
+              onMouseEnter={e=>e.currentTarget.style.background='#F4F3EE'}
+              onMouseLeave={e=>e.currentTarget.style.background='none'}>
+              <span className={r.etat==='running'?'jules-pouls':''} style={{width:9, height:9, borderRadius:'50%', flexShrink:0,
+                    background:r.etat==='pending'?'#fff':col, border:'1.5px solid '+(r.etat==='pending'?JULES_GRIS_F:col)}}/>
+              <span style={{fontFamily:'IBM Plex Mono,monospace', fontSize:11, fontWeight:600, color:JULES_NOIR, flexShrink:0, width:38}}>{extractTime(r.prevu_at)}</span>
+              <span style={{fontSize:12.5, fontWeight:700, color:JULES_NOIR, minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(r.titre)}</span>
+              <span style={{fontSize:10, fontWeight:800, color:col, textTransform:'uppercase', letterSpacing:'0.04em', flexShrink:0, marginLeft:'auto'}}>{JULES_ETAT_MOT[r.etat]}</span>
+            </button>
           );
         })}
       </div>
@@ -7746,10 +7762,10 @@ function JulesFrise({ journee }) {
   );
 }
 
-function JulesEncours({ journee, encours, dueToday }) {
+function JulesEncours({ journee, encours, dueToday, onOuvrir }) {
   return (
     <div style={{display:'flex', flexDirection:'column', gap:14}}>
-      <JulesFrise journee={journee}/>
+      <JulesFrise journee={journee} onOuvrir={onOuvrir}/>
       {encours.length>0&&(
         <div style={{display:'flex', gap:9, flexWrap:'wrap'}}>
           {encours.map(t=>(
@@ -8566,7 +8582,8 @@ function TabJules({ profile, prefs }) {
       </JulesZone>
       <JulesZone id="tourne" titre="Ce qui tourne" compteur={J.data.encours.length}
         hint="La journée de Jules · fait ✓ · en cours ● · planté ✕">
-        <JulesEncours journee={J.data.journee} encours={J.data.encours} dueToday={J.data.dueToday}/>
+        <JulesEncours journee={J.data.journee} encours={J.data.encours} dueToday={J.data.dueToday}
+          onOuvrir={id=>setDetailId(id)}/>
       </JulesZone>
       <JulesZone id="missions" titre="Missions" compteur={J.data.backlog.length}
         hint="Le fond de commerce que Jules pilote en continu"
