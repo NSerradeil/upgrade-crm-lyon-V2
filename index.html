@@ -7987,7 +7987,9 @@ function JulesMissions({ campagnes, backlog, missions, onOuvrir }) {
   const [tri,setTri] = useState({cle:'etat', dir:1});   // par défaut : ce qui bouge en haut
 
   // Une ligne enrichie de tout ce qui sert à trier/filtrer.
-  const lignes = useMemo(()=>(backlog||[]).map(l=>{
+  // Une phase de campagne (parent_mission_id renseigné) ne s'affiche pas au niveau supérieur :
+  // elle vit dans le volet de sa campagne chapeau. La table montre UNE ligne par campagne.
+  const lignes = useMemo(()=>(backlog||[]).filter(l=>!(missMap[l.id]&&missMap[l.id].parent_mission_id)).map(l=>{
     const m=missMap[l.id], camp=campMap[l.id];
     const natCle=julesNatureCle((m&&m.kind)||l.kind);
     const typ=(l.categorie && JULES_TYPE_MISSION[l.categorie]) ? l.categorie : null;
@@ -8316,6 +8318,12 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
   const events = useMemo(()=>(data.events||[])
     .filter(e=>e.mission_id===missionId && !EVENTS_REDONDANTS.includes(e.kind))
     .slice(0,40),[data.events,missionId]);
+  // Les phases de la campagne (missions dont le parent est celle-ci) : montrées ICI, pas au
+  // niveau supérieur de la table. Leur état vient du backlog (mêmes compteurs que les autres).
+  const backMap = useMemo(()=>Object.fromEntries((data.backlog||[]).map(b=>[b.id,b])),[data.backlog]);
+  const phases = useMemo(()=>(data.missions||[])
+    .filter(m=>m.parent_mission_id===missionId)
+    .sort((a,b)=>String(a.task_type).localeCompare(String(b.task_type))),[data.missions,missionId]);
   if(!mission) return null;
   const enPause = mission.statut==='paused';
   const cfg = mission.config||{};
@@ -8334,6 +8342,26 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
         {discuter&&<JulesSlackBtn label="Discuter"
           onClick={()=>discuter({kind:'mission', ref_id:mission.id, mission_id:mission.id, titre:mission.titre})}/>}
       </span>}>
+
+      {phases.length>0&&(
+        <Field label={'Phases de la campagne ('+phases.length+')'}>
+          <div style={{display:'flex', flexDirection:'column', gap:6}}>
+            {phases.map(ph=>{
+              const b = backMap[ph.id]; const p = b ? julesPouls(b, null) : {couleur:JULES_GRIS, pulse:false, mot:ph.statut};
+              const lbl = {'campagne.alimenter':'Alimentation','campagne.envoyer':'Envois','campagne.lire':'Lecture'}[ph.task_type] || ph.task_type;
+              const times = ph.cadence && ph.cadence.times ? ph.cadence.times.join(' · ') : '';
+              return (
+                <div key={ph.id} style={{border:'2px solid '+JULES_GRIS, padding:'8px 10px', display:'flex', alignItems:'center', gap:9, flexWrap:'wrap'}}>
+                  <span className={p.pulse?'jules-pouls':''} style={{width:9, height:9, borderRadius:'50%', background:p.couleur, flexShrink:0}}/>
+                  <span style={{fontSize:13, fontWeight:800, color:JULES_NOIR}}>{lbl}</span>
+                  {times&&<span style={{fontFamily:'IBM Plex Mono,monospace', fontSize:11, color:JULES_GRIS_F}}>{times}</span>}
+                  <span style={{marginLeft:'auto', fontSize:11, fontWeight:700, color:p.couleur, textTransform:'uppercase', letterSpacing:'0.04em'}}>{p.mot}</span>
+                </div>
+              );
+            })}
+          </div>
+        </Field>
+      )}
 
       <Field label="Configuration">
         <div style={{fontSize:12, color:'#565861', lineHeight:1.7}}>
