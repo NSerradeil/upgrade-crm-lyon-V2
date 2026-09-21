@@ -8430,13 +8430,45 @@ const julesActions = {
     await sb.from('agent_events').insert({actor:'crm',
       kind:cible==='done'?'mission.done':'mission.cancelled', mission_id:m.id, message:m.titre});
   },
-  async arreterSuivi(s) {
+  // Sortir une personne d'une séquence, AVEC SA RAISON (Nicolas 21/09 : « laisse la
+  // possibilité de donner la raison : c'est justement le côté converti, refus etc. »).
+  // La raison n'est pas de la décoration : « converti » et « refus » ne se lisent pas
+  // pareil dans un bilan, et sans elle on ne sait jamais pourquoi un vivier s'est vidé.
+  // Converti a son propre statut en base ; tout le reste est un arrêt, distingué par sa
+  // raison écrite dans les notes et dans l'événement.
+  async arreterSuivi(s, raison) {
+    const motif = (raison && raison.cle) || 'autre';
+    const cible = motif === 'converti' ? 'converted' : 'stopped';
+    const texte = (raison && raison.texte) || '';
+    const libelle = (raison && raison.label) || 'arrêt';
+    const horodate = new Date().toLocaleDateString('fr-FR');
+    const note = [s.notes, `[${horodate}] Sorti par Nicolas : ${libelle}${texte?' — '+texte:''}`]
+      .filter(Boolean).join('\n');
     const { data, error } = await sb.from('agent_sequences')
-      .update({statut:'stopped', next_due_at:null}).eq('id', s.id).eq('statut','active').select('id');
+      .update({statut:cible, next_due_at:null, notes:note})
+      .eq('id', s.id).eq('statut','active').select('id');
     if(error) throw new Error('Arrêt non enregistré : '+error.message);
     if(!data||!data.length) throw new Error('Ce suivi n\'était plus actif — rien n\'a été écrit.');
-    await sb.from('agent_events').insert({actor:'crm', kind:'sequence.stopped',
-      sequence_id:s.id, mission_id:s.mission_id, message:s.target_label});
+    await sb.from('agent_events').insert({actor:'crm',
+      kind: cible === 'converted' ? 'sequence.converted' : 'sequence.stopped',
+      sequence_id:s.id, mission_id:s.mission_id,
+      message: s.target_label + ' — ' + libelle + (texte ? ' : ' + texte : '')});
+  },
+  // Terminer une tâche à la main (Nicolas 21/09 : « que je ne sois pas toujours obligé de
+  // passer par toi quand je vois un truc à terminer »). On ne touche qu'aux tâches encore
+  // ouvertes : une tâche déjà close ou annulée n'est pas réécrite.
+  async terminerTache(t, texte) {
+    const note = texte && texte.trim() ? texte.trim() : 'Terminée à la main depuis le CRM.';
+    const { data, error } = await sb.from('agent_tasks')
+      .update({statut:'done', result:{note, par:'nicolas'}, leased_by:null, lease_until:null})
+      .eq('id', t.id).in('statut',['due','claimed','waiting_go','failed']).select('id');
+    if(error) throw new Error('Clôture refusée : '+error.message);
+    if(!data||!data.length) throw new Error('Cette tâche n\'était plus ouverte — rien n\'a été écrit.');
+    // Une tâche close qui laisse une demande au parapheur fait attendre pour rien.
+    await sb.from('agent_approvals').update({statut:'caduque'})
+      .eq('task_id', t.id).eq('statut','pending');
+    await sb.from('agent_events').insert({actor:'crm', kind:'task.done',
+      task_id:t.id, mission_id:t.mission_id, message:note});
   },
 };
 
@@ -8467,7 +8499,9 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
   const mission = useMemo(()=>(data.missions||[]).find(m=>m.id===missionId),[data.missions,missionId]);
   const [taches,setTaches] = useState(null);
   const [seqOuvert,setSeqOuvert] = useState(null);         // id de la séquence dépliée (Personnes suivies)
-  const [detailOuvert,setDetailOuvert] = useState(null);   // id de la tâche dépliée, une seule à la fois
+  const [detailOuvert,setDetailOuvert] = useState(null);   // id de la tâche dépliée
+  const [aSortir,setASortir] = useState(null);            // séquence qu'on sort, avec sa raison
+  const [aTerminer,setATerminer] = useState(null);        // tâche que Nicolas clôt à la main, une seule à la fois
   const [relance,setRelance] = useState(0);                // incrémenté après une relance → relit la liste
   useEffect(()=>{
     let vivant=true;
@@ -8564,6 +8598,9 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
                 || (Object.keys(t.result).length ? JSON.stringify(t.result, null, 1) : null));
               const deplie = detailOuvert===t.id;
               const rejouable = ['done','failed','cancelled'].includes(t.statut);
+              // Terminer à la main (Nicolas 21/09) : pour une tâche encore ouverte, quand il
+              // voit que le sujet est réglé et n'a pas envie de passer par moi pour le dire.
+              const terminable = ['due','claimed','waiting_go','failed'].includes(t.statut);
               return <div key={t.id} style={{border:'2px solid '+JULES_GRIS, padding:8}}>
                 <div style={{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
                   <ColorBadge label={JULES_TASK_STATUT_MOT[t.statut]||t.statut} bg={st.bg} color={st.color}/>
@@ -8582,7 +8619,7 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
                     &&Math.abs(new Date(t.updated_at)-new Date(t.due_at))>5*60000
                     &&' · passée '+extractDate(t.updated_at)+' '+extractTime(t.updated_at)}
                 </div>
-                {(detail||rejouable)&&(
+                {(detail||rejouable||terminable)&&(
                   <div style={{display:'flex', gap:12, alignItems:'center', marginTop:6, flexWrap:'wrap'}}>
                     {detail&&(
                       <button type="button" onClick={()=>setDetailOuvert(deplie?null:t.id)}
@@ -8600,6 +8637,16 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
                                 fontSize:11, color:occupe===t.id?JULES_GRIS_F:JULES_BLEU,
                                 textTransform:'uppercase', letterSpacing:'0.05em', minHeight:32}}>
                         {occupe===t.id?'relance…':'↻ relancer'}
+                      </button>
+                    )}
+                    {terminable&&(
+                      <button type="button" onClick={()=>setATerminer(t)} disabled={occupe===t.id}
+                        style={{background:'none', border:'none', padding:0,
+                                cursor:occupe===t.id?'default':'pointer',
+                                fontSize:11, color:occupe===t.id?JULES_GRIS_F:JULES_VERT,
+                                textTransform:'uppercase', letterSpacing:'0.05em', minHeight:32,
+                                fontWeight:700}}>
+                        ✓ terminer
                       </button>
                     )}
                     {discuter&&<JulesSlackBtn small label="Discuter"
@@ -8643,7 +8690,7 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
                     {parc.faits}/{parc.total} · {ouEnEst}{s.next_due_at?' · '+extractDate(s.next_due_at):''}
                   </span>
                   {s.statut==='active'&&<span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
-                    <BtnAction onClick={()=>actions.arreterSuivi(s)} icon={ICONS.stop} label="Arrêter"
+                    <BtnAction onClick={()=>setASortir(s)} icon={ICONS.stop} label="Sortir"
                                variant="danger" disabled={occupe===s.id}/>
                   </span>}
                 </div>
@@ -8714,7 +8761,75 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
             ))}
            </div>}
       </Field>
+      {aSortir&&<JulesSortirSequence seq={aSortir} onClose={()=>setASortir(null)}
+        saving={occupe===aSortir.id}
+        onSave={raison=>{ const sq=aSortir; setASortir(null); actions.arreterSuivi(sq, raison); }}/>}
+      {aTerminer&&<JulesTerminerTache tache={aTerminer} onClose={()=>setATerminer(null)}
+        saving={occupe===aTerminer.id}
+        onSave={async note=>{ const tk=aTerminer; setATerminer(null);
+          await actions.terminerTache(tk, note); setRelance(n=>n+1); }}/>}
     </SidePanel>
+  );
+}
+
+// Sortir une personne d'une séquence AVEC SA RAISON (Nicolas 21/09). Sans la raison, un
+// vivier qui se vide ne se relit pas : « converti » et « refus » ne veulent pas dire la
+// même chose dans un bilan, et « plus le bon profil » encore moins. Seul « converti » a
+// son propre statut en base ; les autres sont des arrêts, distingués par leur motif.
+const JULES_RAISONS_SORTIE = [
+  {cle:'converti', label:'Converti — RDV pris ou placement', variant:'success'},
+  {cle:'refus',    label:'Refus de la personne',             variant:'danger'},
+  {cle:'profil',   label:'Pas le bon profil finalement',     variant:'edit'},
+  {cle:'silence',  label:'Bout des relances, sans réponse',  variant:'close'},
+];
+function JulesSortirSequence({ seq, onClose, onSave, saving }) {
+  const [cle,setCle] = useState(null);
+  const [texte,setTexte] = useState('');
+  const champRef = useJulesFocusSansScroll();
+  const choisi = JULES_RAISONS_SORTIE.find(r=>r.cle===cle);
+  return (
+    <Modal title={'Sortir '+julesTitre(seq.target_label)+' de la séquence'} onClose={onClose}
+      footer={<ModalFooter onClose={onClose} saving={saving} disabled={!cle}
+        label={cle==='converti'?'Marquer converti':'Sortir du suivi'}
+        onSave={()=>onSave({cle, label:choisi?choisi.label:'arrêt', texte:texte.trim()})}/>}>
+      <div style={{fontSize:12, color:'#565861', marginBottom:10, lineHeight:1.5}}>
+        Plus aucune relance ne partira. La personne et son historique restent en base — dis
+        juste pourquoi elle sort, c'est ce qu'on relira dans le bilan.
+      </div>
+      <div style={{display:'flex', flexDirection:'column', gap:8, marginBottom:12}}>
+        {JULES_RAISONS_SORTIE.map(r=>(
+          <JulesCase key={r.cle} label={r.label} coche={cle===r.cle}
+                     onToggle={()=>setCle(cle===r.cle?null:r.cle)} disabled={saving}/>
+        ))}
+      </div>
+      <Field label="À préciser (facultatif)">
+        <textarea ref={champRef} value={texte} onChange={e=>setTexte(e.target.value)} rows={3}
+          placeholder="Ex : m'a dit qu'elle venait de signer ailleurs."
+          style={{...JULES_CHAMP, minHeight:70, lineHeight:1.5}}/>
+      </Field>
+    </Modal>
+  );
+}
+
+// Terminer une tâche à la main, sans passer par Jules (Nicolas 21/09).
+function JulesTerminerTache({ tache, onClose, onSave, saving }) {
+  const [texte,setTexte] = useState('');
+  const champRef = useJulesFocusSansScroll();
+  return (
+    <Modal title="Terminer cette tâche ?" onClose={onClose}
+      footer={<ModalFooter onClose={onClose} saving={saving} label="Terminer"
+        onSave={()=>onSave(texte.trim())}/>}>
+      <div style={{fontSize:13, fontWeight:700, color:JULES_NOIR, marginBottom:6}}>{julesTitre(tache.titre)}</div>
+      <div style={{fontSize:12, color:'#565861', marginBottom:10, lineHeight:1.5}}>
+        Elle passe en « faite » et sort de la file : l'ordonnanceur ne la reprendra pas. Si
+        elle attendait un GO au parapheur, cette demande devient caduque en même temps.
+      </div>
+      <Field label="Pourquoi (facultatif, mais ça aide à la relire)">
+        <textarea ref={champRef} value={texte} onChange={e=>setTexte(e.target.value)} rows={3}
+          placeholder="Ex : déjà fait à la main, plus la peine."
+          style={{...JULES_CHAMP, minHeight:70, lineHeight:1.5}}/>
+      </Field>
+    </Modal>
   );
 }
 
