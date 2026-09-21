@@ -7519,7 +7519,7 @@ function julesAge(iso) {
   return Math.round(min/1440)+' j';
 }
 
-function JulesParapheur({ entrees, onAccorder, onRefuser, onRepondre, actionEnCours }) {
+function JulesParapheur({ entrees, onAccorder, onAjuster, onRefuser, onRepondre, actionEnCours }) {
   if(!entrees.length) return <div style={{fontSize:13, color:'#565861'}}>Rien n'attend ta décision.</div>;
   return (
     <div style={{display:'flex', flexDirection:'column', gap:10}}>
@@ -7540,10 +7540,16 @@ function JulesParapheur({ entrees, onAccorder, onRefuser, onRepondre, actionEnCo
                 attend l'information qui manque ; une décision attend un arbitrage, pas un accord. */}
             <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
               {a.nature==='go' ? (
-                <span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
-                  <BtnAction onClick={()=>onAccorder(a)} icon={ICONS.check} label="Accorder"
-                             variant="success" disabled={occupe}/>
-                </span>
+                <>
+                  <span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
+                    <BtnAction onClick={()=>onAccorder(a)} icon={ICONS.check} label="Accorder"
+                               variant="success" disabled={occupe}/>
+                  </span>
+                  <span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
+                    <BtnAction onClick={()=>onAjuster(a)} icon={ICONS.edit} label="Ajuster"
+                               variant="edit" disabled={occupe}/>
+                  </span>
+                </>
               ) : (
                 <span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
                   <BtnAction onClick={()=>onRepondre(a)} icon={ICONS.edit}
@@ -7751,6 +7757,27 @@ const julesActions = {
     }
     await sb.from('agent_events').insert({actor:'crm', kind:'approval.approved',
       task_id:a.task_id||null, message:a.titre});
+  },
+  // Ajuster : comme accorder, mais avec un texte corrigé. Le detail affiché ET le payload de
+  // la tâche liée (texte_ajuste) sont écrits AVANT de relancer la tâche — c'est payload que
+  // l'ordonnanceur redonne verbatim au worker (build_prompt), jamais approvals.detail seul.
+  async ajuster(a, texte) {
+    const { data, error } = await sb.from('agent_approvals')
+      .update({statut:'approved', decision:'oui', decided_at:new Date().toISOString(), detail:texte})
+      .eq('id', a.id).eq('statut','pending').select('id');
+    if(error) throw new Error('Ajustement non enregistré : '+error.message);
+    if(!data||!data.length) throw new Error('Cette demande n\'était plus en attente — rien n\'a été écrit.');
+    if(a.task_id) {
+      const { data:tRows, error:eGet } = await sb.from('agent_tasks').select('payload')
+        .eq('id', a.task_id).limit(1);
+      if(eGet) throw new Error('Approbation écrite mais lecture de la tâche impossible : '+eGet.message);
+      const payload = {...((tRows&&tRows[0]&&tRows[0].payload)||{}), texte_ajuste:texte};
+      const { error:e2 } = await sb.from('agent_tasks').update({statut:'due', payload})
+        .eq('id', a.task_id).eq('statut','waiting_go');
+      if(e2) throw new Error('Approbation écrite mais tâche non relancée : '+e2.message);
+    }
+    await sb.from('agent_events').insert({actor:'crm', kind:'approval.adjusted',
+      task_id:a.task_id||null, message:a.titre, data:{texte}});
   },
   // Une entrée « bloqué » ou « décision » n'appelle pas un oui/non : elle appelle une RÉPONSE.
   // On la consigne dans decision, on passe l'entrée en 'answered' et la tâche repart en 'due'.
@@ -8017,6 +8044,26 @@ function JulesRepondre({ entree, onClose, onSave, saving }) {
   );
 }
 
+// Ajuster un GO : corriger le texte proposé avant d'accorder, plutôt que de choisir entre
+// accepter tel quel ou refuser en bloc. Même geste que JulesRepondre, mais ça ACCORDE
+// (pas une réponse libre) avec le texte édité.
+function JulesAjuster({ entree, onClose, onSave, saving }) {
+  const [texte,setTexte] = useState(entree.detail||'');
+  const champRef = useJulesFocusSansScroll();
+  return (
+    <Modal title="Ajuster avant d'accorder" onClose={onClose}
+      footer={<ModalFooter onClose={onClose} saving={saving} disabled={!texte.trim()} label="Accorder ce texte"
+        onSave={()=>onSave(texte.trim())}/>}>
+      <div style={{fontSize:14, fontWeight:700, color:JULES_NOIR, marginBottom:6}}>{julesTitre(entree.titre)}</div>
+      <Field label="Texte">
+        <textarea ref={champRef} value={texte} onChange={e=>setTexte(e.target.value)} rows={7}
+          style={{...JULES_CHAMP, minHeight:150, lineHeight:1.5}}/>
+      </Field>
+      <div style={{fontSize:12, color:'#565861'}}>Jules enverra ce texte exactement, pas la version d'origine.</div>
+    </Modal>
+  );
+}
+
 // Les jours et les heures d'une routine se cliquent. « 1,2,3,4,5 » est le format de la base,
 // pas une interface : personne n'a à savoir que lundi vaut 1.
 const JULES_JOURS = [['L',1],['M',2],['M',3],['J',4],['V',5],['S',6],['D',7]];
@@ -8197,6 +8244,7 @@ function TabJules({ profile, prefs }) {
   const [aModifier,setAModifier] = useState(null);// mission en cours d'édition
   const [aFermer,setAFermer] = useState(null);    // mission dont on confirme la clôture
   const [aRepondre,setARepondre] = useState(null);// entrée bloquée ou à trancher
+  const [aAjuster,setAAjuster] = useState(null);  // entrée 'go' dont on édite le texte
   const [creation,setCreation] = useState(false); // nouvelle mission
   const recharger = J.rechargerMaintenant;
   const agir = useCallback(async (cle, fn) => {
@@ -8246,6 +8294,7 @@ function TabJules({ profile, prefs }) {
         ouvert={!replie.parapheur} onToggle={()=>bascule('parapheur')}>
         <JulesParapheur entrees={J.data.parapheur}
           onAccorder={a=>agir(a.id,()=>julesActions.accorder(a))}
+          onAjuster={a=>setAAjuster(a)}
           onRefuser={a=>setARefuser(a)}
           onRepondre={a=>setARepondre(a)}
           actionEnCours={occupe}/>
@@ -8296,6 +8345,10 @@ function TabJules({ profile, prefs }) {
         saving={occupe===aRepondre.id}
         onSave={txt=>{ const a=aRepondre; setARepondre(null);
           agir(a.id,()=>julesActions.repondre(a,txt)); }}/>}
+      {aAjuster&&<JulesAjuster entree={aAjuster} onClose={()=>setAAjuster(null)}
+        saving={occupe===aAjuster.id}
+        onSave={txt=>{ const a=aAjuster; setAAjuster(null);
+          agir(a.id,()=>julesActions.ajuster(a,txt)); }}/>}
       {creation&&<JulesNouvelleMission onClose={()=>setCreation(false)}
         saving={occupe==='creation'}
         onSave={champs=>{ setCreation(false);
