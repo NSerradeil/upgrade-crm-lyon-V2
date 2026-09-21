@@ -8079,29 +8079,38 @@ function julesSeqRelances(config) {
   if (Array.isArray(sur) && sur.length) return sur;
   return JULES_SEQ_CADENCE_DEFAUT[(config||{}).preset] || JULES_SEQ_CADENCE_DEFAUT.prospection;
 }
-// Rend { faits, total, etapes[], sortie }. `sortie` = la séquence a quitté le parcours par le
-// haut (a répondu, convertie) ou par le bas (arrêtée) : ce n'est pas « plus loin » dans le
-// parcours, c'est en sortir — on ne le montre donc jamais comme une progression.
+// Rend { faits, total, etapes[], sortie, aRepondu }.
+//
+// Règle posée par Nicolas le 21/09, et elle change le modèle : **une réponse n'est pas une
+// sortie**. « A répondu » est un ÉVÉNEMENT du parcours, pas son terme — la personne garde sa
+// place dans la séquence, et c'est Nicolas qui décide de la sortir, dans trois cas et trois
+// seulement : il a converti, il a lu un refus et me le dit, ou on est au bout des relances.
+// On ne ferme donc jamais un parcours tout seul sur une réponse reçue.
 function julesSeqParcours(seq, config) {
   const nbRelances = julesSeqRelances(config).length;
   const noms = ['Invitation', 'Message'].concat(
     Array.from({length: nbRelances}, (_, i) => 'Relance ' + (i + 1)));
   const etape = Number(seq.etape || 0);
+  const relancesFaites = Number(seq.nb_relances || 0);
   // etape : 0 identifié · 1 invité · 2 accepté (message dû) · 3 messagé · 3+n relancé n
-  //         6 répondu · 7 converti (réservées, cf. seqcadence.ETAPES)
+  //         6 répondu · 7 converti (cf. seqcadence.ETAPES)
+  // Sur 6/7, `etape` a écrasé la position : on la reconstruit depuis nb_relances, pour que la
+  // barre continue de dire OÙ la personne en est quand elle a répondu.
   let faits;
-  if (etape >= 6) faits = noms.length;              // sorti par le haut : parcours sans objet
+  if (etape >= 6) faits = Math.min(2 + relancesFaites, noms.length);
   else if (etape <= 0) faits = 0;
   else if (etape <= 2) faits = 1;                   // invitation partie (acceptée ou non)
   else faits = Math.min(2 + (etape - 3), noms.length);
-  // « arrêté » est ambigu : un parcours allé au bout sans réponse et un arrêt manuel portent
-  // le même statut `stopped`. On les distingue — c'est justement la question de Nicolas
-  // (« est-ce qu'on est au bout ? »), et la réponse n'est pas la même dans les deux cas.
   const auBout = faits >= noms.length;
-  const sortie = etape === 7 ? 'converti' : etape === 6 ? 'a répondu'
+  // Les seules vraies sorties : converti, ou arrêté (par Nicolas, ou parce qu'on est au bout).
+  // `stopped` est ambigu en base — un parcours allé au bout sans réponse et un arrêt décidé
+  // portent le même statut — donc on les distingue à l'affichage.
+  const sortie = seq.statut === 'converted' ? 'converti'
                : seq.statut === 'stopped' ? (auBout ? 'parcours terminé, sans réponse' : 'arrêté en cours de route')
                : null;
   return { faits, total: noms.length, etapes: noms, sortie,
+           aRepondu: seq.statut === 'replied' || etape === 6 || !!seq.replied_at,
+           // Au bout des relances sans sortie posée = c'est à Nicolas de trancher.
            termine: !sortie && auBout };
 }
 // La barre : un segment par étape du parcours, plein = fait. Plus lisible qu'un pourcentage
@@ -8615,9 +8624,13 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
               const st=JULES_SEQ_STATUT_STYLE[s.statut]||JULES_SEQ_STATUT_STYLE.stopped;
               const mot={active:'Suivi actif',replied:'A répondu',converted:'Converti',stopped:'Arrêté'}[s.statut]||s.statut;
               const parc=julesSeqParcours(s, cfg);
-              // Ce qu'on VEUT lire d'un coup d'œil : où on en est et s'il reste quelque chose.
+              // Ce qu'on VEUT lire d'un coup d'œil : où on en est, et surtout si la balle est
+              // dans le camp de Nicolas. Une réponse reçue et un parcours arrivé au bout des
+              // relances appellent tous les deux SA décision (convertir, acter un refus,
+              // arrêter) — c'est ce qu'on affiche, pas un état de plus.
               const ouEnEst = parc.sortie ? parc.sortie
-                            : parc.termine ? 'parcours terminé'
+                            : parc.aRepondu ? 'a répondu — à toi de trancher'
+                            : parc.termine ? 'au bout des relances — à toi de trancher'
                             : (parc.etapes[parc.faits] || '?') + ' à venir';
               const deplie=seqOuvert===s.id;
               const jrn=(data.events||[]).filter(e=>e.sequence_id===s.id).slice(0,6);
@@ -8657,11 +8670,17 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
                           <span>{nom}{courant?(s.next_due_at?' — due le '+extractDate(s.next_due_at):' — à venir'):''}</span>
                         </div>;
                       })}
+                      {parc.aRepondu&&<div style={{marginTop:4, fontWeight:700, color:JULES_NOIR}}>
+                        ✉️ A répondu{s.replied_at?' le '+extractDate(s.replied_at):''}
+                        {s.sentiment?' · '+s.sentiment:''} — la séquence reste ouverte : c'est toi
+                        qui la sors (converti, refus constaté, ou arrêt).
+                      </div>}
                       {parc.sortie&&<div style={{marginTop:4, fontWeight:700, color:JULES_NOIR}}>
                         Sorti du parcours : {parc.sortie}.
                       </div>}
                       {!parc.sortie&&parc.termine&&<div style={{marginTop:4, fontWeight:700, color:JULES_NOIR}}>
-                        Parcours terminé — plus aucune relance prévue.
+                        Au bout des relances — plus rien n'est prévu. À toi de trancher : convertir,
+                        acter un refus, ou arrêter.
                       </div>}
                     </div>
                     {s.notes&&<div style={{marginTop:4}}>{julesTitre(s.notes)}</div>}
