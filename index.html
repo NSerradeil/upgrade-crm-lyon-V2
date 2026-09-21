@@ -7854,8 +7854,21 @@ function JulesFrise({ journee, onPin }) {
 // Nicolas 21/09 — « des bulles que je ne peux pas cliquer »). Toutes en ouvrent un, y
 // compris les relances de campagne, qui n'ont pas toujours de mission derrière elles.
 const JULES_FAMILLE_MOT = {ponctuelle:'Ponctuelle', routine:'Routine', campagne:'Campagne'};
-function JulesApercuPin({ pin, onClose, onOuvrirMission, mission }) {
+function JulesApercuPin({ pin, onClose, onOuvrirMission, mission, events, discuter }) {
   const teinte = JULES_ETAT_COULEUR[pin.etat]||JULES_GRIS_F;
+  // Activité : ce que Jules FAIT/A FAIT sur cette tâche (répond au « je sais pas ce qui est fait »).
+  // La tâche (statut/heartbeat/result) est lue à l'ouverture ; le journal vient des events déjà chargés.
+  const [tache,setTache] = useState(null);
+  useEffect(()=>{
+    if(!pin.task_id){ setTache(null); return; }
+    let vivant=true;
+    sb.from('agent_tasks').select('statut,attempts,heartbeat_at,result').eq('id',pin.task_id).limit(1)
+      .then(r=>{ if(vivant) setTache((r.error||!r.data)?null:(r.data[0]||null)); });
+    return ()=>{ vivant=false; };
+  },[pin.task_id]);
+  const journal = useMemo(()=> pin.task_id
+    ? (events||[]).filter(e=>e.task_id===pin.task_id).slice(0,8) : [], [events,pin.task_id]);
+  const resultTxt = tache && tache.result && (tache.result.summary || tache.result.error);
   return (
     <SidePanel title={julesTitre(pin.titre)} onClose={onClose}
       badge={<span style={{display:'inline-flex', gap:6}}>
@@ -7863,8 +7876,12 @@ function JulesApercuPin({ pin, onClose, onOuvrirMission, mission }) {
           bg={(JULES_FRISE_FAMILLES.find(f=>f.cle===pin.famille)||{}).teinte||JULES_NOIR} color="#fff"/>
         <ColorBadge label={JULES_ETAT_MOT[pin.etat]||pin.etat} bg={teinte} color="#fff"/>
       </span>}
-      actions={mission ? <BtnAction onClick={()=>onOuvrirMission(pin.mission_id)} icon={ICONS.eye}
-                           label="Ouvrir la mission" variant="primary"/> : null}>
+      actions={<span style={{display:'inline-flex', gap:8, flexWrap:'wrap', alignItems:'center'}}>
+        {mission && <BtnAction onClick={()=>onOuvrirMission(pin.mission_id)} icon={ICONS.eye}
+                      label="Ouvrir la mission" variant="primary"/>}
+        {discuter && <JulesSlackBtn label="Discuter"
+          onClick={()=>discuter({kind:'task', ref_id:pin.task_id||null, mission_id:pin.mission_id||null, titre:pin.titre})}/>}
+      </span>}>
       <Field label="Heure prévue">
         <span style={{fontFamily:'IBM Plex Mono,monospace', fontSize:15, fontWeight:700, color:JULES_NOIR}}>
           {extractTime(pin.prevu_at)||'—'}</span>
@@ -7873,6 +7890,32 @@ function JulesApercuPin({ pin, onClose, onOuvrirMission, mission }) {
         {mission ? <span style={{fontSize:13, color:JULES_NOIR, fontWeight:700}}>{julesTitre(mission.titre)}</span>
                  : <span style={{fontSize:13, color:'#565861'}}>Aucune — c'est une relance suivie au fil de la campagne.</span>}
       </Field>
+      {pin.task_id && (
+        <Field label="Activité">
+          {tache ? (
+            <div style={{fontSize:12.5, color:'#565861', lineHeight:1.6}}>
+              <div>État : <strong style={{color:teinte}}>{JULES_ETAT_MOT[pin.etat]||tache.statut}</strong>
+                {tache.attempts>0?` · ${tache.attempts} tentative${tache.attempts>1?'s':''}`:''}
+                {tache.heartbeat_at?` · signe de vie il y a ${julesAge(tache.heartbeat_at)}`:''}</div>
+              {resultTxt && <div style={{marginTop:6, borderLeft:'3px solid '+JULES_GRIS, paddingLeft:10, whiteSpace:'pre-wrap', color:'#333'}}>{resultTxt}</div>}
+              {!resultTxt && pin.etat==='running' && <div style={{marginTop:4}}>Jules travaille dessus — pas encore de compte-rendu.</div>}
+            </div>
+          ) : <div style={{fontSize:12.5, color:JULES_GRIS_F}}>Lecture…</div>}
+        </Field>
+      )}
+      {journal.length>0 && (
+        <Field label="Journal">
+          <div style={{display:'flex', flexDirection:'column', gap:4}}>
+            {journal.map(e=>(
+              <div key={e.id} style={{display:'flex', gap:8, alignItems:'baseline', fontSize:12}}>
+                <span style={{color:JULES_GRIS_F, flexShrink:0, width:86}}>{extractDate(e.at)} {extractTime(e.at)}</span>
+                <span style={{fontWeight:700, color:JULES_NOIR, flexShrink:0}}>{e.kind}</span>
+                <span title={e.message||''} style={{color:'#565861', minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(e.message)}</span>
+              </div>
+            ))}
+          </div>
+        </Field>
+      )}
     </SidePanel>
   );
 }
@@ -8823,6 +8866,7 @@ function TabJules({ profile, prefs, deepLink }) {
       </JulesZone>
       {pin&&<JulesApercuPin pin={pin} onClose={()=>setPin(null)}
         mission={(J.data.missions||[]).find(m=>m.id===pin.mission_id)}
+        events={J.data.events} discuter={discuter}
         onOuvrirMission={id=>{ setPin(null); setDetailId(id); }}/>}
       {apercu&&<JulesApercuAppro entree={apercu} occupe={occupe} onClose={()=>setApercu(null)}
         onAccorder={approOnAccorder} onAjuster={approOnAjuster}
