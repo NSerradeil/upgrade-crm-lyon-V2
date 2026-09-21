@@ -1,4 +1,4 @@
--- 35_agent_v_journee.sql — 2026-09-21
+-- 36_agent_v_journee.sql — 2026-09-21
 -- Les passages cycliques du jour et leur état résolu, pour la frise horaire de l'onglet Jules
 -- (spec §5.2). Une mission recurring porte une cadence {"days":[1..7],"times":["07:00","16:00"]}
 -- (jours ISO, lundi=1). On déplie les heures du jour si le jour ISO courant est dans days, puis
