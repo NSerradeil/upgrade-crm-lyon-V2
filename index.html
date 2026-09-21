@@ -8362,6 +8362,7 @@ const JULES_SEQ_STATUT_STYLE = {
 function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
   const mission = useMemo(()=>(data.missions||[]).find(m=>m.id===missionId),[data.missions,missionId]);
   const [taches,setTaches] = useState(null);
+  const [seqOuvert,setSeqOuvert] = useState(null);         // id de la séquence dépliée (Personnes suivies)
   const [detailOuvert,setDetailOuvert] = useState(null);   // id de la tâche dépliée, une seule à la fois
   const [relance,setRelance] = useState(0);                // incrémenté après une relance → relit la liste
   useEffect(()=>{
@@ -8517,17 +8518,46 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
           <div style={{display:'flex', flexDirection:'column', gap:6}}>
             {seqs.map(s=>{
               const st=JULES_SEQ_STATUT_STYLE[s.statut]||JULES_SEQ_STATUT_STYLE.stopped;
-              return <div key={s.id} style={{border:'2px solid '+JULES_GRIS, padding:8, display:'flex',
-                                             alignItems:'center', gap:8, flexWrap:'wrap'}}>
-                <ColorBadge label={s.statut} bg={st.bg} color={st.color}/>
-                <span style={{fontSize:13, fontWeight:700, color:JULES_NOIR, flex:1, minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(s.target_label)}</span>
-                <span style={{fontSize:11, color:JULES_GRIS_F, textTransform:'uppercase', letterSpacing:'0.05em'}}>
-                  étape {s.etape}{s.next_due_at?' · '+extractDate(s.next_due_at):''}
-                </span>
-                {s.statut==='active'&&<span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
-                  <BtnAction onClick={()=>actions.arreterSuivi(s)} icon={ICONS.stop} label="Arrêter"
-                             variant="danger" disabled={occupe===s.id}/>
-                </span>}
+              const mot={active:'Suivi actif',replied:'A répondu',converted:'Converti',stopped:'Arrêté'}[s.statut]||s.statut;
+              const deplie=seqOuvert===s.id;
+              const jrn=(data.events||[]).filter(e=>e.sequence_id===s.id).slice(0,6);
+              return <div key={s.id} style={{border:'2px solid '+JULES_GRIS, padding:8}}>
+                <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
+                  <ColorBadge label={mot} bg={st.bg} color={st.color}/>
+                  <span style={{fontSize:13, fontWeight:700, color:JULES_NOIR, flex:1, minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(s.target_label)}</span>
+                  <span style={{fontSize:11, color:JULES_GRIS_F, textTransform:'uppercase', letterSpacing:'0.05em'}}>
+                    étape {s.etape}{s.next_due_at?' · '+extractDate(s.next_due_at):''}
+                  </span>
+                  {s.statut==='active'&&<span style={{display:'inline-flex', minHeight:44, alignItems:'center'}}>
+                    <BtnAction onClick={()=>actions.arreterSuivi(s)} icon={ICONS.stop} label="Arrêter"
+                               variant="danger" disabled={occupe===s.id}/>
+                  </span>}
+                </div>
+                <div style={{display:'flex', gap:12, alignItems:'center', marginTop:6, flexWrap:'wrap'}}>
+                  <button type="button" onClick={()=>setSeqOuvert(deplie?null:s.id)} aria-expanded={deplie}
+                    style={{background:'none', border:'none', padding:0, cursor:'pointer', fontSize:11, color:JULES_GRIS_F,
+                            textTransform:'uppercase', letterSpacing:'0.05em', minHeight:32}}>
+                    {deplie?'▾ masquer le détail':'▸ voir le détail'}
+                  </button>
+                  {discuter&&<JulesSlackBtn small label="Discuter"
+                    onClick={()=>discuter({kind:'free', ref_id:s.id, mission_id:s.mission_id||mission.id, titre:s.target_label+' — '+mission.titre})}/>}
+                </div>
+                {deplie&&(
+                  <div style={{marginTop:6, borderTop:'1px solid '+JULES_GRIS, paddingTop:6, fontSize:12, color:'#565861', lineHeight:1.5}}>
+                    <div>Statut : <strong style={{color:JULES_NOIR}}>{mot}</strong> · étape {s.etape}{s.next_due_at?' · prochaine échéance '+extractDate(s.next_due_at):''}</div>
+                    {s.notes&&<div style={{marginTop:4}}>{julesTitre(s.notes)}</div>}
+                    {jrn.length>0 && <div style={{marginTop:6, display:'flex', flexDirection:'column', gap:3}}>
+                      {jrn.map(e=>(
+                        <div key={e.id} style={{display:'flex', gap:8, alignItems:'baseline'}}>
+                          <span style={{color:JULES_GRIS_F, flexShrink:0, width:86}}>{extractDate(e.at)} {extractTime(e.at)}</span>
+                          <span style={{fontWeight:700, color:JULES_NOIR, flexShrink:0}}>{e.kind}</span>
+                          <span title={e.message||''} style={{minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(e.message)}</span>
+                        </div>
+                      ))}
+                    </div>}
+                    {jrn.length===0 && !s.notes && <div style={{marginTop:4, color:JULES_GRIS_F}}>Pas d'historique détaillé pour cette personne.</div>}
+                  </div>
+                )}
               </div>;
             })}
           </div>
