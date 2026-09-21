@@ -7715,12 +7715,6 @@ function JulesApercuAppro({ entree, onClose, onAccorder, onAjuster, onRefuser, o
         {a.detail ? <div style={{fontSize:13, color:'#333', lineHeight:1.55}}><JulesTexteRiche texte={a.detail}/></div>
                   : <div style={{fontSize:13, color:'#565861'}}>Pas de détail supplémentaire.</div>}
       </Field>
-      <div style={{border:'2px dashed '+JULES_NOIR, padding:'11px 12px', fontSize:12, color:'#565861', display:'flex', gap:9}}>
-        <span>🔁</span>
-        <div><b style={{color:JULES_NOIR}}>Renvoi 360.</b> {a.nature==='go'
-          ? 'Au GO, Jules exécute et logue l\'action ; il t\'écrira en DM s\'il a besoin de toi.'
-          : 'Réponds par un clic ci-dessus. Pour en discuter librement, ça passera par Slack (à venir).'}</div>
-      </div>
     </SidePanel>
   );
 }
