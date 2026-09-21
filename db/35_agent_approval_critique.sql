@@ -7,8 +7,10 @@
 alter table public.agent_approvals
   add column if not exists critique boolean not null default false;
 
+-- NB : critique est ajoutée EN DERNIER — CREATE OR REPLACE VIEW n'autorise que l'ajout de
+-- colonnes en fin (pas de réinsertion au milieu, sinon ERROR 42P16). L'UI lit par nom.
 create or replace view public.agent_v_parapheur as
-  select id, nature, titre, detail, options, task_id, critique, created_at
+  select id, nature, titre, detail, options, task_id, created_at, critique
     from public.agent_approvals
    where statut = 'pending'
    order by critique desc,

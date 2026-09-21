@@ -42,7 +42,7 @@ alter table public.agent_approvals
   add column if not exists critique boolean not null default false;
 
 create or replace view public.agent_v_parapheur as
-  select id, nature, titre, detail, options, task_id, critique, created_at
+  select id, nature, titre, detail, options, task_id, created_at, critique
     from public.agent_approvals
    where statut = 'pending'
    order by critique desc,
