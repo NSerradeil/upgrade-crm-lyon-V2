@@ -8399,8 +8399,12 @@ const julesActions = {
       mission_id:data[0].id, message:data[0].titre});
   },
   async modifierMission(m, champs) {
+    const maj = {titre:champs.titre, priorite:champs.priorite, contexte:champs.contexte};
+    // `categorie` peut valoir null (retirer le type) : on teste la PRÉSENCE de la clé, pas
+    // sa vérité, sinon « sans type » ne serait jamais enregistrable.
+    if ('categorie' in champs) maj.categorie = champs.categorie;
     const { data, error } = await sb.from('agent_missions')
-      .update({titre:champs.titre, priorite:champs.priorite, contexte:champs.contexte})
+      .update(maj)
       .eq('id', m.id).select('id');
     if(error) throw new Error('Modification refusée : '+error.message);
     if(!data||!data.length) throw new Error('Mission introuvable — rien n\'a été écrit.');
@@ -9105,15 +9109,22 @@ function JulesNouvelleMission({ onClose, onSave, saving, onDiscuter }) {
 
 // Modifier une mission : le strict nécessaire. Le titre et le contexte sont souvent repris
 // d'un import et méritent d'être réécrits proprement ; la priorité se règle à la main.
+// Le vocabulaire de catégories qu'on peut POSER à la main. `chasse` en est exclu : c'est
+// une valeur héritée qu'on laisse s'afficher le temps que les données migrent, pas une
+// valeur qu'on veut voir réapparaître.
+const JULES_CATEGORIES_SAISIE = ['business','recrutement','veille','relance','pilotage','admin','tech'];
+
 function JulesModifierMission({ mission, onClose, onSave, saving }) {
   const [titre,setTitre] = useState(mission.titre||'');
   const [priorite,setPriorite] = useState(mission.priorite||2);
+  const [categorie,setCategorie] = useState(mission.categorie||'');
   const [contexte,setContexte] = useState(mission.contexte||'');
   const champ = JULES_CHAMP;
   return (
     <Modal title="Modifier la mission" onClose={onClose}
       footer={<ModalFooter onClose={onClose} saving={saving} disabled={!titre.trim()}
-        onSave={()=>onSave({titre:titre.trim(), priorite:Number(priorite), contexte})}/>}>
+        onSave={()=>onSave({titre:titre.trim(), priorite:Number(priorite),
+                            categorie: categorie || null, contexte})}/>}>
       <Field label="Titre">
         <input value={titre} onChange={e=>setTitre(e.target.value)} style={champ}/>
       </Field>
@@ -9122,6 +9133,15 @@ function JulesModifierMission({ mission, onClose, onSave, saving }) {
           <option value={1}>1 — d'abord</option>
           <option value={2}>2 — normale</option>
           <option value={3}>3 — quand il y a le temps</option>
+        </select>
+      </Field>
+      {/* Type : il n'était éditable NULLE PART (ni ici, ni via le MCP, qui ignorait le champ
+          en silence). Résultat constaté le 21/09 : des missions « sans type », et le filtre
+          « Afficher tech » disparu faute de mission tech à afficher. */}
+      <Field label="Type">
+        <select value={categorie} onChange={e=>setCategorie(e.target.value)} style={champ}>
+          <option value="">— sans type —</option>
+          {JULES_CATEGORIES_SAISIE.map(c=><option key={c} value={c}>{c}</option>)}
         </select>
       </Field>
       <Field label="Contexte">
