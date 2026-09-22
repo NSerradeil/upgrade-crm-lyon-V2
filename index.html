@@ -7774,6 +7774,24 @@ const JULES_ETAT_MOT = {done:'fait', running:'en cours', waiting:'attend ton GO'
 // Trois couloirs (21/09) : les ponctuelles du jour, le rythme des routines, les campagnes.
 // Ils partagent une seule règle horaire en bas et un seul trait « maintenant » : on lit la
 // journée en une colonne de temps, mais on distingue d'un coup d'œil ce qui relève de quoi.
+// Regroupe les relances de séquence (task_id null) par campagne et par créneau horaire.
+// Tout le reste — les vraies tâches — passe intact : une tâche mérite sa pastille, une
+// personne dans une séquence non.
+function julesFriseGrouperRelances(lignes) {
+  const out = [], paquets = new Map();
+  for (const r of lignes) {
+    if (r.task_id) { out.push(r); continue; }          // une vraie tâche : intacte
+    const creneau = String(r.prevu_at).slice(0, 16);   // à la minute près
+    const cle = (r.mission_id || '?') + '@' + creneau;
+    if (!paquets.has(cle)) paquets.set(cle, { ...r, _n: 0 });
+    paquets.get(cle)._n++;
+  }
+  for (const p of paquets.values()) {
+    out.push({ ...p, titre: p._n > 1 ? `${p._n} relances` : p.titre });
+  }
+  return out.sort((a, b) => String(a.prevu_at).localeCompare(String(b.prevu_at)));
+}
+
 const JULES_FRISE_FAMILLES = [
   {cle:'ponctuelle', mot:'Ponctuelles', teinte:JULES_VIOLET},
   {cle:'routine',    mot:'Routines',    teinte:JULES_NOIR},
@@ -7807,8 +7825,14 @@ function JulesFrise({ journee, onPin }) {
   // Une famille absente garde son couloir : un couloir vide DIT quelque chose (aucune
   // campagne ne tourne aujourd'hui), là où le masquer ferait croire à un oubli.
   const parFamille = JULES_FRISE_FAMILLES.map(f=>{
-    const lignes=(journee||[]).filter(r=>(r.famille||'routine')===f.cle)
+    let lignes=(journee||[]).filter(r=>(r.famille||'routine')===f.cle)
                               .sort((a,b)=>String(a.prevu_at).localeCompare(String(b.prevu_at)));
+    // Les RELANCES d'une campagne (une ligne par personne, task_id null) ne valent pas une
+    // pastille chacune : le 22/09, vingt relances dues à 11h ont enseveli la frise sous une
+    // colonne de noms illisible, qui recouvrait les vraies tâches (constat Nicolas). On les
+    // REGROUPE par campagne et par créneau : une seule bulle qui dit combien de personnes.
+    // Le détail nominatif existe déjà là où on le lit vraiment — dans la fiche de la campagne.
+    lignes = julesFriseGrouperRelances(lignes);
     return {...f, lignes:julesFriseNiveaux(lignes)};
   });
   const CRAN = 30;              // hauteur d'un cran de libellé
