@@ -9170,11 +9170,14 @@ function JulesSortirSequence({ seq, onClose, onSave, saving }) {
 // infobulles sont CEUX DE NICOLAS, mot pour mot : c'est ce qui rend la barre lisible sans
 // mode d'emploi. Une icône sans objet est désactivée, jamais cachée — la voir toujours à la
 // même place est ce qui rend la barre apprenable.
+// ORDRE DES TOUCHES (Nicolas 23/09) : ⏮ ⏸ ⏭ ⏹ — la pause est ENTRE reculer et avancer,
+// comme sur une platine. C'est ce qui rend la barre reconnaissable au premier coup d'œil,
+// donc on ne réordonne pas ce tableau : l'ordre de la liste EST l'ordre à l'écran.
 const JULES_SEQ_GESTES = [
   {cle:'prev',  icone:'⏮', titre:'refaire faire la relance de l’étape N-1'},
-  {cle:'next',  icone:'⏭', titre:'passer l’étape (ex : j’ai écrit à la personne à la main)'},
   {cle:'pause', icone:'⏸', titre:'suspendre le suivi (vacances, attente…)'},
   {cle:'play',  icone:'▶️', titre:'reprendre le suivi (fin de la pause)'},
+  {cle:'next',  icone:'⏭', titre:'passer l’étape (ex : j’ai écrit à la personne à la main)'},
   {cle:'stop',  icone:'⏹', titre:'sortir la personne de la campagne'},
 ];
 // Mêmes gestes, mêmes places, mêmes icônes — mais on ne dit pas « la personne » d'une
