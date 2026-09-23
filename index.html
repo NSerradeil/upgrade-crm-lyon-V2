@@ -9130,15 +9130,20 @@ const JULES_RAISONS_SORTIE = [
   {cle:'refus',    label:'Refus de la personne',             variant:'danger'},
   {cle:'profil',   label:'Pas le bon profil finalement',     variant:'edit'},
   {cle:'silence',  label:'Bout des relances, sans réponse',  variant:'close'},
+  {cle:'doublon',  label:'Doublon, déjà suivi ailleurs',     variant:'edit'},
+  {cle:'autre',    label:'Autre',                            variant:'close'},
 ];
 function JulesSortirSequence({ seq, onClose, onSave, saving }) {
   const [cle,setCle] = useState(null);
   const [texte,setTexte] = useState('');
   const champRef = useJulesFocusSansScroll();
   const choisi = JULES_RAISONS_SORTIE.find(r=>r.cle===cle);
+  // « Autre » sans précision perd exactement l'information qu'on cherche à capter (Nicolas
+  // 23/09, cas doublon Lionel Gonzalez) : là seulement, le champ libre devient obligatoire.
+  const precisionManquante = cle==='autre' && !texte.trim();
   return (
     <Modal title={'Sortir '+julesTitre(seq.target_label)+' de la séquence'} onClose={onClose}
-      footer={<ModalFooter onClose={onClose} saving={saving} disabled={!cle}
+      footer={<ModalFooter onClose={onClose} saving={saving} disabled={!cle || precisionManquante}
         label={cle==='converti'?'Marquer converti':'Sortir du suivi'}
         onSave={()=>onSave({cle, label:choisi?choisi.label:'arrêt', texte:texte.trim()})}/>}>
       <div style={{fontSize:12, color:'#565861', marginBottom:10, lineHeight:1.5}}>
@@ -9151,10 +9156,16 @@ function JulesSortirSequence({ seq, onClose, onSave, saving }) {
                      onToggle={()=>setCle(cle===r.cle?null:r.cle)} disabled={saving}/>
         ))}
       </div>
-      <Field label="À préciser (facultatif)">
+      <Field label={cle==='autre' ? 'À préciser (obligatoire pour « Autre »)' : 'À préciser (facultatif)'}>
         <textarea ref={champRef} value={texte} onChange={e=>setTexte(e.target.value)} rows={3}
           placeholder="Ex : m'a dit qu'elle venait de signer ailleurs."
-          style={{...JULES_CHAMP, minHeight:70, lineHeight:1.5}}/>
+          style={{...JULES_CHAMP, minHeight:70, lineHeight:1.5,
+                  borderColor: precisionManquante ? '#C0392B' : undefined}}/>
+        {precisionManquante && (
+          <div style={{fontSize:11, color:'#C0392B', marginTop:4}}>
+            Motif « Autre » : précise la raison, sinon l'info est perdue.
+          </div>
+        )}
       </Field>
     </Modal>
   );
