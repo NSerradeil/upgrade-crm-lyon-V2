@@ -7347,6 +7347,12 @@ function useJulesData() {
   const [dernierEssai,setDernierEssai]=useState('');
 
   const lire = useCallback(async () => {
+    // Fin de pause automatique (db/48) : une séquence suspendue avec une date de reprise
+    // passée redevient un suivi actif. C'est le seul « réveil » temporel du cockpit — la
+    // fonction SQL est idempotente, donc l'appeler à chaque lecture ne coûte rien et ne
+    // dépend pas d'un démon de plus. Un échec (migration pas encore appliquée) ne doit
+    // jamais empêcher la page de s'afficher.
+    try { await sb.rpc('agent_sequences_reprendre_dues'); } catch(e) { /* migration db/48 absente */ }
     const r = await Promise.all([
       sb.from('agent_v_parapheur').select('*'),
       sb.from('agent_v_encours').select('*'),
@@ -8148,6 +8154,38 @@ function julesSeqParcours(seq, config) {
            // Au bout des relances sans sortie posée = c'est à Nicolas de trancher.
            termine: !sortie && auBout };
 }
+// -- barre de transport (Nicolas 23/09) : reculer / avancer d'une étape à la main ----------
+// Les deux fonctions ci-dessous sont l'inverse de `julesSeqParcours` : celle-ci lit
+// (etape, nb_relances) → position dans le parcours ; celles-là écrivent une position voulue
+// vers (etape, nb_relances). Elles DOIVENT rester cohérentes avec bin/seqcadence.py :
+//   etape 0 identifié · 1 invité · 2 accepté · 3 messagé · 3+n relancé n · 6 répondu · 7 converti
+function julesSeqEtatDepuisFaits(faits) {
+  const f = Math.max(0, faits);
+  if (f === 0) return { etape: 0, nb_relances: 0 };
+  if (f === 1) return { etape: 1, nb_relances: 0 };   // invitation partie
+  return { etape: f + 1, nb_relances: f - 2 };        // f=2 → étape 3 (message), puis relances
+}
+// Délai normal AVANT l'étape d'indice `i` (0 = Invitation, 1 = Message, 2+ = Relance n).
+// Les cadences de campagne (`cadence.relances`, ex. [4, 10]) sont des jours CUMULÉS depuis le
+// message : le délai propre d'une relance est donc l'écart avec la précédente. Nicolas 23/09 :
+// reculer ou avancer d'une étape ne déclenche JAMAIS une relance immédiate — on repose la
+// prochaine échéance sur le délai normal de l'étape visée.
+function julesSeqDelaiEtapeJours(config, i) {
+  if (i <= 0) return 0;          // l'invitation part au prochain passage
+  if (i === 1) return 1;         // message : le lendemain de l'acceptation
+  const rel = julesSeqRelances(config);
+  const n = i - 2;                                   // relance n° n+1
+  const cumul = Number(rel[n] || rel[rel.length-1] || 7);
+  const cumulPrec = n > 0 ? Number(rel[n-1] || 0) : 0;
+  return Math.max(1, cumul - cumulPrec);
+}
+function julesSeqEcheance(config, i, total) {
+  if (i >= total) return null;   // au bout du parcours : plus rien n'est prévu
+  const d = new Date();
+  d.setDate(d.getDate() + julesSeqDelaiEtapeJours(config, i));
+  d.setHours(9, 0, 0, 0);        // même convention d'heure utile que les tâches CRM
+  return d.toISOString();
+}
 // La barre : un segment par étape du parcours, plein = fait. Plus lisible qu'un pourcentage
 // sur 3 ou 4 étapes, et ça tient dans la DA (carrés nets, pas de dégradé ni d'arrondi).
 function JulesSeqBarre({ parcours, couleur }) {
@@ -8575,15 +8613,80 @@ const julesActions = {
     // 'replied' compte comme EN COURS : une réponse n'est pas une sortie (règle Nicolas
     // 21/09), donc une personne qui a répondu est justement celle qu'on a besoin de sortir
     // à la main. La restreindre à 'active' rendait le bouton inutilisable là où il sert le plus.
+    // 'paused' aussi (23/09) : ⏹ doit rester possible sur un suivi suspendu.
     const { data, error } = await sb.from('agent_sequences')
-      .update({statut:cible, next_due_at:null, notes:note})
-      .eq('id', s.id).in('statut',['active','replied']).select('id');
+      .update({statut:cible, next_due_at:null, resume_at:null, notes:note})
+      .eq('id', s.id).in('statut',['active','replied','paused']).select('id');
     if(error) throw new Error('Arrêt non enregistré : '+error.message);
     if(!data||!data.length) throw new Error('Ce suivi était déjà sorti — rien n\'a été écrit.');
     await sb.from('agent_events').insert({actor:'crm',
       kind: cible === 'converted' ? 'sequence.converted' : 'sequence.stopped',
       sequence_id:s.id, mission_id:s.mission_id,
       message: s.target_label + ' — ' + libelle + (texte ? ' : ' + texte : '')});
+  },
+  // -- barre de transport d'un suivi (Nicolas 23/09) ------------------------------------
+  // Trois gestes de plus que « Sortir », qui existaient dans la tête de Nicolas mais pas
+  // dans l'outil : refaire l'étape précédente, passer l'étape (« je lui ai écrit à la main »),
+  // suspendre (« c'est les vacances »). Chacun exige SA RAISON, pour la même raison que la
+  // sortie : sans elle, un parcours qui recule ou saute une étape ne se relit jamais.
+  // On n'agit que sur un suivi encore ouvert, et la base fait foi (0 ligne touchée = erreur).
+  async deplacerEtape(s, versFaits, config, raison) {
+    const parc = julesSeqParcours(s, config);
+    const cible = Math.max(0, Math.min(versFaits, parc.total));
+    const etat = julesSeqEtatDepuisFaits(cible);
+    const sens = cible < parc.faits ? 'reculé' : 'avancé';
+    const texte = (raison && raison.trim()) || '';
+    const horodate = new Date().toLocaleDateString('fr-FR');
+    const nomEtape = parc.etapes[Math.min(cible, parc.total-1)] || 'fin de parcours';
+    const note = [s.notes, `[${horodate}] ${sens} à « ${nomEtape} » par Nicolas${texte?' — '+texte:''}`]
+      .filter(Boolean).join('\n');
+    const { data, error } = await sb.from('agent_sequences')
+      .update({...etat, statut:'active', resume_at:null,
+               next_due_at: julesSeqEcheance(config, cible, parc.total), notes:note})
+      .eq('id', s.id).in('statut',['active','replied','paused']).select('id');
+    if(error) throw new Error('Étape non enregistrée : '+error.message);
+    if(!data||!data.length) throw new Error('Ce suivi n\'est plus ouvert — rien n\'a été écrit.');
+    await sb.from('agent_events').insert({actor:'crm',
+      kind: cible < parc.faits ? 'sequence.step_back' : 'sequence.step_forward',
+      sequence_id:s.id, mission_id:s.mission_id,
+      message: s.target_label + ' — ' + sens + ' à « ' + nomEtape + ' »' + (texte?' : '+texte:'')});
+  },
+  // Pause : la personne reste dans la campagne, plus aucune relance ne part. `reprendreLe`
+  // est FACULTATIF (hypothèse validée par Nicolas) — renseigné, la séquence repart toute
+  // seule à cette date (fonction SQL agent_sequences_reprendre_dues, migration db/48).
+  async mettreEnPause(s, raison, reprendreLe) {
+    const texte = (raison && raison.trim()) || '';
+    const horodate = new Date().toLocaleDateString('fr-FR');
+    const note = [s.notes, `[${horodate}] Mis en pause par Nicolas${texte?' — '+texte:''}`
+      + (reprendreLe?` (reprise prévue le ${extractDate(reprendreLe)})`:' (pause indéfinie)')]
+      .filter(Boolean).join('\n');
+    const { data, error } = await sb.from('agent_sequences')
+      .update({statut:'paused', next_due_at:null, resume_at: reprendreLe || null, notes:note})
+      .eq('id', s.id).in('statut',['active','replied']).select('id');
+    if(error) throw new Error('Pause non enregistrée : '+error.message);
+    if(!data||!data.length) throw new Error('Ce suivi n\'était pas en cours — rien n\'a été écrit.');
+    await sb.from('agent_events').insert({actor:'crm', kind:'sequence.paused',
+      sequence_id:s.id, mission_id:s.mission_id,
+      message: s.target_label + ' — suivi suspendu' + (texte?' : '+texte:'')
+             + (reprendreLe?' (reprise le '+extractDate(reprendreLe)+')':'')});
+  },
+  // Reprendre un suivi en pause : on repose la prochaine échéance sur le délai normal de
+  // l'étape en cours, jamais une relance immédiate (règle Nicolas 23/09).
+  async reprendreSuivi(s, config, raison) {
+    const parc = julesSeqParcours(s, config);
+    const texte = (raison && raison.trim()) || '';
+    const horodate = new Date().toLocaleDateString('fr-FR');
+    const note = [s.notes, `[${horodate}] Suivi repris par Nicolas${texte?' — '+texte:''}`]
+      .filter(Boolean).join('\n');
+    const { data, error } = await sb.from('agent_sequences')
+      .update({statut:'active', resume_at:null,
+               next_due_at: julesSeqEcheance(config, parc.faits, parc.total), notes:note})
+      .eq('id', s.id).eq('statut','paused').select('id');
+    if(error) throw new Error('Reprise non enregistrée : '+error.message);
+    if(!data||!data.length) throw new Error('Ce suivi n\'était pas en pause — rien n\'a été écrit.');
+    await sb.from('agent_events').insert({actor:'crm', kind:'sequence.resumed',
+      sequence_id:s.id, mission_id:s.mission_id,
+      message: s.target_label + ' — suivi repris' + (texte?' : '+texte:'')});
   },
   // Terminer une tâche à la main (Nicolas 21/09 : « que je ne sois pas toujours obligé de
   // passer par toi quand je vois un truc à terminer »). On ne touche qu'aux tâches encore
@@ -8620,7 +8723,14 @@ const JULES_SEQ_STATUT_STYLE = {
   active:    { bg:JULES_BLEU,   color:'#FFFFFF' },
   replied:   { bg:JULES_VERT,   color:JULES_NOIR },
   converted: { bg:JULES_VIOLET, color:'#FFFFFF' },
+  paused:    { bg:JULES_JAUNE,  color:JULES_NOIR },
   stopped:   { bg:JULES_GRIS,   color:JULES_NOIR },
+};
+// Libellés humains des statuts de séquence — un seul endroit (ils étaient écrits en dur
+// dans le panneau de détail, donc « paused » y serait resté affiché en anglais).
+const JULES_SEQ_STATUT_MOT = {
+  active:'Suivi actif', replied:'A répondu', converted:'Converti',
+  paused:'En pause', stopped:'Arrêté',
 };
 
 // agent_tasks n'est pas chargée globalement : une mission peut en porter beaucoup et elles ne
@@ -8631,7 +8741,7 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
   const [taches,setTaches] = useState(null);
   const [seqOuvert,setSeqOuvert] = useState(null);         // id de la séquence dépliée (Personnes suivies)
   const [detailOuvert,setDetailOuvert] = useState(null);   // id de la tâche dépliée
-  const [aSortir,setASortir] = useState(null);            // séquence qu'on sort, avec sa raison
+  const [geste,setGeste] = useState(null);                // {seq, geste} de la barre de transport
   const [aTerminer,setATerminer] = useState(null);        // tâche que Nicolas clôt à la main, une seule à la fois
   const [aReplanifier,setAReplanifier] = useState(null);  // tâche dont on déplace l'échéance
   const [relance,setRelance] = useState(0);                // incrémenté après une relance → relit la liste
@@ -8814,13 +8924,14 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
           <div style={{display:'flex', flexDirection:'column', gap:6}}>
             {seqs.map(s=>{
               const st=JULES_SEQ_STATUT_STYLE[s.statut]||JULES_SEQ_STATUT_STYLE.stopped;
-              const mot={active:'Suivi actif',replied:'A répondu',converted:'Converti',stopped:'Arrêté'}[s.statut]||s.statut;
+              const mot=JULES_SEQ_STATUT_MOT[s.statut]||s.statut;
               const parc=julesSeqParcours(s, cfg);
               // Ce qu'on VEUT lire d'un coup d'œil : où on en est, et surtout si la balle est
               // dans le camp de Nicolas. Une réponse reçue et un parcours arrivé au bout des
               // relances appellent tous les deux SA décision (convertir, acter un refus,
               // arrêter) — c'est ce qu'on affiche, pas un état de plus.
               const ouEnEst = parc.sortie ? parc.sortie
+                            : s.statut==='paused' ? ('en pause' + (s.resume_at?' — reprise le '+extractDate(s.resume_at):' (indéfinie)'))
                             : parc.aRepondu ? 'a répondu — à toi de trancher'
                             : parc.termine ? 'au bout des relances — à toi de trancher'
                             : (parc.etapes[parc.faits] || '?') + ' à venir';
@@ -8829,7 +8940,14 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
               return <div key={s.id} style={{border:'2px solid '+JULES_GRIS, padding:8}}>
                 <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
                   <ColorBadge label={mot} bg={st.bg} color={st.color}/>
-                  <span style={{fontSize:13, fontWeight:700, color:JULES_NOIR, flex:1, minWidth:0, ...JULES_UNE_LIGNE}}>{julesTitre(s.target_label)}</span>
+                  {/* FIX 23/09 : le nom etait le SEUL element retractable de la rangee
+                      (flex:1, minWidth:0) ; la barre et « 2/4 · Relance 1 a venir · 30/09 »
+                      ne cedant rien, il etait ecrase jusqu'a une lettre (« G », « A »,
+                      « Yan… », constat de Nicolas). On lui donne une base de 200px et un
+                      minimum de 140px : l'ellipsis ne joue plus que s'il deborde vraiment. */}
+                  <span title={s.target_label||''}
+                        style={{fontSize:13, fontWeight:700, color:JULES_NOIR,
+                                flex:'10 1 200px', minWidth:140, ...JULES_UNE_LIGNE}}>{julesTitre(s.target_label)}</span>
                   <JulesSeqBarre parcours={parc} couleur={st.bg}/>
                   <span style={{fontSize:11, color:JULES_GRIS_F, textTransform:'uppercase', letterSpacing:'0.05em'}}>
                     {parc.faits}/{parc.total} · {ouEnEst}{s.next_due_at?' · '+extractDate(s.next_due_at):''}
@@ -8846,12 +8964,8 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
                   {/* « Sortir » vit sur la ligne d'actions, pas dans l'en-tête (Nicolas 22/09) :
                       en en-tête il passait à la ligne ou non selon la longueur du nom, donc la
                       carte ne ressemblait jamais à la précédente. Ici sa place est fixe. */}
-                  {['active','replied'].includes(s.statut)&&(
-                    <span style={{display:'inline-flex', minHeight:44, alignItems:'center', marginLeft:'auto'}}>
-                      <BtnAction onClick={()=>setASortir(s)} icon={ICONS.stop} label="Sortir"
-                                 variant={s.statut==='replied'?'success':'danger'} disabled={occupe===s.id}/>
-                    </span>
-                  )}
+                  <JulesSeqTransport seq={s} parcours={parc} occupe={occupe===s.id}
+                    onGeste={g=>setGeste({seq:s, geste:g})}/>
                 </div>
                 {deplie&&(
                   <div style={{marginTop:6, borderTop:'1px solid '+JULES_GRIS, paddingTop:6, fontSize:12, color:'#565861', lineHeight:1.5}}>
@@ -8911,9 +9025,20 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
             ))}
            </div>}
       </Field>
-      {aSortir&&<JulesSortirSequence seq={aSortir} onClose={()=>setASortir(null)}
-        saving={occupe===aSortir.id}
-        onSave={raison=>{ const sq=aSortir; setASortir(null); actions.arreterSuivi(sq, raison); }}/>}
+      {geste&&geste.geste==='stop'&&<JulesSortirSequence seq={geste.seq} onClose={()=>setGeste(null)}
+        saving={occupe===geste.seq.id}
+        onSave={raison=>{ const sq=geste.seq; setGeste(null); actions.arreterSuivi(sq, raison); }}/>}
+      {geste&&geste.geste!=='stop'&&<JulesSeqGeste seq={geste.seq} geste={geste.geste}
+        parcours={julesSeqParcours(geste.seq, cfg)} config={cfg}
+        onClose={()=>setGeste(null)} saving={occupe===geste.seq.id}
+        onSave={({raison, reprendreLe})=>{
+          const sq=geste.seq, g=geste.geste; setGeste(null);
+          const parc=julesSeqParcours(sq, cfg);
+          if(g==='prev')   return actions.deplacerEtape(sq, parc.faits-1, cfg, raison);
+          if(g==='next')   return actions.deplacerEtape(sq, parc.faits+1, cfg, raison);
+          if(g==='pause')  return actions.mettreEnPause(sq, raison, reprendreLe);
+          if(g==='play')   return actions.reprendreSuivi(sq, cfg, raison);
+        }}/>}
       {aReplanifier&&<JulesReplanifierTache tache={aReplanifier} onClose={()=>setAReplanifier(null)}
         saving={occupe===aReplanifier.id}
         onSave={async iso=>{ const tk=aReplanifier; setAReplanifier(null);
@@ -8968,6 +9093,112 @@ function JulesSortirSequence({ seq, onClose, onSave, saving }) {
 // Déplacer l'échéance d'une tâche déjà en file (Nicolas 21/09 : « donne un moyen quand on
 // modifie une campagne ou une tâche de VRAIMENT la modifier »). Jusqu'ici il n'existait
 // aucun moyen de replanifier : il fallait clore la tâche et en recréer une à la main.
+// -- barre de transport d'un suivi, façon platine hifi (Nicolas 23/09) --------------------
+// Le bouton unique « Sortir » ne couvrait qu'un cas sur quatre. Les trois autres arrivaient
+// dans la vraie vie sans avoir de geste dans l'outil : refaire l'étape d'avant, passer
+// l'étape parce qu'on a écrit à la main, suspendre pendant les vacances. Les libellés des
+// infobulles sont CEUX DE NICOLAS, mot pour mot : c'est ce qui rend la barre lisible sans
+// mode d'emploi. Une icône sans objet est désactivée, jamais cachée — la voir toujours à la
+// même place est ce qui rend la barre apprenable.
+const JULES_SEQ_GESTES = [
+  {cle:'prev',  icone:'⏮', titre:'refaire faire la relance de l’étape N-1'},
+  {cle:'next',  icone:'⏭', titre:'passer l’étape (ex : j’ai écrit à la personne à la main)'},
+  {cle:'pause', icone:'⏸', titre:'suspendre le suivi (vacances, attente…)'},
+  {cle:'play',  icone:'▶️', titre:'reprendre le suivi (fin de la pause)'},
+  {cle:'stop',  icone:'⏹', titre:'sortir la personne de la campagne'},
+];
+function JulesSeqTransport({ seq, parcours, occupe, onGeste }) {
+  const ouvert = ['active','replied','paused'].includes(seq.statut);
+  const enPause = seq.statut === 'paused';
+  // ⏮ n'a pas de sens à la première étape, ⏭ pas au bout du parcours, et aucun des trois
+  // premiers sur une séquence déjà arrêtée ou convertie.
+  const actifs = {
+    prev:  ouvert && parcours.faits > 0,
+    next:  ouvert && parcours.faits < parcours.total,
+    pause: ouvert && !enPause,
+    play:  ouvert && enPause,
+    stop:  ouvert,
+  };
+  const visibles = JULES_SEQ_GESTES
+    .filter(g => g.cle !== 'play'  || enPause)    // ⏸ devient ▶️ quand c'est en pause
+    .filter(g => g.cle !== 'pause' || !enPause);
+  return (
+    <span style={{display:'inline-flex', gap:4, alignItems:'center', marginLeft:'auto', minHeight:44}}>
+      {visibles.map(g => {
+        const on = actifs[g.cle] && !occupe;
+        return (
+          <button key={g.cle} type="button" title={g.titre} aria-label={g.titre} disabled={!on}
+            onClick={()=>onGeste(g.cle)}
+            style={{minWidth:36, minHeight:36, display:'inline-flex', alignItems:'center',
+                    justifyContent:'center', fontSize:15, lineHeight:1, padding:0,
+                    background:'#FFFFFF', border:'2px solid '+(on?JULES_NOIR:JULES_GRIS),
+                    color:(on?JULES_NOIR:JULES_GRIS_F), opacity:(on?1:0.45),
+                    cursor:(on?'pointer':'not-allowed')}}>
+            {g.icone}
+          </button>
+        );
+      })}
+    </span>
+  );
+}
+// Le champ « raison » n'existait que pour la sortie. Les trois autres gestes le méritent
+// autant : un parcours qui recule ou saute une étape sans raison écrite est illisible trois
+// semaines plus tard. Même champ, même trace (agent_events + notes de la séquence).
+const JULES_SEQ_GESTE_TEXTES = {
+  prev:  {titre:'Refaire l’étape précédente', bouton:'Reculer d’une étape',
+          aide:'La personne revient à l’étape d’avant : la relance sera refaite. La prochaine échéance est reposée sur le délai normal de cette étape — rien ne part tout de suite.',
+          exemple:'Ex : la relance est partie mal aérée, on la refait.'},
+  next:  {titre:'Passer l’étape', bouton:'Passer l’étape',
+          aide:'L’étape est comptée comme faite sans rien envoyer. La prochaine échéance est reposée sur le délai normal de l’étape suivante.',
+          exemple:'Ex : je lui ai écrit à la main ce matin.'},
+  pause: {titre:'Suspendre le suivi', bouton:'Mettre en pause',
+          aide:'Plus aucune relance ne part. La personne reste dans la campagne. Sans date de reprise, la pause dure jusqu’à ce que tu la lèves.',
+          exemple:'Ex : elle est en congés jusqu’au 6 octobre.'},
+  play:  {titre:'Reprendre le suivi', bouton:'Reprendre',
+          aide:'Le suivi repart. La prochaine échéance est reposée sur le délai normal de l’étape en cours — pas de relance immédiate.',
+          exemple:'Ex : de retour de congés.'},
+};
+function JulesSeqGeste({ seq, geste, parcours, config, onClose, onSave, saving }) {
+  const [texte,setTexte] = useState('');
+  const [reprendreLe,setReprendreLe] = useState('');
+  const champRef = useJulesFocusSansScroll();
+  const t = JULES_SEQ_GESTE_TEXTES[geste] || {titre:'Modifier le suivi', bouton:'Valider', aide:'', exemple:''};
+  const cible = geste==='prev' ? parcours.faits-1 : geste==='next' ? parcours.faits+1 : parcours.faits;
+  const borne = Math.min(Math.max(cible, 0), parcours.total-1);
+  const nomCible = parcours.etapes[borne];
+  // On annonce l'effet AVANT de valider : ni ⏮ ni ⏭ ne déclenchent d'envoi immédiat, et
+  // c'est exactement ce que Nicolas doit lire avant de cliquer.
+  const dansNJours = ['prev','next','play'].includes(geste) && cible < parcours.total
+    ? julesSeqDelaiEtapeJours(config, borne) : null;
+  return (
+    <Modal title={t.titre+' — '+julesTitre(seq.target_label)} onClose={onClose}
+      footer={<ModalFooter onClose={onClose} saving={saving} label={t.bouton}
+        onSave={()=>onSave({raison:texte.trim(),
+                            reprendreLe:(geste==='pause' && reprendreLe)
+                              ? new Date(reprendreLe+'T09:00').toISOString() : null})}/>}>
+      <div style={{fontSize:12, color:'#565861', marginBottom:10, lineHeight:1.5}}>{t.aide}</div>
+      {dansNJours!==null && (
+        <div style={{fontSize:12, color:JULES_NOIR, fontWeight:700, marginBottom:10}}>
+          Prochaine étape : {nomCible}, dans {dansNJours} jour{dansNJours>1?'s':''}.
+        </div>
+      )}
+      {geste==='pause' && (
+        <Field label="Reprendre le (facultatif)">
+          <input type="date" value={reprendreLe} onChange={e=>setReprendreLe(e.target.value)}
+            style={{...JULES_CHAMP, width:200}}/>
+          <div style={{fontSize:11, color:JULES_GRIS_F, marginTop:4}}>
+            Renseigné, le suivi repart tout seul à cette date. Laissé vide, la pause est indéfinie.
+          </div>
+        </Field>
+      )}
+      <Field label="Raison (facultatif, mais c’est ce qu’on relira)">
+        <textarea ref={champRef} value={texte} onChange={e=>setTexte(e.target.value)} rows={3}
+          placeholder={t.exemple} style={{...JULES_CHAMP, minHeight:70, lineHeight:1.5}}/>
+      </Field>
+    </Modal>
+  );
+}
+
 function JulesReplanifierTache({ tache, onClose, onSave, saving }) {
   // <input type="datetime-local"> attend une heure LOCALE sans fuseau, alors que due_at est
   // en UTC. On convertit dans les deux sens, sinon on décale la tâche de deux heures sans

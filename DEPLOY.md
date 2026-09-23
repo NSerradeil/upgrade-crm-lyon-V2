@@ -20,6 +20,9 @@ constaté qu'aucune doc n'existait).
 ### Migrations à appliquer (en ordre)
 - `db/20_agence.sql` — onglet Agence : colonnes collaborateur sur `contacts` (date_entree, date_sortie, salaire_annuel, cjm_manuel, statut_rh, statut_rh_depuis, type_presta, manager_trigramme), `profiles.partner_lead`, `is_my_consultant()` élargi. **À appliquer AVANT de pousser l'app** (le `select` de `fetchAll` référence les nouvelles colonnes → 400 sinon).
 - ⚠️ `agence-calc.js` doit être poussé AVEC `index.html` (dépendance dure du shell : 404 = écran blanc).
+- `db/47_domaine_task_types.sql` (22/09/2026) — colonne `agent_task_types.domaine` (linkedin/plateformes/autre) : permet au scheduler Jules de paralleliser les taches navigateur par domaine au lieu d'un verrou global (`bin/jules-scheduler.py`). A appliquer avant de deployer le scheduler cote domaine — sans elle, `agent_task_types.domaine` est absent et le scheduler retombe sur le comportement « un seul domaine a la fois » (safe, mais pas de gain de parallelisme).
+
+- 🔴 `db/48_agent_sequences_pause.sql` (23/09/2026) — statut `paused` + colonne `resume_at` sur `agent_sequences`, et fonction `agent_sequences_reprendre_dues()` (fin de pause automatique). **À appliquer AVANT de pousser l'app** : sans elle, le bouton ⏸ de la barre de transport des personnes suivies échoue sur la contrainte `agent_sequences_statut_check` (message d'erreur propre, rien de cassé, mais la pause est inopérante) et l'appel RPC de reprise est ignoré en silence.
 
 ## Déployer l'app (le seul vrai « déploiement »)
 
