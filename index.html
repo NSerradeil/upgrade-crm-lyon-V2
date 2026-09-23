@@ -1165,8 +1165,22 @@ function SidePanel({ title, badge, onClose, actions, children }) {
     </OverlayDepth.Provider>
   );
 }
-function Field({ label, children }) {
-  return <div><label className="block text-[11px] font-bold text-midnight mb-1.5 uppercase tracking-[0.12em]">{label}</label>{children}</div>;
+function Field({ label, children, action }) {
+  // `action` est optionnel : un lien discret aligné à droite du libellé, pour les sections
+  // qui replient une partie de leur contenu (ex. les séquences arrêtées). Sans lui, le rendu
+  // est strictement celui d'avant.
+  const lbl = <label className="block text-[11px] font-bold text-midnight mb-1.5 uppercase tracking-[0.12em]">{label}</label>;
+  if (!action) return <div>{lbl}{children}</div>;
+  return <div>
+    <div className="flex items-baseline justify-between gap-2">
+      {lbl}
+      <button type="button" onClick={action.onClick}
+        className="text-[11px] font-bold uppercase tracking-[0.12em] text-neutral-400 hover:text-midnight mb-1.5 transition-colors">
+        {action.label}
+      </button>
+    </div>
+    {children}
+  </div>;
 }
 const inputCls = "w-full px-3 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight font-[Outfit] transition-colors";
 const dateInputCls = "flex-1 px-3 py-2.5 border-2 border-neutral-200 text-sm focus:outline-none focus:border-midnight transition-colors";
@@ -8798,6 +8812,7 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
   const [aTerminer,setATerminer] = useState(null);        // tâche que Nicolas clôt à la main, une seule à la fois
   const [aReplanifier,setAReplanifier] = useState(null);  // tâche dont on déplace l'échéance
   const [relance,setRelance] = useState(0);                // incrémenté après une relance → relit la liste
+  const [voirArretees,setVoirArretees] = useState(false);  // les séquences arrêtées sont repliées par défaut
   useEffect(()=>{
     let vivant=true;
     sb.from('agent_tasks').select('*').eq('mission_id',missionId)
@@ -8814,7 +8829,16 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
   // On relit dans tous les cas, succès ou échec : la base fait foi, pas ce qu'on espérait.
   // Le message (succès ou erreur) est porté par `agir`, comme pour tous les autres gestes.
   const relancer = async (t) => { await actions.relancerTache(t); setRelance(n=>n+1); };
-  const seqs   = useMemo(()=>(data.sequences||[]).filter(s=>s.mission_id===missionId),[data.sequences,missionId]);
+  const seqsToutes = useMemo(()=>(data.sequences||[]).filter(s=>s.mission_id===missionId),[data.sequences,missionId]);
+  // Une séquence ARRÊTÉE n'appelle plus aucune action : elle garde sa valeur d'historique
+  // (pourquoi on a cessé de suivre cette plateforme, cette personne) mais elle n'a rien à
+  // faire dans la liste de ce qui tourne. Le 23/09, la campagne « Veille plateformes »
+  // affichait 23 lignes dont 9 arrêtées : Nicolas devait scroller au milieu de plateformes
+  // qu'on ne scanne plus pour trouver les 14 qui travaillent. On les replie donc derrière
+  // un compteur, sans jamais les effacer de l'écran : le lien reste à un clic.
+  const seqsArretees = useMemo(()=>seqsToutes.filter(s=>s.statut==='stopped'),[seqsToutes]);
+  const seqs = useMemo(()=>voirArretees?seqsToutes:seqsToutes.filter(s=>s.statut!=='stopped'),
+                       [seqsToutes,seqsArretees,voirArretees]);
   // Le journal ne redit pas ce que la liste des tâches montre déjà, juste au-dessus :
   // `task.claimed` répète mot pour mot le titre d'une carte, et `task.done` le texte de son
   // « voir le détail ». Filtrés ici, ils laissent la place à ce qu'on ne lit nulle part
@@ -8972,8 +8996,11 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
            </div>}
       </Field>
 
-      {seqs.length>0&&(
-        <Field label={julesSeqTitreSection(seqs)+' ('+seqs.length+')'}>
+      {seqsToutes.length>0&&(
+        <Field label={julesSeqTitreSection(seqs)+' ('+seqs.length+')'
+                      +(seqsArretees.length&&!voirArretees?' · '+seqsArretees.length+' arrêtée'+(seqsArretees.length>1?'s':'')+' masquée'+(seqsArretees.length>1?'s':''):'')}
+               action={seqsArretees.length?{label:(voirArretees?'masquer':'voir')+' les arrêtées',
+                                            onClick:()=>setVoirArretees(v=>!v)}:null}>
           <div style={{display:'flex', flexDirection:'column', gap:6}}>
             {seqs.map(s=>{
               const st=JULES_SEQ_STATUT_STYLE[s.statut]||JULES_SEQ_STATUT_STYLE.stopped;
