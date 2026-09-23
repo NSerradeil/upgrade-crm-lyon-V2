@@ -7436,7 +7436,12 @@ function julesApproTeinte(a){
 // Un blocage TECHNIQUE (≠ métier) : Nicolas n'a rien à « donner », c'est au builder de réparer
 // (règle Nicolas 21/09). On le détecte au vocabulaire pour l'afficher comme tel, jamais comme
 // « attend ton GO » (il n'y a d'ailleurs pas de bouton GO sur une carte Bloqué).
-const JULES_TECH_RE = /sandbox|jules-browser|jules-cdp|\bcdp\b|playwright|moteur d.?envoi|beforeunload|target\.?close|\bnode \b|\bmcp\b|browserenvoi|browsergestes|requires approval|navigateur (cass|d[ée]connect)|script/i;
+// FIX 23/09 (faux positif constaté) : le motif `script`, sans frontière de mot, matchait
+// « transcript », « description », « descriptif »… Une carte 100 % MÉTIER (« AO accessibilité
+// EDF : docs pas reçus », qui cite un transcript Plaud) était donc affichée « technique — à
+// voir avec le builder », alors que Nicolas est justement le seul à pouvoir la débloquer.
+// Tous les motifs de mots courants sont désormais bornés par \b.
+const JULES_TECH_RE = /sandbox|jules-browser|jules-cdp|\bcdp\b|playwright|moteur d.?envoi|beforeunload|target\.?close|\bnode \b|\bmcp\b|browserenvoi|browsergestes|requires approval|navigateur (cass|d[ée]connect)|\bscripts?\b/i;
 function julesBlocageTechnique(a){ return JULES_TECH_RE.test(((a.titre||'')+' '+(a.detail||''))); }
 function julesSuiviResolution(a, events){
   const evs = a.task_id ? (events||[]).filter(e=>e.task_id===a.task_id) : [];
