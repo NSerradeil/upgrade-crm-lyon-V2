@@ -8120,6 +8120,31 @@ function julesSeqRelances(config) {
   if (Array.isArray(sur) && sur.length) return sur;
   return JULES_SEQ_CADENCE_DEFAUT[(config||{}).preset] || JULES_SEQ_CADENCE_DEFAUT.prospection;
 }
+// -- LE CYCLE D'ÉTAPES DÉPEND DU TYPE DE CIBLE (Nicolas 23/09) -----------------------------
+// Une séquence ne suit plus forcément une PERSONNE. Depuis que le scan des plateformes est
+// une campagne, une cible peut être une PLATEFORME de besoins — et « invitation → message →
+// relance » n'y veut rien dire. On nomme donc les patterns une fois (miroir exact de la table
+// public.agent_sequence_patterns, db/49) au lieu d'empiler des cas particuliers à l'affichage.
+//
+// Étape 2 d'une plateforme, « Liste des besoins », est le GATE DE COUVERTURE : c'est là que le
+// scan du 23/09 a calé sur 5 plateformes (onglet ouvert sur l'accueil, jamais descendu jusqu'à
+// la liste, et un compte rendu qui disait « pas d'onglet ouvert »). Ouverte n'est PAS couverte.
+const JULES_SEQ_PATTERNS = {
+  personne:   { pluriel:'Personnes suivies',   gate:null, gateMot:null },
+  plateforme: { pluriel:'Plateformes suivies',
+                etapes:['Ouverte','Liste des besoins','Besoins ouverts','Qualifiés au CRM'],
+                gate:2, gateMot:'liste des besoins jamais atteinte — NON COUVERTE' },
+};
+function julesSeqPattern(seq) {
+  return (seq && seq.target_kind === 'plateforme') ? 'plateforme' : 'personne';
+}
+// Le titre de la section : « Personnes suivies » n'a plus de sens quand la campagne suit des
+// plateformes. Cibles mélangées (cas non prévu mais pas interdit) → libellé neutre.
+function julesSeqTitreSection(seqs) {
+  const kinds = new Set((seqs||[]).map(julesSeqPattern));
+  if (kinds.size === 1) return JULES_SEQ_PATTERNS[[...kinds][0]].pluriel;
+  return 'Cibles suivies';
+}
 // Rend { faits, total, etapes[], sortie, aRepondu }.
 //
 // Règle posée par Nicolas le 21/09, et elle change le modèle : **une réponse n'est pas une
@@ -8128,6 +8153,20 @@ function julesSeqRelances(config) {
 // seulement : il a converti, il a lu un refus et me le dit, ou on est au bout des relances.
 // On ne ferme donc jamais un parcours tout seul sur une réponse reçue.
 function julesSeqParcours(seq, config) {
+  // Une plateforme a son propre cycle, et son `etape` est simplement le nombre d'étapes
+  // franchies (0..4) — pas l'encodage historique des personnes (0 identifié · 1 invité…).
+  if (julesSeqPattern(seq) === 'plateforme') {
+    const P = JULES_SEQ_PATTERNS.plateforme;
+    const faits = Math.max(0, Math.min(Number(seq.etape || 0), P.etapes.length));
+    const couverte = faits >= P.gate;
+    const sortie = seq.statut === 'converted' ? 'convertie'
+                 : seq.statut === 'stopped'   ? 'plateforme arrêtée'
+                 : null;
+    return { kind:'plateforme', faits, total:P.etapes.length, etapes:P.etapes, sortie,
+             aRepondu:false, termine:false, couverte,
+             // Le seul état qu'on veut voir crier : ouverte, mais rien scanné.
+             alerte: (!sortie && faits > 0 && !couverte) ? P.gateMot : null };
+  }
   const nbRelances = julesSeqRelances(config).length;
   const noms = ['Invitation', 'Message'].concat(
     Array.from({length: nbRelances}, (_, i) => 'Relance ' + (i + 1)));
@@ -8149,7 +8188,8 @@ function julesSeqParcours(seq, config) {
   const sortie = seq.statut === 'converted' ? 'converti'
                : seq.statut === 'stopped' ? (auBout ? 'parcours terminé, sans réponse' : 'arrêté en cours de route')
                : null;
-  return { faits, total: noms.length, etapes: noms, sortie,
+  return { kind:'personne', alerte:null, couverte:null,
+           faits, total: noms.length, etapes: noms, sortie,
            aRepondu: seq.statut === 'replied' || etape === 6 || !!seq.replied_at,
            // Au bout des relances sans sortie posée = c'est à Nicolas de trancher.
            termine: !sortie && auBout };
@@ -8159,8 +8199,10 @@ function julesSeqParcours(seq, config) {
 // (etape, nb_relances) → position dans le parcours ; celles-là écrivent une position voulue
 // vers (etape, nb_relances). Elles DOIVENT rester cohérentes avec bin/seqcadence.py :
 //   etape 0 identifié · 1 invité · 2 accepté · 3 messagé · 3+n relancé n · 6 répondu · 7 converti
-function julesSeqEtatDepuisFaits(faits) {
+function julesSeqEtatDepuisFaits(faits, seq) {
   const f = Math.max(0, faits);
+  // Plateforme : `etape` EST le nombre d'étapes franchies, rien à décoder.
+  if (julesSeqPattern(seq) === 'plateforme') return { etape: f, nb_relances: 0 };
   if (f === 0) return { etape: 0, nb_relances: 0 };
   if (f === 1) return { etape: 1, nb_relances: 0 };   // invitation partie
   return { etape: f + 1, nb_relances: f - 2 };        // f=2 → étape 3 (message), puis relances
@@ -8179,7 +8221,18 @@ function julesSeqDelaiEtapeJours(config, i) {
   const cumulPrec = n > 0 ? Number(rel[n-1] || 0) : 0;
   return Math.max(1, cumul - cumulPrec);
 }
-function julesSeqEcheance(config, i, total) {
+function julesSeqEcheance(config, i, total, seq) {
+  // Plateforme : son rythme n'est pas celui de la campagne, c'est le SIEN (cadence_jours à
+  // heure_passage). Bouger une étape à la main ne déclenche donc jamais un scan immédiat :
+  // on repose simplement le prochain passage. Au bout du cycle non plus — une plateforme
+  // scannée jusqu'au bout est justement celle qu'il faut repasser demain.
+  if (julesSeqPattern(seq) === 'plateforme') {
+    const d = new Date();
+    d.setDate(d.getDate() + Math.max(1, Number(seq.cadence_jours || 1)));
+    const [hh, mm] = String(seq.heure_passage || '08:00').split(':');
+    d.setHours(Number(hh) || 8, Number(mm) || 0, 0, 0);
+    return d.toISOString();
+  }
   if (i >= total) return null;   // au bout du parcours : plus rien n'est prévu
   const d = new Date();
   d.setDate(d.getDate() + julesSeqDelaiEtapeJours(config, i));
@@ -8633,7 +8686,7 @@ const julesActions = {
   async deplacerEtape(s, versFaits, config, raison) {
     const parc = julesSeqParcours(s, config);
     const cible = Math.max(0, Math.min(versFaits, parc.total));
-    const etat = julesSeqEtatDepuisFaits(cible);
+    const etat = julesSeqEtatDepuisFaits(cible, s);
     const sens = cible < parc.faits ? 'reculé' : 'avancé';
     const texte = (raison && raison.trim()) || '';
     const horodate = new Date().toLocaleDateString('fr-FR');
@@ -8642,7 +8695,7 @@ const julesActions = {
       .filter(Boolean).join('\n');
     const { data, error } = await sb.from('agent_sequences')
       .update({...etat, statut:'active', resume_at:null,
-               next_due_at: julesSeqEcheance(config, cible, parc.total), notes:note})
+               next_due_at: julesSeqEcheance(config, cible, parc.total, s), notes:note})
       .eq('id', s.id).in('statut',['active','replied','paused']).select('id');
     if(error) throw new Error('Étape non enregistrée : '+error.message);
     if(!data||!data.length) throw new Error('Ce suivi n\'est plus ouvert — rien n\'a été écrit.');
@@ -8680,7 +8733,7 @@ const julesActions = {
       .filter(Boolean).join('\n');
     const { data, error } = await sb.from('agent_sequences')
       .update({statut:'active', resume_at:null,
-               next_due_at: julesSeqEcheance(config, parc.faits, parc.total), notes:note})
+               next_due_at: julesSeqEcheance(config, parc.faits, parc.total, s), notes:note})
       .eq('id', s.id).eq('statut','paused').select('id');
     if(error) throw new Error('Reprise non enregistrée : '+error.message);
     if(!data||!data.length) throw new Error('Ce suivi n\'était pas en pause — rien n\'a été écrit.');
@@ -8920,7 +8973,7 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
       </Field>
 
       {seqs.length>0&&(
-        <Field label={'Personnes suivies ('+seqs.length+')'}>
+        <Field label={julesSeqTitreSection(seqs)+' ('+seqs.length+')'}>
           <div style={{display:'flex', flexDirection:'column', gap:6}}>
             {seqs.map(s=>{
               const st=JULES_SEQ_STATUT_STYLE[s.statut]||JULES_SEQ_STATUT_STYLE.stopped;
@@ -8932,8 +8985,13 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
               // arrêter) — c'est ce qu'on affiche, pas un état de plus.
               const ouEnEst = parc.sortie ? parc.sortie
                             : s.statut==='paused' ? ('en pause' + (s.resume_at?' — reprise le '+extractDate(s.resume_at):' (indéfinie)'))
+                            // Une plateforme ouverte sans la liste n'est PAS couverte : c'est
+                            // l'échec qu'on cherchait à rendre visible, il passe donc devant
+                            // le reste au lieu de se lire « Liste des besoins à venir ».
+                            : parc.alerte ? parc.alerte
                             : parc.aRepondu ? 'a répondu — à toi de trancher'
                             : parc.termine ? 'au bout des relances — à toi de trancher'
+                            : parc.kind==='plateforme' && parc.faits>=parc.total ? 'couverte — prochain passage'
                             : (parc.etapes[parc.faits] || '?') + ' à venir';
               const deplie=seqOuvert===s.id;
               const jrn=(data.events||[]).filter(e=>e.sequence_id===s.id).slice(0,6);
@@ -8981,6 +9039,18 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
                           <span>{nom}{courant?(s.next_due_at?' — due le '+extractDate(s.next_due_at):' — à venir'):''}</span>
                         </div>;
                       })}
+                      {parc.alerte&&<div style={{marginTop:4, fontWeight:700, color:JULES_ROUGE}}>
+                        ⚠️ {parc.alerte} — un passage qui s'arrête là n'a rien scanné.
+                        {s.notes?'':' Le motif est dans le journal ci-dessous.'}
+                      </div>}
+                      {parc.kind==='plateforme'&&<div style={{marginTop:4, color:JULES_GRIS_F}}>
+                        Playbook : {s.playbook_path
+                          ? <code style={{fontFamily:'IBM Plex Mono,monospace', fontSize:11}}>{s.playbook_path}</code>
+                          : <em>aucune fiche — à écrire dans routines/scan-plateformes/references/</em>}
+                        {s.cadence_jours?' · tous les '+s.cadence_jours+' jour(s)':''}
+                        {s.heure_passage?' à '+String(s.heure_passage).slice(0,5):''}
+                        {s.last_pass_at?' · dernier passage '+extractDate(s.last_pass_at):''}
+                      </div>}
                       {parc.aRepondu&&<div style={{marginTop:4, fontWeight:700, color:JULES_NOIR}}>
                         ✉️ A répondu{s.replied_at?' le '+extractDate(s.replied_at):''}
                         {s.sentiment?' · '+s.sentiment:''} — la séquence reste ouverte : c'est toi
@@ -9004,7 +9074,7 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
                         </div>
                       ))}
                     </div>}
-                    {jrn.length===0 && !s.notes && <div style={{marginTop:4, color:JULES_GRIS_F}}>Pas d'historique détaillé pour cette personne.</div>}
+                    {jrn.length===0 && !s.notes && <div style={{marginTop:4, color:JULES_GRIS_F}}>Pas d'historique détaillé pour cette cible.</div>}
                   </div>
                 )}
               </div>;
@@ -9107,7 +9177,20 @@ const JULES_SEQ_GESTES = [
   {cle:'play',  icone:'▶️', titre:'reprendre le suivi (fin de la pause)'},
   {cle:'stop',  icone:'⏹', titre:'sortir la personne de la campagne'},
 ];
+// Mêmes gestes, mêmes places, mêmes icônes — mais on ne dit pas « la personne » d'une
+// plateforme. Le cas d'usage immédiat de ⏸ (Nicolas 23/09) est justement une plateforme :
+// OneVMS et Connecting-Expertise ont leur session morte, on les suspend le temps de
+// reconnecter au lieu de les voir échouer tous les matins.
+const JULES_SEQ_GESTES_PLATEFORME = {
+  prev:  'refaire le passage de l’étape N-1',
+  next:  'passer l’étape (ex : je l’ai regardée moi-même)',
+  pause: 'suspendre les passages (session morte, plateforme en panne…)',
+  play:  'reprendre les passages',
+  stop:  'sortir la plateforme de la veille',
+};
 function JulesSeqTransport({ seq, parcours, occupe, onGeste }) {
+  const plat = julesSeqPattern(seq) === 'plateforme';
+  const titreGeste = (g) => (plat && JULES_SEQ_GESTES_PLATEFORME[g.cle]) || g.titre;
   const ouvert = ['active','replied','paused'].includes(seq.statut);
   const enPause = seq.statut === 'paused';
   // ⏮ n'a pas de sens à la première étape, ⏭ pas au bout du parcours, et aucun des trois
@@ -9126,8 +9209,9 @@ function JulesSeqTransport({ seq, parcours, occupe, onGeste }) {
     <span style={{display:'inline-flex', gap:4, alignItems:'center', marginLeft:'auto', minHeight:44}}>
       {visibles.map(g => {
         const on = actifs[g.cle] && !occupe;
+        const titre = titreGeste(g);
         return (
-          <button key={g.cle} type="button" title={g.titre} aria-label={g.titre} disabled={!on}
+          <button key={g.cle} type="button" title={titre} aria-label={titre} disabled={!on}
             onClick={()=>onGeste(g.cle)}
             style={{minWidth:36, minHeight:36, display:'inline-flex', alignItems:'center',
                     justifyContent:'center', fontSize:15, lineHeight:1, padding:0,
@@ -9158,18 +9242,31 @@ const JULES_SEQ_GESTE_TEXTES = {
           aide:'Le suivi repart. La prochaine échéance est reposée sur le délai normal de l’étape en cours — pas de relance immédiate.',
           exemple:'Ex : de retour de congés.'},
 };
+const JULES_SEQ_GESTE_TEXTES_PLATEFORME = {
+  prev:  {aide:'La plateforme revient à l’étape d’avant : le passage sera refait au prochain créneau. Rien ne part tout de suite.',
+          exemple:'Ex : la liste n’avait pas fini de charger, on recommence.'},
+  next:  {aide:'L’étape est comptée comme faite sans rien scanner. Le prochain passage reste à son heure habituelle.',
+          exemple:'Ex : je l’ai regardée moi-même ce matin.'},
+  pause: {aide:'Plus aucun passage ne part. La plateforme reste dans la veille. Sans date de reprise, la pause dure jusqu’à ce que tu la lèves.',
+          exemple:'Ex : session morte sur OneVMS, à reconnecter.'},
+  play:  {aide:'Les passages repartent au prochain créneau — pas de scan immédiat.',
+          exemple:'Ex : session reconnectée.'},
+};
 function JulesSeqGeste({ seq, geste, parcours, config, onClose, onSave, saving }) {
   const [texte,setTexte] = useState('');
   const [reprendreLe,setReprendreLe] = useState('');
   const champRef = useJulesFocusSansScroll();
-  const t = JULES_SEQ_GESTE_TEXTES[geste] || {titre:'Modifier le suivi', bouton:'Valider', aide:'', exemple:''};
+  const plat = julesSeqPattern(seq) === 'plateforme';
+  const t = {...(JULES_SEQ_GESTE_TEXTES[geste] || {titre:'Modifier le suivi', bouton:'Valider', aide:'', exemple:''}),
+             ...(plat ? (JULES_SEQ_GESTE_TEXTES_PLATEFORME[geste] || {}) : {})};
   const cible = geste==='prev' ? parcours.faits-1 : geste==='next' ? parcours.faits+1 : parcours.faits;
   const borne = Math.min(Math.max(cible, 0), parcours.total-1);
   const nomCible = parcours.etapes[borne];
   // On annonce l'effet AVANT de valider : ni ⏮ ni ⏭ ne déclenchent d'envoi immédiat, et
   // c'est exactement ce que Nicolas doit lire avant de cliquer.
-  const dansNJours = ['prev','next','play'].includes(geste) && cible < parcours.total
-    ? julesSeqDelaiEtapeJours(config, borne) : null;
+  const dansNJours = !['prev','next','play'].includes(geste) ? null
+    : plat ? Math.max(1, Number(seq.cadence_jours || 1))
+    : (cible < parcours.total ? julesSeqDelaiEtapeJours(config, borne) : null);
   return (
     <Modal title={t.titre+' — '+julesTitre(seq.target_label)} onClose={onClose}
       footer={<ModalFooter onClose={onClose} saving={saving} label={t.bouton}
