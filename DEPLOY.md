@@ -27,6 +27,8 @@ constaté qu'aucune doc n'existait).
 
 - 🔴 `db/49_agent_sequences_plateforme.sql` (23/09/2026) — **le scan devient une campagne**. Élargit `agent_sequences.target_kind` à `'plateforme'`, ajoute le cycle d'étapes par type de cible (`agent_sequence_patterns`), la cadence/heure/playbook propres à chaque séquence, la table de rendement `agent_sequence_passages` (+ trigger qui fait avancer et replanifier la séquence), la fonction `agent_scan_stats(p_jours)`, les types de tâches `scan.plateforme` / `scan.recap`, et **seede la campagne « Veille plateformes » et ses 22 séquences** depuis `routines/scan-plateformes/platforms.json` (toutes quotidiennes, heures étalées 07h40→11h00 ; AXA XL seedée `stopped` avec son motif). Idempotente, et **ne touche aucune séquence de personne** (contrainte élargie, colonnes nullables, encodage d'étape des personnes inchangé). **À appliquer AVANT de pousser l'app** : sans elle, le cockpit affiche « Personnes suivies » et rien de plus (aucune séquence de plateforme n'existe), et le scheduler journalise « migration db/49 appliquée ? » sans rien casser.
 
+- 🔴 `db/50_agent_tasks_sans_cr.sql` (25/09/2026) — nouveau statut `sans_cr` sur `agent_tasks` (worker sorti rc=0 sans avoir appelé `agent_task_done`, distinct de `done`/`failed`). **À appliquer avant de déployer le scheduler qui l'écrit** (`bin/jules-scheduler.py`) : sans elle, la clôture d'une tâche sortie en silence échoue sur `agent_tasks_statut_check` (le scheduler journalise l'erreur, la tâche reste `claimed` jusqu'à reprise du bail — rien de cassé, juste pas de correctif actif).
+
 ## Déployer l'app (le seul vrai « déploiement »)
 
 GitHub Pages sert depuis **`main`**, path `/`. ⚠️ **Toujours partir de `origin/main` à jour** :
