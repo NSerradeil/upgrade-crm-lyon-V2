@@ -5514,7 +5514,7 @@ function TabTaches({ taches, contacts, contactMap, besoins, missions, historique
           {actives.length===0&&<div className="text-center py-16"><div className="font-bold text-midnight text-lg mb-1">Aucune tâche</div><div className="text-sm text-neutral-300">Les tâches actives apparaîtront ici.</div></div>}
         </div>
       ):(
-        <CalendarTaches taches={actives} contactMap={contactMap} profile={profile} isAdmin={isAdmin} onComplete={setCompletingModal}/>
+        <CalendarTaches taches={actives} contactMap={contactMap} profile={profile} isAdmin={isAdmin} onComplete={handleComplete}/>
       )}
       {showAdd&&<AddTacheModal contacts={contacts} besoins={besoins} missions={missions} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
       {detailTask&&(()=>{const t=detailTask;const contact=t.contact_id?contactMap[t.contact_id]:null;const besoinLabel=t.besoin_id?besoinMap[t.besoin_id]:null;const mission=t.mission_id?missionMap[t.mission_id]:null;const besoin=t.besoin_id?besoinObjMap[t.besoin_id]:null;const canEdit=isAdmin||t.responsable===profile.nom||profile.role==='partner';return<TacheDetailPanel task={t} contact={contact} besoinLabel={besoinLabel} mission={mission} besoin={besoin} historique={historique} profile={profile} canEdit={canEdit} onClose={()=>setDetailTask(null)} onEdit={()=>handleEdit(t)} onComplete={()=>handleComplete(t)} onDelete={()=>handleDelete(t)} onAddAction={()=>{setDetailTask(null);onRefresh();}} onViewContact={c=>{setDetailTask(null);onNavToContact&&onNavToContact(c.id);}} onViewMission={m=>{setDetailTask(null);onNavToMission&&onNavToMission(m.id);}} onViewBesoin={b=>{setDetailTask(null);onNavToBesoin&&onNavToBesoin(b.id);}}/>;})()}
