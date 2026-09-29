@@ -123,3 +123,58 @@ test('aucun tiret cadratin ni demi-cadratin dans le code ajoute', () => {
   assert.ok(i > 0 && j > i, 'bloc ajoute a arreterSuivi introuvable');
   assert.doesNotMatch(html.slice(i, j), /[\u2013\u2014]/);
 });
+
+// ---- Fix round 1 : garanties centrales ----
+function fauxSbErreur(tables, tableEnErreur, op) {
+  const f = fauxSb(tables);
+  const base = f.sb.from;
+  f.sb.from = (table) => {
+    const q = base(table);
+    if (table !== tableEnErreur) return q;
+    const orig = q[op];
+    q[op] = (v) => { orig(v); q.then = (res, rej) => Promise.resolve({ data: null, error: { message: 'boom ' + table } }).then(res, rej); return q; };
+    return q;
+  };
+  return f;
+}
+
+test('erreur CRM sur la mise a jour de la fiche : elle est levee, aucune ligne d historique', async () => {
+  const f = fauxSbErreur({ contacts: [JEAN('Contacté')] }, 'contacts', 'update');
+  await assert.rejects(charge(f.sb).julesSortieCampagneCrm(SEQ, 'refus', PROSPECTION, 'Nicolas Serradeil', ''), /boom contacts/);
+  assert.equal((f.tables.historique_actions || []).length, 0);
+});
+
+test('erreur CRM sur l historique : elle est levee', async () => {
+  const f = fauxSbErreur({ contacts: [JEAN('Contacté')] }, 'historique_actions', 'insert');
+  await assert.rejects(charge(f.sb).julesSortieCampagneCrm(SEQ, 'refus', PROSPECTION, 'Nicolas Serradeil', ''), /boom historique_actions/);
+});
+
+test('converti : l historique est ecrit AVANT la tache, donc une tache en erreur laisse une trace', async () => {
+  const f = fauxSbErreur({ contacts: [JEAN('Contacté')] }, 'taches', 'insert');
+  await assert.rejects(charge(f.sb).julesSortieCampagneCrm(SEQ, 'converti', PROSPECTION, 'Nicolas Serradeil', ''), /boom taches/);
+  assert.equal(f.tables.historique_actions.length, 1);
+});
+
+test('precision par defaut identique au MCP (refus, silence), la saisie l emporte', async () => {
+  const a = fauxSb({ contacts: [JEAN('Contacté')] });
+  await charge(a.sb).julesSortieCampagneCrm(SEQ, 'refus', PROSPECTION, 'Nicolas Serradeil', '');
+  assert.equal(a.tables.contacts[0].motif_perte_precision, 'Refus en campagne Prospection DSI Lyon');
+  const b = fauxSb({ contacts: [JEAN('Contacté')] });
+  await charge(b.sb).julesSortieCampagneCrm(SEQ, 'silence', PROSPECTION, 'Nicolas Serradeil', '');
+  assert.equal(b.tables.contacts[0].motif_perte_precision, 'Sans réponse à la campagne Prospection DSI Lyon');
+  const c = fauxSb({ contacts: [JEAN('Contacté')] });
+  await charge(c.sb).julesSortieCampagneCrm(SEQ, 'refus', PROSPECTION, 'Nicolas Serradeil', 'raison saisie');
+  assert.equal(c.tables.contacts[0].motif_perte_precision, 'raison saisie');
+});
+
+test('arreterSuivi : garde de statut conservee, CRM en try APRES l insertion de l evenement', () => {
+  const i = html.indexOf('async arreterSuivi(s, raison, mission, responsable) {');
+  assert.ok(i > 0);
+  const corps = html.slice(i, html.indexOf('\n  },\n', i));
+  assert.match(corps, /\.in\('statut',\['active','replied','paused'\]\)/);
+  const ev = corps.indexOf("from('agent_events').insert");
+  const tr = corps.indexOf('try {');
+  const ap = corps.indexOf('julesSortieCampagneCrm(');
+  assert.ok(ev > 0 && tr > ev && ap > tr, 'ordre evenement, try, appel CRM');
+  assert.match(corps.slice(tr), /^try \{[\s\S]*julesSortieCampagneCrm\([\s\S]*\} catch \(e\) \{[\s\S]*toast\(/);
+});

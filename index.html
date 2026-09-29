@@ -628,6 +628,10 @@ async function julesSortieCampagneCrm(s, motif, mission, responsable, precision)
     var fermees = await prospectAnnulerTachesOuvertes(c.id);
     if (fermees.error) throw new Error(fermees.error.message);
   }
+  // Historique AVANT la tache : si la creation de la tache echoue, la fiche ne bouge pas sans trace.
+  var h = await sb.from('historique_actions').insert({ id_prospect: c.id, date: getToday(), type_action: 'LinkedIn',
+    details: plan.detail, responsable: qui });
+  if (h.error) throw new Error(h.error.message);
   if (plan.tache) {
     var lues = await sb.from('taches').select('id,statut').eq('contact_id', c.id).like('id', 'tw_prospect_%');
     if (lues.error) throw new Error(lues.error.message);
@@ -637,9 +641,6 @@ async function julesSortieCampagneCrm(s, motif, mission, responsable, precision)
       if (cree.error) throw new Error(cree.error.message);
     }
   }
-  var h = await sb.from('historique_actions').insert({ id_prospect: c.id, date: getToday(), type_action: 'LinkedIn',
-    details: plan.detail, responsable: qui });
-  if (h.error) throw new Error(h.error.message);
   return plan;
 }
 
