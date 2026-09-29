@@ -18,13 +18,13 @@ function extrait(nom) {
 const NOMS = ['PROSPECT_ETAPES', 'PROSPECT_ETAPES_ACTIVES', 'PROSPECT_ETAPES_SORTIE',
               'PROSPECT_MOTIFS_PERTE', 'prospectEtapeOuDefaut', 'prospectEtapeRequiert',
               'prospectCanSubmit', 'prospectEnRetard', 'prospectTacheLibelle',
-              'prospectTacheEcheance', 'prospectReveilPreset', 'prospectPatchEtape'];
+              'prospectTacheEcheance', 'prospectReveilPreset', 'prospectPatchEtape', 'prospectTachePayload'];
 const src = NOMS.map(extrait).join('\n');
 const API = new Function(`${src}\nreturn {${NOMS.join(',')}};`)();
 const { PROSPECT_ETAPES, PROSPECT_ETAPES_ACTIVES, PROSPECT_ETAPES_SORTIE,
         prospectEtapeOuDefaut, prospectEtapeRequiert, prospectCanSubmit,
         prospectEnRetard, prospectTacheLibelle, prospectTacheEcheance,
-        prospectReveilPreset, prospectPatchEtape } = API;
+        prospectReveilPreset, prospectPatchEtape, prospectTachePayload } = API;
 
 test('les 8 etapes, dans l ordre, avec les accents exacts', () => {
   assert.deepEqual(PROSPECT_ETAPES, ['À contacter', 'Contacté', 'En discussion',
@@ -157,4 +157,29 @@ test('le patch de mise en veille conserve le commentaire', () => {
 
 test('le patch porte toujours updated_at', () => {
   assert.ok(prospectPatchEtape('À contacter', {}).updated_at);
+});
+
+test('pas de tache si la case n est pas cochee', () => {
+  assert.equal(prospectTachePayload({id:42}, 'Contacté',
+    {prochaine_action_date:'2026-10-05', creer_tache:false}, 'Nicolas Serradeil'), null);
+});
+
+test('la tache porte le contact, l echeance a 09h00 et le responsable', () => {
+  const t = prospectTachePayload({id:42, prenom:'Léo', nom:'Brignone'}, 'Contacté',
+    {prochaine_action_date:'2026-10-05', prochaine_action_libelle:'Rappeler', creer_tache:true},
+    'Nicolas Serradeil');
+  assert.equal(t.contact_id, 42);
+  assert.equal(t.responsable, 'Nicolas Serradeil');
+  assert.match(t.due_date, /^2026-10-05T09:00/);
+  assert.ok(t.titre.includes('Rappeler'));
+  assert.ok(t.titre.includes('Brignone'));
+  assert.ok(t.id.startsWith('tw_prospect_42_'));
+  assert.equal(t.besoin_id, null);
+  assert.equal(t.mission_id, null);
+  assert.ok(!/[—–]/.test(t.titre));
+});
+
+test('pas de tache pour une etape sans date', () => {
+  assert.equal(prospectTachePayload({id:42}, 'Perdu', {motif_perte:'Autre', creer_tache:true},
+    'Nicolas Serradeil'), null);
 });

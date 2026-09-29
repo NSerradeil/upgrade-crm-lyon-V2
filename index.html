@@ -299,6 +299,26 @@ function prospectPatchEtape(etape, form) {
     updated_at: new Date().toISOString()
   };
 }
+
+function prospectTachePayload(contact, etape, form, responsable) {
+  form = form || {};
+  if (!form.creer_tache) return null;
+  var due = prospectTacheEcheance(form.prochaine_action_date);
+  if (!due) return null;
+  var qui = [contact.prenom, contact.nom].filter(Boolean).join(' ');
+  var quoi = form.prochaine_action_libelle || prospectTacheLibelle(etape);
+  return {
+    id: 'tw_prospect_' + contact.id + '_' + Date.now(),
+    titre: quoi + (qui ? ' : ' + qui : ''),
+    statut: 'en_cours',
+    due_date: due,
+    contact_id: parseInt(contact.id),
+    besoin_id: null,
+    mission_id: null,
+    notes: null,
+    responsable: responsable
+  };
+}
 const TYPES_ACTION     = ['Tel','Mail envoyé','Mail reçu','RDV','LinkedIn','Note interne','Autre'];
 const STATUTS_ENTRETIEN = ['candidat','freelance','prestataire'];
 const isEntretienStatut = s => s && STATUTS_ENTRETIEN.includes(s.toLowerCase());
@@ -2328,6 +2348,21 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
         type_action:'Changement d\'étape',details:`Étape → ${etape}`,responsable:profile.nom});
       if(errHist){toast('Étape enregistrée, historique non tracé','error');}
       else{toast('Étape → '+etape);}
+      const tache=prospectTachePayload(contact,etape,form,profile.nom);
+      if(tache){
+        // Garde anti-doublon sur donnees fraiches (Supabase, pas le state React : un autre poste
+        // ou onglet a pu poser la tache entre-temps). Meme predicat que le reste du fichier
+        // (statut !== 'fait' && !== 'annule'), applique cote client : pas de syntaxe PostgREST fragile.
+        const {data:dejaLa,error:errGarde}=await sb.from('taches').select('id,statut')
+          .eq('contact_id',parseInt(contact.id)).like('id','tw_prospect_%');
+        if(errGarde){toast('Étape enregistrée, tâche non créée (vérification impossible)','error');}
+        else if((dejaLa||[]).some(t=>t.statut!=='fait'&&t.statut!=='annule')){
+          toast('Action re-planifiée, pense à mettre à jour la tâche existante');
+        }else{
+          const {error:tErr}=await sb.from('taches').insert(tache);
+          if(!tErr) toast('📅 Tâche créée'); else toast('Étape enregistrée, tâche non créée','error');
+        }
+      }
       setEtapeCible(null);onRefresh();
     }catch(e){
       toast('Erreur: '+(e&&e.message?e.message:e),'error');
