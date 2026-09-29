@@ -213,6 +213,75 @@ const DEFAULT_MISSION_START_TIME='09:00';
 const DEFAULT_MISSION_END_TIME='18:00';
 
 const STATUTS_CONTACT  = ['Prospect','Candidat','Client','Consultant CDI','Freelance','Prestataire','À définir'];
+// ═══ Pipeline prospect — cf. SPECS_CRM/SPEC_prospects_pipeline_etapes.md ═══
+const PROSPECT_ETAPES_ACTIVES = ['À contacter','Contacté','En discussion','RDV planifié','Qualifié'];
+const PROSPECT_ETAPES_SORTIE = ['En veille','Perdu','Ne pas recontacter'];
+const PROSPECT_ETAPES = ['À contacter','Contacté','En discussion','RDV planifié','Qualifié','En veille','Perdu','Ne pas recontacter'];
+const PROSPECT_MOTIFS_PERTE = ['Budget insuffisant','Pas le bon interlocuteur','Pas de besoin','Choix concurrent','Perdu de vue','Autre'];
+const PROSPECT_BADGE_COLORS = {
+  'À contacter':       { bg:'#E4E4E6', color:'#1C1F35' },
+  'Contacté':          { bg:'#FFE500', color:'#1C1F35' },
+  'En discussion':     { bg:'#5090FE', color:'#FFFFFF' },
+  'RDV planifié':      { bg:'#8B5CF6', color:'#FFFFFF' },
+  'Qualifié':          { bg:'#00C218', color:'#1C1F35' },
+  'En veille':         { bg:'#A4A6AB', color:'#FFFFFF' },
+  'Perdu':             { bg:'#FF6B6B', color:'#FFFFFF' },
+  'Ne pas recontacter':{ bg:'#1C1F35', color:'#FFFFFF' }
+};
+
+function prospectEtapeOuDefaut(contact) {
+  var e = contact && contact.etape_prospect;
+  return (e && PROSPECT_ETAPES.indexOf(e) >= 0) ? e : 'À contacter';
+}
+
+function prospectEtapeRequiert(etape) {
+  return {
+    date: etape === 'En veille' || (PROSPECT_ETAPES_ACTIVES.indexOf(etape) > 0),
+    motif: etape === 'Perdu',
+    commentaire: etape === 'Ne pas recontacter'
+  };
+}
+
+function prospectCanSubmit(etape, form) {
+  var r = prospectEtapeRequiert(etape); form = form || {};
+  if (r.date && !form.prochaine_action_date) return false;
+  if (r.motif && !form.motif_perte) return false;
+  if (r.commentaire && !form.motif_perte_precision) return false;
+  return true;
+}
+
+function prospectEnRetard(contact, now) {
+  var d = contact && contact.prochaine_action_date;
+  if (!d) return false;
+  var t = new Date(d).getTime();
+  if (isNaN(t)) return false;
+  return t <= (now ? new Date(now).getTime() : Date.now());
+}
+
+function prospectTacheLibelle(etape) {
+  var L = { 'Contacté':'Rappeler', 'En discussion':'Relancer', 'RDV planifié':'RDV prospect',
+            'Qualifié':'Qualifier le besoin', 'En veille':'Réveil prospect',
+            'À contacter':'Premier contact', 'Perdu':'Suivi prospect',
+            'Ne pas recontacter':'Suivi prospect' };
+  return L[etape] || 'Suivi prospect';
+}
+
+function prospectTacheEcheance(dateISO) {
+  if (!dateISO) return null;
+  return dateISO.length > 10 ? dateISO : (dateISO + 'T09:00');
+}
+
+function prospectReveilPreset(base, preset) {
+  var d = new Date(base + 'T12:00:00Z');
+  var jour = d.getUTCDate();
+  var mois = { '3m':3, '6m':6, '1a':12 }[preset] || 3;
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() + mois);
+  // Fin de mois : on retombe sur le dernier jour reel du mois cible (31 aout + 6 mois = 28 fev).
+  var dernier = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  d.setUTCDate(Math.min(jour, dernier));
+  return d.toISOString().slice(0, 10);
+}
 const TYPES_ACTION     = ['Tel','Mail envoyé','Mail reçu','RDV','LinkedIn','Note interne','Autre'];
 const STATUTS_ENTRETIEN = ['candidat','freelance','prestataire'];
 const isEntretienStatut = s => s && STATUTS_ENTRETIEN.includes(s.toLowerCase());
