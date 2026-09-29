@@ -1,0 +1,32 @@
+{
+  "commentaire": "Jeu de cas commun : copie identique dans tests/fixtures/ du repo web (worktree prospects-pipeline) et du repo MCP. Chaque cas donne l'etape visee, les valeurs passees dans le meme appel, et les 4 champs attendus apres nettoyage. Toute modification se fait dans les deux copies.",
+  "cas": [
+    { "nom": "retour a A contacter efface tout",
+      "etape": "À contacter", "form": {},
+      "attendu": { "prochaine_action_date": null, "prochaine_action_libelle": null, "motif_perte": null, "motif_perte_precision": null } },
+    { "nom": "etape active : date passee, libelle par defaut",
+      "etape": "Contacté", "form": { "prochaine_action_date": "2026-10-05T09:00:00+02:00" },
+      "attendu": { "prochaine_action_date": "2026-10-05T09:00:00+02:00", "prochaine_action_libelle": "Rappeler", "motif_perte": null, "motif_perte_precision": null } },
+    { "nom": "etape active : libelle explicite conserve",
+      "etape": "En discussion", "form": { "prochaine_action_date": "2026-10-05T14:30:00+02:00", "prochaine_action_libelle": "Envoyer la proposition" },
+      "attendu": { "prochaine_action_date": "2026-10-05T14:30:00+02:00", "prochaine_action_libelle": "Envoyer la proposition", "motif_perte": null, "motif_perte_precision": null } },
+    { "nom": "RDV planifie : libelle par defaut",
+      "etape": "RDV planifié", "form": { "prochaine_action_date": "2026-11-03T10:00:00+01:00" },
+      "attendu": { "prochaine_action_date": "2026-11-03T10:00:00+01:00", "prochaine_action_libelle": "RDV prospect", "motif_perte": null, "motif_perte_precision": null } },
+    { "nom": "Qualifie : libelle par defaut",
+      "etape": "Qualifié", "form": { "prochaine_action_date": "2026-11-03T10:00:00+01:00" },
+      "attendu": { "prochaine_action_date": "2026-11-03T10:00:00+01:00", "prochaine_action_libelle": "Qualifier le besoin", "motif_perte": null, "motif_perte_precision": null } },
+    { "nom": "En veille : date de reveil, libelle par defaut, commentaire conserve",
+      "etape": "En veille", "form": { "prochaine_action_date": "2027-03-29T09:00:00+02:00", "motif_perte_precision": "budget gele" },
+      "attendu": { "prochaine_action_date": "2027-03-29T09:00:00+02:00", "prochaine_action_libelle": "Réveil prospect", "motif_perte": null, "motif_perte_precision": "budget gele" } },
+    { "nom": "Perdu : motif conserve, date et libelle vides",
+      "etape": "Perdu", "form": { "motif_perte": "Choix concurrent", "motif_perte_precision": "signe chez X" },
+      "attendu": { "prochaine_action_date": null, "prochaine_action_libelle": null, "motif_perte": "Choix concurrent", "motif_perte_precision": "signe chez X" } },
+    { "nom": "Perdu sans precision : precision vide",
+      "etape": "Perdu", "form": { "motif_perte": "Pas de besoin" },
+      "attendu": { "prochaine_action_date": null, "prochaine_action_libelle": null, "motif_perte": "Pas de besoin", "motif_perte_precision": null } },
+    { "nom": "Ne pas recontacter : raison conservee, tout le reste vide",
+      "etape": "Ne pas recontacter", "form": { "motif_perte_precision": "a demande a ne plus etre appele" },
+      "attendu": { "prochaine_action_date": null, "prochaine_action_libelle": null, "motif_perte": null, "motif_perte_precision": "a demande a ne plus etre appele" } }
+  ]
+}

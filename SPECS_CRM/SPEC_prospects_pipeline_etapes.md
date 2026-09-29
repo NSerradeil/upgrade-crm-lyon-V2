@@ -102,9 +102,16 @@ update contacts set etape_prospect = 'À contacter'
   where statut = 'Prospect' and etape_prospect is null;
 
 -- Reprise du flag ne_pas_recontacter (supprimé en migration 52).
+-- Volontairement SANS filtre sur statut : un contact qui portait le flag puis est passé Client
+-- ou Candidat doit garder son refus d'être recontacté (RGPD). Le board ne lit que les prospects,
+-- donc aucun effet de bord. La date de la demande est conservée dans motif_perte_precision.
 update contacts set etape_prospect = 'Ne pas recontacter',
-                    motif_perte_precision = coalesce(motif_perte_precision, ne_pas_recontacter_note)
-  where statut = 'Prospect' and ne_pas_recontacter = true;
+                    motif_perte_precision = coalesce(motif_perte_precision,
+                      case when ne_pas_recontacter_date is not null
+                           then 'Depuis le ' || to_char(ne_pas_recontacter_date, 'DD/MM/YYYY')
+                                || coalesce(' : ' || ne_pas_recontacter_note, '')
+                           else ne_pas_recontacter_note end)
+  where ne_pas_recontacter = true;
 
 create index if not exists idx_contacts_etape_prospect
   on contacts (etape_prospect) where statut = 'Prospect';
@@ -215,8 +222,13 @@ Le mapping du résultat d'appel vers l'étape, dans `handleTerminer` :
 |---|---|
 | `interested` | En discussion |
 | `unreachable` | Contacté |
-| `not_interested` | Perdu, ou Ne pas recontacter si l'utilisateur coche « ne plus appeler » |
+| `not_interested`, case « Ne plus appeler » cochée | Ne pas recontacter, quel que soit le statut du contact (Client compris), et annulation des tâches `tw_prospect_` ouvertes |
+| `not_interested`, case décochée | Prospect : En veille, `prochaine_action_date` = aujourd'hui + 6 mois à 09:00 (décalage horaire explicite), libellé « Relance après refus » sauf note de relance de la ligne, aucune tâche CRM (le badge « Réveil » du board sert de rappel). Non-Prospect : aucun changement d'étape |
 | `called` / `none` | Contacté (si l'étape était « À contacter ») |
+
+Cas particuliers de « Pas intéressé » : un contact déjà Ne pas recontacter le reste quel que soit le résultat ; un Prospect déjà En veille voit sa date de réveil repoussée à +6 mois ; un Prospect déjà Perdu reste Perdu (sauf case cochée, qui pose Ne pas recontacter). La case « Ne plus appeler » n'apparaît que sur une ligne « Pas intéressé » et n'est pas persistée (aucune colonne dans `session_prospection_contacts`) : elle vit en mémoire jusqu'à `handleTerminer`, et la correction d'une session (`handleSaveEdits`) la considère décochée.
+
+Les tâches `tw_relance_` de fin de session (et de correction) écrivent `due_date` avec un décalage horaire explicite (date seule = 09:00, comme `prospectTacheEcheance`), jamais une date naïve.
 
 Le `want_relance` / `relance_date` existant **alimente directement** `prochaine_action_date` et `prochaine_action_libelle`. La tâche de relance créée aujourd'hui par `handleTerminer` reste la même tâche : on ne la duplique pas.
 
