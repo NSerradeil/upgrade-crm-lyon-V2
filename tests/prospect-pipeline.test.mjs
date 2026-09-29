@@ -333,6 +333,27 @@ test('appel : deja En veille + pas interesse => date de reveil repoussee a +6 mo
   assert.equal(etapeDepuisResultatAppel('not_interested', false, 'En veille'), 'En veille');
 });
 
+test('appel : la note de relance ne devient le libelle de reveil que si wantRelance', () => {
+  const p = prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'Contacté', status: 'not_interested',
+    wantRelance: false, relanceNote: 'note perimee' }, true, AUJ);
+  assert.equal(p.prochaine_action_libelle, 'Relance après refus');
+});
+
+test('correction de session : etape touchee seulement si le resultat a change dans l edition', () => {
+  const base = { statut: 'Prospect', status: 'not_interested', statutInitial: 'not_interested' };
+  assert.equal(prospectPatchDepuisAppel({ ...base, etape_prospect: 'RDV planifié' }, false, AUJ, true), null);
+  assert.equal(prospectPatchDepuisAppel({ ...base, etape_prospect: 'En veille', prochaine_action_date: '2026-12-01T09:00:00+01:00' }, false, AUJ, true), null);
+  assert.equal(prospectPatchDepuisAppel({ ...base, etape_prospect: 'En discussion', nePlusAppeler: true }, false, AUJ, true), null);
+  // resultat change vers not_interested
+  const ch = { statut: 'Prospect', etape_prospect: 'Contacté', status: 'not_interested', statutInitial: 'called' };
+  const v = prospectPatchDepuisAppel(ch, false, AUJ, true);
+  assert.equal(v.etape_prospect, 'En veille');
+  assert.equal(v.prochaine_action_date, '2027-03-29T09:00:00+02:00');
+  assert.equal(prospectPatchDepuisAppel({ ...ch, nePlusAppeler: true }, false, AUJ, true).etape_prospect, 'Ne pas recontacter');
+  // hors correction (fin de session), statutInitial est ignore
+  assert.equal(prospectPatchDepuisAppel(base, true, AUJ).etape_prospect, 'En veille');
+});
+
 test('relance de session : une date seule devient 09:00 avec decalage explicite (jamais naive)', () => {
   assert.equal(prospectTacheEcheance('2026-10-15'), '2026-10-15T09:00:00+02:00');
   assert.equal(prospectTacheEcheance('2026-12-15'), '2026-12-15T09:00:00+01:00');

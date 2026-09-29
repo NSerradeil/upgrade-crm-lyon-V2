@@ -370,7 +370,11 @@ function etapeDepuisResultatAppel(statutAppel, nePlusAppeler, etapeActuelle) {
 //   et la relance saisie alimente la prochaine action. La tache de relance, elle, reste celle que
 //   la fin de session cree deja : on n'en cree pas une seconde.
 // aujourdhui : date YYYY-MM-DD (defaut : getToday()), injectable pour les tests.
-function prospectPatchDepuisAppel(sc, avancer, aujourdhui) {
+// correction : true en correction d'une session passee. On ne touche alors l'etape QUE si le resultat de
+// la ligne a change dans cette edition (sc.statutInitial = statut stocke avant l'edition), sinon un
+// contact qui a avance depuis l'appel serait ramene en veille, ou sa date de reveil repoussee a chaque save.
+function prospectPatchDepuisAppel(sc, avancer, aujourdhui, correction) {
+  if (correction && sc.status === sc.statutInitial) return null;
   var actuelle = prospectEtapeOuDefaut(sc);
   if (actuelle === 'Ne pas recontacter') return null;
   if (sc.status === 'not_interested') {
@@ -386,7 +390,7 @@ function prospectPatchDepuisAppel(sc, avancer, aujourdhui) {
     if (etapeDepuisResultatAppel('not_interested', false, actuelle) !== 'En veille') return null;   // Perdu reste Perdu
     return prospectPatchEtape('En veille', {
       prochaine_action_date: prospectReveilPreset(aujourdhui || getToday(), '6m'),
-      prochaine_action_libelle: sc.relanceNote || 'Relance après refus'
+      prochaine_action_libelle: (sc.wantRelance && sc.relanceNote) || 'Relance après refus'
     });
   }
   if (!avancer || sc.statut !== 'Prospect') return null;
@@ -11611,6 +11615,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDo
       notes: saved?saved.notes||'':'',
       wantRelance: saved?!!saved.want_relance:false,
       nePlusAppeler: false,
+      statutInitial: saved?saved.statut:'none',
       relanceDate: saved?saved.relance_date||'':'',
       relanceNote: saved?saved.relance_note||'':'',
       editTel: saved&&saved.tel_saisi?saved.tel_saisi:(c.telephone||''),
@@ -11767,10 +11772,11 @@ function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDo
 
     // « Pas intéressé » corrigé en session : En veille (Prospect). La case « Ne plus appeler » n'est pas
     // persistée (aucune colonne) : en correction elle vaut « décochée », un contact déjà NPC le reste (garde).
-    // En correction on n'avance PAS les autres étapes (avancer = false).
+    // En correction on n'avance PAS les autres étapes (avancer = false), et l'étape n'est touchée que si le
+    // résultat de la ligne a changé dans cette édition (statutInitial).
     for (var pi2=0; pi2<appeles.length; pi2++) {
       var pic2 = appeles[pi2];
-      var patchNpc = prospectPatchDepuisAppel(pic2, false);
+      var patchNpc = prospectPatchDepuisAppel(pic2, false, undefined, true);
       if (patchNpc) {
         var npcRes = await sb.from('contacts').update(patchNpc).eq('id',pic2.id);
         if (npcRes.error) toast('⚠️ Étape non mise à jour pour ' + (pic2.prenom||'') + ' ' + pic2.nom + ' : ' + npcRes.error.message, 'error');
