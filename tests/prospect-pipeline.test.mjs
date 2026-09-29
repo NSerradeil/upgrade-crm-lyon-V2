@@ -19,14 +19,14 @@ const NOMS = ['PROSPECT_ETAPES', 'PROSPECT_ETAPES_ACTIVES', 'PROSPECT_ETAPES_SOR
               'PROSPECT_MOTIFS_PERTE', 'prospectEtapeOuDefaut', 'prospectEtapeRequiert',
               'prospectCanSubmit', 'prospectEnRetard', 'prospectTacheLibelle',
               'prospectTacheEcheance', 'prospectReveilPreset', 'prospectPatchEtape', 'prospectTachePayload',
-              'prospectSurLeBoard', 'prospectTacheEstProspection'];
+              'prospectSurLeBoard', 'prospectTacheEstProspection', 'etapeDepuisResultatAppel'];
 const src = NOMS.map(extrait).join('\n');
 const API = new Function(`${src}\nreturn {${NOMS.join(',')}};`)();
 const { PROSPECT_ETAPES, PROSPECT_ETAPES_ACTIVES, PROSPECT_ETAPES_SORTIE,
         prospectEtapeOuDefaut, prospectEtapeRequiert, prospectCanSubmit,
         prospectEnRetard, prospectTacheLibelle, prospectTacheEcheance,
         prospectReveilPreset, prospectPatchEtape, prospectTachePayload,
-        prospectSurLeBoard, prospectTacheEstProspection } = API;
+        prospectSurLeBoard, prospectTacheEstProspection, etapeDepuisResultatAppel } = API;
 
 test('les 8 etapes, dans l ordre, avec les accents exacts', () => {
   assert.deepEqual(PROSPECT_ETAPES, ['À contacter', 'Contacté', 'En discussion',
@@ -210,4 +210,30 @@ test('prospectTacheEstProspection : prefixe tw_prospect_ ET contact lie', () => 
   assert.equal(prospectTacheEstProspection({ id: 'tw_abc', contact_id: 12 }), false);
   assert.equal(prospectTacheEstProspection({ id: 42, contact_id: 12 }), false);
   assert.equal(prospectTacheEstProspection(null), false);
+});
+
+test('le resultat d appel fait avancer l etape', () => {
+  assert.equal(etapeDepuisResultatAppel('interested', false, 'À contacter'), 'En discussion');
+  assert.equal(etapeDepuisResultatAppel('unreachable', false, 'À contacter'), 'Contacté');
+  assert.equal(etapeDepuisResultatAppel('not_interested', false, 'En discussion'), 'Perdu');
+  assert.equal(etapeDepuisResultatAppel('not_interested', true, 'En discussion'), 'Ne pas recontacter');
+  assert.equal(etapeDepuisResultatAppel('called', false, 'À contacter'), 'Contacté');
+});
+
+test('un appel ne fait jamais RECULER une etape deja avancee', () => {
+  assert.equal(etapeDepuisResultatAppel('called', false, 'RDV planifié'), 'RDV planifié');
+  assert.equal(etapeDepuisResultatAppel('unreachable', false, 'En discussion'), 'En discussion');
+  // mais une sortie est toujours possible
+  assert.equal(etapeDepuisResultatAppel('not_interested', false, 'RDV planifié'), 'Perdu');
+});
+
+test('un statut d appel neutre ne change rien', () => {
+  assert.equal(etapeDepuisResultatAppel('none', false, 'Contacté'), 'Contacté');
+});
+
+test('RGPD : un appel ne LEVE jamais « Ne pas recontacter »', () => {
+  for (const s of ['called', 'interested', 'unreachable', 'none', 'not_interested']) {
+    assert.equal(etapeDepuisResultatAppel(s, false, 'Ne pas recontacter'), 'Ne pas recontacter', s);
+    assert.equal(etapeDepuisResultatAppel(s, true, 'Ne pas recontacter'), 'Ne pas recontacter', s);
+  }
 });

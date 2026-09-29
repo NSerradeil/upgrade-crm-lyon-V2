@@ -309,6 +309,55 @@ function prospectPatchEtape(etape, form) {
   };
 }
 
+// Etape deduite du resultat d'un appel en session. Un appel ne fait jamais reculer une etape
+// deja avancee, mais une sortie (Perdu / Ne pas recontacter) reste toujours possible.
+// RGPD : « Ne pas recontacter » est terminal pour un appel, seule la levee protegee du stepper
+// (responsable ou admin) peut en sortir. Sans cette garde, un « pas interesse » sans ne-plus-appeler
+// ramenerait la personne a « Perdu » et la remettrait dans les selections d'appels.
+function etapeDepuisResultatAppel(statutAppel, nePlusAppeler, etapeActuelle) {
+  if (etapeActuelle === 'Ne pas recontacter') return etapeActuelle;
+  if (statutAppel === 'not_interested') return nePlusAppeler ? 'Ne pas recontacter' : 'Perdu';
+  var cible = { interested:'En discussion', unreachable:'Contacté', called:'Contacté' }[statutAppel];
+  if (!cible) return etapeActuelle;
+  // Un appel ne fait jamais reculer : on ne prend la cible que si elle est plus avancee.
+  var iActuelle = PROSPECT_ETAPES_ACTIVES.indexOf(etapeActuelle);
+  var iCible = PROSPECT_ETAPES_ACTIVES.indexOf(cible);
+  if (iActuelle < 0) return etapeActuelle;   // deja sorti du pipeline, on ne le ramene pas
+  return iCible > iActuelle ? cible : etapeActuelle;
+}
+
+// Patch contacts a poser en fin de session d'appels pour un contact appele (sc = ligne de session :
+// contact + status / wantRelance / relanceDate / relanceNote). Retourne null si rien a ecrire.
+// - « Pas interesse » pose « Ne pas recontacter » quel que soit le statut du contact (c'est l'ancien
+//   flag ne_pas_recontacter : la personne ne doit plus etre rappelee). nePlusAppeler est donc
+//   toujours vrai ici, comme l'etait l'ancienne pose automatique du flag.
+// - Les autres resultats font avancer l'etape des seuls PROSPECTS (jamais un Client ou un Candidat),
+//   et la relance saisie alimente la prochaine action. La tache de relance, elle, reste celle que
+//   la fin de session cree deja : on n'en cree pas une seconde.
+function prospectPatchDepuisAppel(sc, avancer) {
+  var actuelle = prospectEtapeOuDefaut(sc);
+  if (actuelle === 'Ne pas recontacter') return null;
+  if (sc.status === 'not_interested') {
+    return {
+      etape_prospect: 'Ne pas recontacter',
+      prochaine_action_date: null, prochaine_action_libelle: null, motif_perte: null,
+      motif_perte_precision: 'Marqué "Pas intéressé" en session de prospection',
+      updated_at: new Date().toISOString()
+    };
+  }
+  if (!avancer || sc.statut !== 'Prospect') return null;
+  var nouvelle = etapeDepuisResultatAppel(sc.status, false, actuelle);
+  var patch = {};
+  if (nouvelle !== actuelle) patch.etape_prospect = nouvelle;
+  if (sc.wantRelance && sc.relanceDate && PROSPECT_ETAPES_ACTIVES.indexOf(nouvelle) >= 0) {
+    patch.prochaine_action_date = prospectTacheEcheance(sc.relanceDate);
+    patch.prochaine_action_libelle = sc.relanceNote || prospectTacheLibelle(nouvelle);
+  }
+  if (Object.keys(patch).length === 0) return null;
+  patch.updated_at = new Date().toISOString();
+  return patch;
+}
+
 // R3 : une tache de prospection se reconnait a son id (pose par prospectTachePayload) ET a son
 // contact lie. Sa cloture redemande l'etape au lieu de la passer simplement a « fait ».
 function prospectTacheEstProspection(t) {
@@ -1612,13 +1661,13 @@ function CollabFields({ f, setF, partners }) {
 function ContactEditModal({ contact, profile, allProfiles, comptes, contacts, onClose, onSaved }) {
   const isAdmin=profile.role==='admin';
   const initCompteId=(()=>{const c=(comptes||[]).find(x=>x.nom&&x.nom===contact.groupe);return c?c.id:'';})();
-  const [f,setF] = useState({ prenom:contact.prenom||'', nom:contact.nom||'', telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', employeur:contact.employeur||'', compte_id:initCompteId, responsable:contact.responsable||'', linkedin:contact.linkedin||'', ats:contact.ats||'', cjm:contact.cjm??'', agence:contact.agence||'', ne_pas_recontacter:contact.ne_pas_recontacter||false, ne_pas_recontacter_note:contact.ne_pas_recontacter_note||'', date_entree:contact.date_entree||'', date_sortie:contact.date_sortie||'', salaire_annuel:contact.salaire_annuel??'', cjm_manuel:!!contact.cjm_manuel, statut_rh:contact.statut_rh||'', statut_rh_depuis:contact.statut_rh_depuis||'', type_presta:contact.type_presta||'', manager_trigramme:contact.manager_trigramme||'' });
+  const [f,setF] = useState({ prenom:contact.prenom||'', nom:contact.nom||'', telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', employeur:contact.employeur||'', compte_id:initCompteId, responsable:contact.responsable||'', linkedin:contact.linkedin||'', ats:contact.ats||'', cjm:contact.cjm??'', agence:contact.agence||'', date_entree:contact.date_entree||'', date_sortie:contact.date_sortie||'', salaire_annuel:contact.salaire_annuel??'', cjm_manuel:!!contact.cjm_manuel, statut_rh:contact.statut_rh||'', statut_rh_depuis:contact.statut_rh_depuis||'', type_presta:contact.type_presta||'', manager_trigramme:contact.manager_trigramme||'' });
   const canEditAgence = isAdmin || (contact.responsable === profile.nom);
   const [saving,setSaving]=useState(false); const [err,setErr]=useState('');
   const s = k => e => setF(v=>({...v,[k]:e.target.value}));
   const save = async () => {
     setSaving(true);
-    const upd={ prenom:normPrenom(f.prenom)||contact.prenom, nom:(f.nom||'').toUpperCase()||contact.nom, telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, employeur:f.employeur||null, responsable:f.responsable||contact.responsable, linkedin:normalizeLinkedinUrl(f.linkedin), cjm:(f.cjm===''||f.cjm==null)?null:parseFloat(f.cjm), agence:f.agence||contact.agence, updated_at:new Date().toISOString(), ne_pas_recontacter:f.ne_pas_recontacter||false, ne_pas_recontacter_note:f.ne_pas_recontacter_note||null, ne_pas_recontacter_date:f.ne_pas_recontacter?contact.ne_pas_recontacter_date||(f.ne_pas_recontacter!==contact.ne_pas_recontacter?getToday():null):null };
+    const upd={ prenom:normPrenom(f.prenom)||contact.prenom, nom:(f.nom||'').toUpperCase()||contact.nom, telephone:f.telephone||null, email:f.email||null, commentaires:f.commentaires||null, statut:f.statut, ville:f.ville||null, role:f.role||null, employeur:f.employeur||null, responsable:f.responsable||contact.responsable, linkedin:normalizeLinkedinUrl(f.linkedin), cjm:(f.cjm===''||f.cjm==null)?null:parseFloat(f.cjm), agence:f.agence||contact.agence, updated_at:new Date().toISOString() };
     if(['Candidat','Consultant CDI','Freelance','Prestataire'].includes(f.statut)) upd.ats=f.ats||null;
     if(['Consultant CDI','Freelance','Prestataire'].includes(f.statut)){
       Object.assign(upd,{ date_entree:f.date_entree||null, date_sortie:f.date_sortie||null, salaire_annuel:(f.salaire_annuel===''||f.salaire_annuel==null)?null:parseFloat(f.salaire_annuel), cjm_manuel:!!f.cjm_manuel, statut_rh:f.statut_rh||null, statut_rh_depuis:f.statut_rh?(f.statut_rh_depuis||getToday()):null, type_presta:f.statut==='Consultant CDI'?null:(f.statut==='Prestataire'?'sous_traitant':'freelance'), manager_trigramme:f.manager_trigramme||null });
@@ -1653,13 +1702,6 @@ function ContactEditModal({ contact, profile, allProfiles, comptes, contacts, on
       if (changes.length && profile?.nom !== contact.responsable) {
         await sb.from('historique_actions').insert({ id_prospect:contact.id, date:getToday(), type_action:'Note interne', details:`${profile.nom} a modifié : ${changes.join(', ')}`, responsable:profile?.nom||contact.responsable });
       }
-      if (f.ne_pas_recontacter !== (contact.ne_pas_recontacter||false)) {
-        if (f.ne_pas_recontacter) {
-          await sb.from('historique_actions').insert({id_prospect:contact.id,date:getToday(),type_action:'Flag NPC',details:'Flag posé par '+profile.nom+(f.ne_pas_recontacter_note?' — '+f.ne_pas_recontacter_note:''),responsable:profile.nom});
-        } else {
-          await sb.from('historique_actions').insert({id_prospect:contact.id,date:getToday(),type_action:'Flag NPC levé',details:'Flag levé par '+profile.nom,responsable:profile.nom});
-        }
-      }
       if(['Prospect','Client'].includes(f.statut) && (f.compte_id||'')!==(initCompteId||'')){
         await syncContactComptePrimary(contact.id, f.compte_id||null);
       }
@@ -1688,13 +1730,6 @@ function ContactEditModal({ contact, profile, allProfiles, comptes, contacts, on
       <CollabFields f={f} setF={setF} partners={AgenceCalc.optionsPartners(contacts||[],allProfiles||[])}/>
       {f.statut==='Consultant CDI' && <IntercoEditor contact={contact} profile={profile} />}
       <Field label="Commentaires"><textarea rows={3} value={f.commentaires} onChange={s('commentaires')} className={inputCls+' resize-none'}/></Field>
-      {(f.statut==='Prospect'||contact.ne_pas_recontacter)&&<div style={{borderTop:'2px solid #E4E4E6',paddingTop:12,marginTop:12}}>
-        <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
-          <input type="checkbox" checked={f.ne_pas_recontacter||false} onChange={function(e){setF(function(v){var n={};for(var k in v)n[k]=v[k];n.ne_pas_recontacter=e.target.checked;if(e.target.checked)n.ne_pas_recontacter_date=getToday();return n;});}}/>
-          <span style={{fontSize:12,fontWeight:700,color:'#FF3D2E'}}>Ne pas recontacter</span>
-        </label>
-        {f.ne_pas_recontacter&&<textarea rows={2} placeholder="Raison (optionnel)" value={f.ne_pas_recontacter_note||''} onChange={function(e){setF(function(v){var n={};for(var k in v)n[k]=v[k];n.ne_pas_recontacter_note=e.target.value;return n;});}} style={{marginTop:6,width:'100%',fontSize:12,padding:'6px 10px',border:'1px solid #E4E4E6',borderRadius:0,resize:'none'}} className={inputCls}/>}
-      </div>}
       {err && <div className="text-xs text-coral-100 bg-coral-20 rounded px-3 py-2">{err}</div>}
     </Modal>
   );
@@ -2236,7 +2271,9 @@ function ConfirmDeleteCompteModal({ compte, contactComptes, onClose, onConfirm, 
 // Stepper d'etape prospect, clone de BesoinStatusStepper2.
 // Toutes les etapes sont contextuelles ici : meme « À contacter » passe par le
 // micro-formulaire, pour nettoyer motif et action periemes (cf. prospectPatchEtape).
-function ProspectStatusStepper({ contact, onEtapeClick }) {
+// verrouille : contact en « Ne pas recontacter » et utilisateur ni responsable ni admin. Les boutons
+// d'etape sont alors desactives (protection RGPD reportee de l'ancien flag ne_pas_recontacter).
+function ProspectStatusStepper({ contact, onEtapeClick, verrouille }) {
   var courante = prospectEtapeOuDefaut(contact);
   var idx = PROSPECT_ETAPES.indexOf(courante);
   return (
@@ -2244,17 +2281,20 @@ function ProspectStatusStepper({ contact, onEtapeClick }) {
       {PROSPECT_ETAPES.map(function(e, i){
         var isCurrent = e === courante;
         var bc = PROSPECT_BADGE_COLORS[e] || {bg:'#E4E4E6',color:'#1C1F35'};
-        return <button key={e} onClick={function(){ if(!isCurrent) onEtapeClick(e); }} style={{
+        var bloque = !!verrouille && !isCurrent;
+        return <button key={e} disabled={bloque}
+          title={bloque?'Seul le responsable du contact ou un administrateur peut remettre ce contact en jeu':undefined}
+          onClick={function(){ if(!isCurrent && !bloque) onEtapeClick(e); }} style={{
           padding:'4px 10px',fontSize:10,fontWeight:isCurrent?900:700,
           background:isCurrent?'#1C1F35':'#fff',
           color:isCurrent?'#fff':'#1C1F35',
           border:isCurrent?'0':'1px solid #E4E4E6',
           boxShadow:isCurrent?'3px 3px 0 '+bc.bg:'none',
           transform:isCurrent?'translate(-1px,-1px)':'none',
-          cursor:isCurrent?'default':'pointer',
+          cursor:isCurrent?'default':(bloque?'not-allowed':'pointer'),
           borderRadius:0,textTransform:'uppercase',letterSpacing:'0.03em',
           transition:'all 80ms',fontFamily:'Outfit,sans-serif',
-          opacity:PROSPECT_ETAPES_SORTIE.indexOf(e)>=0&&!isCurrent?0.6:1
+          opacity:bloque?0.35:(PROSPECT_ETAPES_SORTIE.indexOf(e)>=0&&!isCurrent?0.6:1)
         }}>{e}</button>;
       })}
     </div>
@@ -2340,6 +2380,10 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
   const canEdit  = profile.role==='admin'||profile.role==='commercial'||profile.role==='partner';
   const canDelete= profile.role==='admin' || contact.responsable===profile.nom;
   const isOwner  = canEdit;   // conserve : ancien nom utilise ailleurs dans ce panneau
+  // « Ne pas recontacter » est une etape de sortie protegee (ex-flag ne_pas_recontacter, RGPD) :
+  // en sortir est reserve au responsable du contact ou a un admin (meme regle que canDelete).
+  const etapeNpc = prospectEtapeOuDefaut(contact)==='Ne pas recontacter';
+  const npcVerrouille = etapeNpc && !canDelete;
   const hist = historique.filter(h=>h.id_prospect===contact.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const tachesContact = taches.filter(t=>t.contact_id===contact.id&&t.statut!=='fait'&&t.statut!=='annule');
   const besoinsContact = (besoins||[]).filter(b=>String(b.contact_id)===String(contact.id)||String(b.candidat_id)===String(contact.id));
@@ -2371,10 +2415,16 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
   // (retour depuis un compte, clic liste, navContactId) et rouvrirait le formulaire au remontage.
   useEffect(()=>{
     if(!dropIntent) return;
-    if(dropIntent.contactId===contact.id&&contact.statut==='Prospect'){ setEtapeCible(dropIntent.etape); setTacheAClore(dropIntent.tacheId||null); }
+    if(dropIntent.contactId===contact.id&&contact.statut==='Prospect'){
+      if(npcVerrouille){ toast('Contact en « Ne pas recontacter » : seul son responsable ou un administrateur peut le remettre en jeu','error'); }
+      else{ setEtapeCible(dropIntent.etape); setTacheAClore(dropIntent.tacheId||null); }
+    }
     if(onIntentConsumed) onIntentConsumed();
   },[dropIntent]);
   const handleEtapeConfirm=async(etape,form)=>{
+    // Dernier rempart, au point d'ecriture unique : quel que soit le chemin (stepper, drop kanban,
+    // tache), personne d'autre que le responsable ou un admin ne sort un contact de « Ne pas recontacter ».
+    if(npcVerrouille&&etape!=='Ne pas recontacter'){ toast('Seul le responsable du contact ou un administrateur peut le remettre en jeu','error'); setEtapeCible(null); return; }
     setEtapeSaving(true);
     try{
       const patch=prospectPatchEtape(etape,form);
@@ -2446,19 +2496,18 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
         </span>}
       </div></>}
       onClose={onClose} actions={actions}>
-      {contact.ne_pas_recontacter&&(
+      {etapeNpc&&(
         <div style={{background:'#FF3D2E',color:'#fff',padding:'10px 16px',fontWeight:700,fontSize:12,display:'flex',alignItems:'center',gap:8,marginBottom:12,borderRadius:0}}>
           <Icon d={ICONS.warning} size={16}/>
           <div style={{flex:1}}>
             <div>NE PAS RECONTACTER</div>
-            {contact.ne_pas_recontacter_note&&<div style={{fontWeight:400,fontSize:11,marginTop:2}}>{contact.ne_pas_recontacter_note}</div>}
-            {contact.ne_pas_recontacter_date&&<div style={{fontWeight:400,fontSize:10,opacity:0.8}}>Posé le {new Date(contact.ne_pas_recontacter_date).toLocaleDateString('fr-FR')}</div>}
+            {contact.motif_perte_precision&&<div style={{fontWeight:400,fontSize:11,marginTop:2}}>{contact.motif_perte_precision}</div>}
+            {contact.statut==='Prospect'&&<div style={{fontWeight:400,fontSize:10,opacity:0.8}}>Seul le responsable du contact ou un administrateur peut le remettre en jeu (étapes ci-dessous).</div>}
           </div>
-          {isOwner&&<button onClick={async function(){await sb.from('contacts').update({ne_pas_recontacter:false,ne_pas_recontacter_note:null,ne_pas_recontacter_date:null}).eq('id',contact.id);await sb.from('historique_actions').insert({id_prospect:contact.id,date:getToday(),type_action:'Flag NPC levé',details:'Flag levé par '+profile.nom,responsable:profile.nom});toast('Flag levé');onRefresh();}} style={{fontSize:10,background:'rgba(255,255,255,0.2)',border:'1px solid rgba(255,255,255,0.4)',color:'#fff',padding:'4px 8px',cursor:'pointer',borderRadius:0,fontWeight:700}}>Lever le flag</button>}
         </div>
       )}
       {contact.statut==='Prospect'&&<>
-        <ProspectStatusStepper contact={contact} onEtapeClick={setEtapeCible}/>
+        <ProspectStatusStepper contact={contact} onEtapeClick={setEtapeCible} verrouille={npcVerrouille}/>
         {etapeCible&&<ProspectMicroForm key={contact.id+'|'+etapeCible} targetEtape={etapeCible} contact={contact} saving={etapeSaving}
           onCancel={()=>{setEtapeCible(null);setTacheAClore(null);}}
           onConfirm={handleEtapeConfirm}/>}
@@ -4296,7 +4345,7 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
                 {c.role&&<div className="text-xs text-neutral-300">{c.role}</div>}
               </div>
               <StatutBadge statut={c.statut}/>
-              {c.ne_pas_recontacter&&<span title="Ne pas recontacter" style={{display:'inline-flex',alignItems:'center',padding:'1px 5px',borderRadius:0,fontSize:9,fontWeight:700,letterSpacing:'0.05em',backgroundColor:'#FF3D2E',color:'#fff',border:'none',lineHeight:1,whiteSpace:'nowrap',marginLeft:4}}>NPC</span>}
+              {prospectEtapeOuDefaut(c)==='Ne pas recontacter'&&<span title="Ne pas recontacter" style={{display:'inline-flex',alignItems:'center',padding:'1px 5px',borderRadius:0,fontSize:9,fontWeight:700,letterSpacing:'0.05em',backgroundColor:'#FF3D2E',color:'#fff',border:'none',lineHeight:1,whiteSpace:'nowrap',marginLeft:4}}>NPC</span>}
             </div>
             <div className="flex items-center gap-3 mt-2 text-xs text-neutral-300">
               {c.ville&&<span>{c.ville}</span>}
@@ -4323,7 +4372,7 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
               <td className="px-4 py-3"><div className="font-medium text-midnight">{c.prenom} {c.nom}</div>{c.role&&<div className="text-xs text-neutral-300">{c.role}</div>}</td>
               <td className="px-4 py-3 text-slate">{c.societe}</td>
               <td className="px-4 py-3 text-slate hidden lg:table-cell">{c.ville}</td>
-              <td className="px-4 py-3"><div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'nowrap'}}><StatutBadge statut={c.statut}/>{c.ne_pas_recontacter&&<span title="Ne pas recontacter" style={{display:'inline-flex',alignItems:'center',padding:'1px 5px',borderRadius:0,fontSize:9,fontWeight:700,letterSpacing:'0.05em',backgroundColor:'#FF3D2E',color:'#fff',border:'none',lineHeight:1,whiteSpace:'nowrap'}}>NPC</span>}</div></td>
+              <td className="px-4 py-3"><div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'nowrap'}}><StatutBadge statut={c.statut}/>{prospectEtapeOuDefaut(c)==='Ne pas recontacter'&&<span title="Ne pas recontacter" style={{display:'inline-flex',alignItems:'center',padding:'1px 5px',borderRadius:0,fontSize:9,fontWeight:700,letterSpacing:'0.05em',backgroundColor:'#FF3D2E',color:'#fff',border:'none',lineHeight:1,whiteSpace:'nowrap'}}>NPC</span>}</div></td>
               <td className="px-4 py-3 text-slate text-xs hidden lg:table-cell">{c.responsable||'—'}</td>
               <td className="px-4 py-3 hidden lg:table-cell">{c.jours<999?<span className={c.jours>90?'text-coral-100 font-medium':'text-slate'}>{c.jours}j</span>:<span className="text-neutral-200">—</span>}</td>
               {filterStatut==='Prospect'&&<td className="px-4 py-3">{(function(){var e=prospectEtapeOuDefaut(c);var bc=PROSPECT_BADGE_COLORS[e]||{bg:'#E4E4E6',color:'#1C1F35'};return <ColorBadge label={e} bg={bc.bg} color={bc.color}/>;})()}</td>}
@@ -11337,6 +11386,9 @@ function ProspectionNew({ contacts, profile, onStart, onBack }) {
     if (agence && c.agence !== agence) return false;
     if (filterResp && c.responsable !== filterResp) return false;
     if (c.statut === 'Consultant CDI' || c.statut === 'Freelance') return false;
+    // Etapes de sortie (En veille / Perdu / Ne pas recontacter) : jamais dans une session d'appels.
+    // « Ne pas recontacter » est la protection RGPD (ex-flag ne_pas_recontacter).
+    if (PROSPECT_ETAPES_SORTIE.indexOf(prospectEtapeOuDefaut(c)) >= 0) return false;
     if (delai > 0) {
       var lastDate = c.date_dernier || c.updated_at;
       if (lastDate) {
@@ -11405,7 +11457,7 @@ function ProspectionNew({ contacts, profile, onStart, onBack }) {
               <div style={{flex:1}}>
                 <span style={{fontWeight:700,fontSize:13,color:'#1C1F35'}}>{c.prenom} {c.nom}</span>
                 {c.groupe&&<span style={{fontSize:11,color:'#999',marginLeft:8}}>{c.groupe}</span>}
-                {c.ne_pas_recontacter&&<span style={{fontSize:9,fontWeight:700,color:'#FF3D2E',marginLeft:8}} title="Ce contact a demandé à ne plus être contacté">⛔ NPC</span>}
+                {prospectEtapeOuDefaut(c)==='Ne pas recontacter'&&<span style={{fontSize:9,fontWeight:700,color:'#FF3D2E',marginLeft:8}} title="Ce contact a demandé à ne plus être contacté">⛔ NPC</span>}
               </div>
               <div style={{display:'flex',gap:4}}>
                 {!c.telephone&&<span style={{fontSize:9,fontWeight:700,color:'#FF3D2E',background:'#FFF0EF',padding:'1px 4px'}}>TEL?</span>}
@@ -11504,15 +11556,16 @@ function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDo
       if (sc.editVille && sc.editVille !== sc.ville) upd.ville = sc.editVille;
       if (sc.editRole && sc.editRole !== sc.role) upd.role = sc.editRole;
       if (sc.editAts && sc.editAts !== (sc.ats||sc.recruitee||'')) upd.ats = sc.editAts;
-      if (Object.keys(upd).length > 0) await sb.from('contacts').update({...upd, updated_at:now}).eq('id', sc.id);
-    }
-
-    // Auto-flag contacts marked "not_interested"
-    var pasInteresses = appeles.filter(function(c){return c.status==='not_interested';});
-    for (var pi=0; pi<pasInteresses.length; pi++) {
-      var pic = pasInteresses[pi];
-      if (!pic.ne_pas_recontacter) {
-        await sb.from('contacts').update({ne_pas_recontacter:true,ne_pas_recontacter_date:getToday(),ne_pas_recontacter_note:'Marqué "Pas intéressé" en session de prospection'}).eq('id',pic.id);
+      // Etape du pipeline : « Pas interesse » pose « Ne pas recontacter » (ex-flag), les autres
+      // resultats font avancer un prospect, la relance saisie alimente sa prochaine action.
+      var patchAppel = prospectPatchDepuisAppel(sc, true);
+      if (patchAppel) Object.assign(upd, patchAppel);
+      if (Object.keys(upd).length > 0) {
+        var updRes = await sb.from('contacts').update({...upd, updated_at:now}).eq('id', sc.id);
+        if (updRes.error) {
+          console.error('[Prospection] Erreur mise à jour contact', sc.id, updRes.error);
+          toast('⚠️ Contact non mis à jour : ' + (sc.prenom||'') + ' ' + sc.nom + ' (' + updRes.error.message + ')', 'error');
+        }
       }
     }
 
@@ -11586,12 +11639,14 @@ function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDo
       }
     }
 
-    // Auto-flag contacts marked "not_interested"
-    var pasInteresses2 = appeles.filter(function(c){return c.status==='not_interested';});
-    for (var pi2=0; pi2<pasInteresses2.length; pi2++) {
-      var pic2 = pasInteresses2[pi2];
-      if (!pic2.ne_pas_recontacter) {
-        await sb.from('contacts').update({ne_pas_recontacter:true,ne_pas_recontacter_date:getToday(),ne_pas_recontacter_note:'Marqué "Pas intéressé" en session de prospection'}).eq('id',pic2.id);
+    // « Pas intéressé » corrigé en session : pose l'étape « Ne pas recontacter » (ex-flag).
+    // En correction on n'avance PAS les autres étapes (avancer = false) : seule la protection RGPD est posée.
+    for (var pi2=0; pi2<appeles.length; pi2++) {
+      var pic2 = appeles[pi2];
+      var patchNpc = prospectPatchDepuisAppel(pic2, false);
+      if (patchNpc) {
+        var npcRes = await sb.from('contacts').update(patchNpc).eq('id',pic2.id);
+        if (npcRes.error) toast('⚠️ Ne pas recontacter non posé pour ' + (pic2.prenom||'') + ' ' + pic2.nom + ' : ' + npcRes.error.message, 'error');
       }
     }
 
