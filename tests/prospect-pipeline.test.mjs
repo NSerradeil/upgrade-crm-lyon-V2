@@ -19,14 +19,14 @@ const NOMS = ['PROSPECT_ETAPES', 'PROSPECT_ETAPES_ACTIVES', 'PROSPECT_ETAPES_SOR
               'PROSPECT_MOTIFS_PERTE', 'prospectEtapeOuDefaut', 'prospectEtapeRequiert',
               'prospectCanSubmit', 'prospectEnRetard', 'prospectTacheLibelle',
               'prospectTacheEcheance', 'prospectReveilPreset', 'prospectPatchEtape', 'prospectTachePayload',
-              'prospectSurLeBoard'];
+              'prospectSurLeBoard', 'prospectTacheEstProspection'];
 const src = NOMS.map(extrait).join('\n');
 const API = new Function(`${src}\nreturn {${NOMS.join(',')}};`)();
 const { PROSPECT_ETAPES, PROSPECT_ETAPES_ACTIVES, PROSPECT_ETAPES_SORTIE,
         prospectEtapeOuDefaut, prospectEtapeRequiert, prospectCanSubmit,
         prospectEnRetard, prospectTacheLibelle, prospectTacheEcheance,
         prospectReveilPreset, prospectPatchEtape, prospectTachePayload,
-        prospectSurLeBoard } = API;
+        prospectSurLeBoard, prospectTacheEstProspection } = API;
 
 test('les 8 etapes, dans l ordre, avec les accents exacts', () => {
   assert.deepEqual(PROSPECT_ETAPES, ['À contacter', 'Contacté', 'En discussion',
@@ -201,4 +201,13 @@ test('un besoin perdu rend le prospect au board', () => {
 test('un besoin sur un AUTRE contact ne sort personne', () => {
   const c = { id: 7, statut: 'Prospect' };
   assert.equal(prospectSurLeBoard(c, [{ contact_id: 99, statut: 'Opportunité' }]), true);
+});
+
+test('prospectTacheEstProspection : prefixe tw_prospect_ ET contact lie', () => {
+  assert.equal(prospectTacheEstProspection({ id: 'tw_prospect_12_1700', contact_id: 12 }), true);
+  assert.equal(prospectTacheEstProspection({ id: 'tw_prospect_12_1700', contact_id: null }), false);
+  assert.equal(prospectTacheEstProspection({ id: 'tw_prospect_12_1700' }), false);
+  assert.equal(prospectTacheEstProspection({ id: 'tw_abc', contact_id: 12 }), false);
+  assert.equal(prospectTacheEstProspection({ id: 42, contact_id: 12 }), false);
+  assert.equal(prospectTacheEstProspection(null), false);
 });

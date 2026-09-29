@@ -309,6 +309,13 @@ function prospectPatchEtape(etape, form) {
   };
 }
 
+// R3 : une tache de prospection se reconnait a son id (pose par prospectTachePayload) ET a son
+// contact lie. Sa cloture redemande l'etape au lieu de la passer simplement a « fait ».
+function prospectTacheEstProspection(t) {
+  return !!(t && String(t.id).indexOf('tw_prospect_') === 0
+    && t.contact_id !== null && t.contact_id !== undefined && t.contact_id !== '');
+}
+
 function prospectTachePayload(contact, etape, form, responsable) {
   form = form || {};
   if (!form.creer_tache) return null;
@@ -2325,6 +2332,8 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
   const fermerProposition = () => { setModal(null); onRefresh(); };
   const [deleting,setDeleting] = useState(false);
   const [etapeCible,setEtapeCible]=useState(null);
+  // Tache de prospection a clore a la confirmation d'etape (posee par l'intention venue de l'onglet Taches).
+  const [tacheAClore,setTacheAClore]=useState(null);
   const [etapeSaving,setEtapeSaving]=useState(false);
   // canEdit : ouvert a tous les commerciaux (db/09). canDelete : proprietaire ou admin.
   // Le partner garde son perimetre, verrouille en dur par les policies *_partner_*.
@@ -2350,7 +2359,7 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
   };
   // Le panneau n'est pas remonté quand on passe d'un contact à l'autre (pas de key sur
   // ContactDetail) : sans ça, un micro-formulaire ouvert resterait ouvert sur le suivant.
-  useEffect(()=>{ setEtapeCible(null); setEtapeSaving(false); },[contact.id]);
+  useEffect(()=>{ setEtapeCible(null); setEtapeSaving(false); setTacheAClore(null); },[contact.id]);
   // Un drop sur le kanban est une INTENTION : il ouvre le micro-formulaire et n'ecrit
   // qu'a la confirmation (glisser vers « Perdu » ecrirait sinon sans motif).
   // ORDRE : cet effet DOIT rester APRES celui du reset ci-dessus. React execute les effets
@@ -2362,7 +2371,7 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
   // (retour depuis un compte, clic liste, navContactId) et rouvrirait le formulaire au remontage.
   useEffect(()=>{
     if(!dropIntent) return;
-    if(dropIntent.contactId===contact.id&&contact.statut==='Prospect') setEtapeCible(dropIntent.etape);
+    if(dropIntent.contactId===contact.id&&contact.statut==='Prospect'){ setEtapeCible(dropIntent.etape); setTacheAClore(dropIntent.tacheId||null); }
     if(onIntentConsumed) onIntentConsumed();
   },[dropIntent]);
   const handleEtapeConfirm=async(etape,form)=>{
@@ -2375,6 +2384,13 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
         type_action:'Changement d\'étape',details:`Étape → ${etape}`,responsable:profile.nom});
       if(errHist){toast('Étape enregistrée, historique non tracé','error');}
       else{toast('Étape → '+etape);}
+      // Boucle de retour : la tache qu'on est en train de clore doit etre close AVANT la garde
+      // anti-doublon ci-dessous, sinon elle compterait comme « tache deja la » et bloquerait la suivante.
+      if(tacheAClore){
+        const {error:errClose}=await sb.from('taches').update({statut:'fait',date_completion:getToday(),updated_at:new Date().toISOString()}).eq('id',tacheAClore);
+        if(errClose) toast('Étape enregistrée, tâche non clôturée','error');
+        setTacheAClore(null);
+      }
       const tache=prospectTachePayload(contact,etape,form,profile.nom);
       if(tache){
         // Garde anti-doublon sur donnees fraiches (Supabase, pas le state React : un autre poste
@@ -2444,7 +2460,7 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
       {contact.statut==='Prospect'&&<>
         <ProspectStatusStepper contact={contact} onEtapeClick={setEtapeCible}/>
         {etapeCible&&<ProspectMicroForm key={contact.id+'|'+etapeCible} targetEtape={etapeCible} contact={contact} saving={etapeSaving}
-          onCancel={()=>setEtapeCible(null)}
+          onCancel={()=>{setEtapeCible(null);setTacheAClore(null);}}
           onConfirm={handleEtapeConfirm}/>}
       </>}
       <div className="grid grid-cols-2 gap-3 text-sm">
@@ -4116,7 +4132,7 @@ function ProspectsKanban({ contacts, onCardClick, onDrop }) {
   </>);
 }
 
-function TabProspects({ contacts, contactMap, historique, taches, histMissions, missions, allMissions, besoins, comptes, contactComptes, compteMap, profile, allProfiles, commerciauxParAgence, onRefresh, navContactId, navContactKey, navCompteId, navCompteKey, onNavToBesoin, onNavToMission, onNavToTache, prefs }) {
+function TabProspects({ contacts, contactMap, historique, taches, histMissions, missions, allMissions, besoins, comptes, contactComptes, compteMap, profile, allProfiles, commerciauxParAgence, onRefresh, navContactId, navContactKey, navEtape, onNavEtapeConsumed, navCompteId, navCompteKey, onNavToBesoin, onNavToMission, onNavToTache, prefs }) {
   const prefResp=prefs?.contacts_filter_responsable==='moi'?profile.nom:(prefs?.contacts_filter_responsable==='all'?'':(prefs?.filter_responsable==='moi'?profile.nom:(prefs?.filter_responsable||'')));
   const prefStatut=prefs?.contacts_filter_statut&&prefs.contacts_filter_statut!=='all'?prefs.contacts_filter_statut:'';
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState(prefStatut);
@@ -4141,7 +4157,10 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
   const [editingCompte,setEditingCompte]=useState(null);
   const [deletingCompte,setDeletingCompte]=useState(null);
   const [compteDeleting,setCompteDeleting]=useState(false);
-  useEffect(()=>{ if(navContactId){ const c=contacts.find(x=>x.id===navContactId||String(x.id)===String(navContactId)); if(c) setSelected(c); } },[navContactKey]);
+  useEffect(()=>{ if(navContactId){ const c=contacts.find(x=>x.id===navContactId||String(x.id)===String(navContactId)); if(c){ setSelected(c);
+    // Intention venue de l'onglet Taches (clore une tache de prospection) : meme canal que le drop kanban.
+    if(navEtape&&String(navEtape.contactId)===String(c.id)) setDropIntent({contactId:c.id,etape:navEtape.etape,tacheId:navEtape.tacheId}); }
+    if(navEtape&&onNavEtapeConsumed) onNavEtapeConsumed(); } },[navContactKey]);
   useEffect(()=>{ if(navCompteId){ const cpt=(comptes||[]).find(x=>String(x.id)===String(navCompteId)); if(cpt){ setSelected(null); setSelectedCompte(cpt); setViewMode('comptes'); } } },[navCompteKey]);
   const isAdmin=profile.role==='admin';
   const statuts=useMemo(()=>[...new Set(contacts.map(c=>c.statut).filter(Boolean))].sort(),[contacts]);
@@ -5378,7 +5397,7 @@ function BadgeMiniDisplay({ achievements, prefs, onClick }) {
 // TABS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function TabTaches({ taches, contacts, contactMap, besoins, missions, historique, profile, allProfiles, onRefresh, navKey, navEcheance, navTacheId, navTacheKey, onNavToContact, onNavToBesoin, onNavToMission, prefs }) {
+function TabTaches({ taches, contacts, contactMap, besoins, missions, historique, profile, allProfiles, onRefresh, navKey, navEcheance, navTacheId, navTacheKey, onNavToEtapeTache, onNavToContact, onNavToBesoin, onNavToMission, prefs }) {
   const tPrefResp=profile.role==='partner'?'':(prefs?.filter_responsable==='moi'?profile.nom:(prefs?.filter_responsable||profile.nom));
   const [search,setSearch]=useState(''); const [showAdd,setShowAdd]=useState(false);
   const [filterResp,setFilterResp]=useState(tPrefResp);
@@ -5444,7 +5463,14 @@ function TabTaches({ taches, contacts, contactMap, besoins, missions, historique
   const resetAll=()=>{setSearch('');setFilterResp(isAdmin?'':profile.nom);setFilterEcheance('');};
 
   const openDetail=(t)=>setDetailTask(t);
-  const handleComplete=(t)=>{ setDetailTask(null); setCompletingModal(t); };
+  const handleComplete=(t)=>{
+    setDetailTask(null);
+    // Boucle de retour : clore une tache de prospection redemande l'etape (la tache sera close a la confirmation ;
+    // si l'utilisateur annule, elle reste ouverte). Toute autre tache garde la cloture habituelle.
+    const c=prospectTacheEstProspection(t)?contactMap[t.contact_id]:null;
+    if(c&&c.statut==='Prospect'&&onNavToEtapeTache){ onNavToEtapeTache(t,c); return; }
+    setCompletingModal(t);
+  };
   const handleDelete=(t)=>{ setDetailTask(null); setDeletingTask(t); };
   const handleEdit=(t)=>{ setDetailTask(null); setEditingTask(t); };
 
@@ -11925,6 +11951,8 @@ function App() {
   const [navMissionId,setNavMissionId]=useState(null); const [navMissionKey,setNavMissionKey]=useState(0);
   const [navTacheId,setNavTacheId]=useState(null); const [navTacheKey,setNavTacheKey]=useState(0);
   const [navCompteId,setNavCompteId]=useState(null); const [navCompteKey,setNavCompteKey]=useState(0);
+  const [navEtape,setNavEtape]=useState(null);
+  const navToEtapeTache = (t,c) => { setNavEtape({contactId:c.id,etape:prospectEtapeOuDefaut(c),tacheId:t.id}); setTab('prospects'); setNavContactId(c.id); setNavContactKey(k=>k+1); };
   const navToContact = id => { setTab('prospects'); setNavContactId(id); setNavContactKey(k=>k+1); };
   const navToCompte = id => { setTab('prospects'); setNavCompteId(id); setNavCompteKey(k=>k+1); };
   const navToBesoin = id => { setTab('besoins'); setNavBesoinId(id); setNavBesoinKey(k=>k+1); };
@@ -12320,9 +12348,9 @@ function App() {
       <div id="main-content" role="main" className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-6">
         {/* Agence : missions NON filtrées par agence — un commercial voit la France entière (spec §4), donc TJM/CJM/marges de toutes les agences (arbitrage Nicolas 14/09) ; un partner reste sur vMissions. */}
         {tab==='agence'   &&<TabAgence contacts={vContacts} missions={isPartner?vMissions:missions} missionPeriods={missionPeriods} intercos={intercos} taches={vTaches} comptes={vComptes} histMissions={vHistMiss} besoins={vBesoins} partnerConsultants={partnerConsultants} allProfiles={allProfiles} profile={activeProfile} isPartner={isPartner} onRefresh={fetchAll} onNavToMission={navToMission} onNavToContact={navToContact} prefs={prefs}/>}
-        {tab==='prospects'&&<TabProspects contacts={vContacts} contactMap={contactMap} historique={vHistorique} taches={vTaches} histMissions={vHistMiss} missions={vMissions} allMissions={missions} besoins={vBesoins} comptes={vComptes} contactComptes={vContactComptes} compteMap={compteMap} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navContactId={navContactId} navContactKey={navContactKey} navCompteId={navCompteId} navCompteKey={navCompteKey} onNavToBesoin={navToBesoin} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
+        {tab==='prospects'&&<TabProspects contacts={vContacts} contactMap={contactMap} historique={vHistorique} taches={vTaches} histMissions={vHistMiss} missions={vMissions} allMissions={missions} besoins={vBesoins} comptes={vComptes} contactComptes={vContactComptes} compteMap={compteMap} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navContactId={navContactId} navContactKey={navContactKey} navEtape={navEtape} onNavEtapeConsumed={()=>setNavEtape(null)} navCompteId={navCompteId} navCompteKey={navCompteKey} onNavToBesoin={navToBesoin} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
         {tab==='prospection'&&<TabProspection profile={activeProfile} contacts={vContacts} contactMap={contactMap} onRefresh={fetchAll} isAdmin={activeIsAdmin} onNavToContact={navToContact} allProfiles={allProfiles} prefs={prefs}/>}
-        {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} contactMap={contactMap} besoins={vBesoins} missions={vMissions} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance} navTacheId={navTacheId} navTacheKey={navTacheKey} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToMission={navToMission} prefs={prefs}/>}
+        {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} contactMap={contactMap} besoins={vBesoins} missions={vMissions} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance} navTacheId={navTacheId} navTacheKey={navTacheKey} onNavToEtapeTache={navToEtapeTache} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToMission={navToMission} prefs={prefs}/>}
         {tab==='besoins'  &&<TabBesoins  contacts={vContacts} contactMap={contactMap} comptes={vComptes} compteMap={compteMap} besoins={vBesoins} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navBesoinId={navBesoinId} navBesoinKey={navBesoinKey} onNavToContact={navToContact} onNavToMission={navToMission} onNavToTache={navToTache} onNavToCompte={navToCompte} prefs={prefs}/>}
         {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} comptes={vComptes} compteMap={compteMap} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToCompte={navToCompte} prefs={prefs}/>}
         {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} contactMap={contactMap} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache}/>}
