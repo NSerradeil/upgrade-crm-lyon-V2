@@ -251,7 +251,7 @@ test('prospectTacheEstProspection : prefixe tw_prospect_ ET contact lie', () => 
 test('le resultat d appel fait avancer l etape', () => {
   assert.equal(etapeDepuisResultatAppel('interested', false, 'À contacter'), 'En discussion');
   assert.equal(etapeDepuisResultatAppel('unreachable', false, 'À contacter'), 'Contacté');
-  assert.equal(etapeDepuisResultatAppel('not_interested', false, 'En discussion'), 'Perdu');
+  assert.equal(etapeDepuisResultatAppel('not_interested', false, 'En discussion'), 'En veille');
   assert.equal(etapeDepuisResultatAppel('not_interested', true, 'En discussion'), 'Ne pas recontacter');
   assert.equal(etapeDepuisResultatAppel('called', false, 'À contacter'), 'Contacté');
 });
@@ -260,7 +260,8 @@ test('un appel ne fait jamais RECULER une etape deja avancee', () => {
   assert.equal(etapeDepuisResultatAppel('called', false, 'RDV planifié'), 'RDV planifié');
   assert.equal(etapeDepuisResultatAppel('unreachable', false, 'En discussion'), 'En discussion');
   // mais une sortie est toujours possible
-  assert.equal(etapeDepuisResultatAppel('not_interested', false, 'RDV planifié'), 'Perdu');
+  assert.equal(etapeDepuisResultatAppel('not_interested', false, 'RDV planifié'), 'En veille');
+  assert.equal(etapeDepuisResultatAppel('not_interested', true, 'RDV planifié'), 'Ne pas recontacter');
 });
 
 test('un statut d appel neutre ne change rien', () => {
@@ -275,23 +276,72 @@ test('RGPD : un appel ne LEVE jamais « Ne pas recontacter »', () => {
 });
 
 // ---- prospectPatchDepuisAppel : ce qui s'ecrit sur le contact en fin de session d'appels ----
-test('appel : « pas interesse » sur un Client pose Ne pas recontacter (protection RGPD)', () => {
-  const p = prospectPatchDepuisAppel({ statut: 'Client', status: 'not_interested' }, true);
-  assert.equal(p.etape_prospect, 'Ne pas recontacter');
-  assert.equal(p.prochaine_action_date, null);
-  assert.equal(p.prochaine_action_libelle, null);
-  assert.ok(p.motif_perte_precision);
+const AUJ = '2026-09-29';   // date fournie a la fonction pure (evite getToday dans le test)
+
+test('appel : « pas interesse » sans case sur un Prospect => En veille a +6 mois 09:00 avec decalage explicite', () => {
+  const p = prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'En discussion', status: 'not_interested' }, true, AUJ);
+  assert.equal(p.etape_prospect, 'En veille');
+  assert.equal(p.prochaine_action_date, '2027-03-29T09:00:00+02:00');   // 29 mars 2027 = heure d'ete
+  assert.match(p.prochaine_action_date, /T09:00:00[+-]\d{2}:\d{2}$/);
+  assert.equal(p.prochaine_action_libelle, 'Relance après refus');
+  assert.equal(p.motif_perte, null);
   assert.ok(p.updated_at);
+  // hiver : 30 sept + 6 mois = 30 mars, heure d'ete ; 31 aout + 6 mois = 28 fev, heure d'hiver
+  assert.equal(prospectPatchDepuisAppel({ statut: 'Prospect', status: 'not_interested' }, false, '2026-08-31').prochaine_action_date, '2027-02-28T09:00:00+01:00');
 });
 
-test('appel : « pas interesse » est pose meme avec avancer=false, et sur un Prospect avance', () => {
-  assert.equal(prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'RDV planifié', status: 'not_interested' }, false).etape_prospect, 'Ne pas recontacter');
-  assert.equal(prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'RDV planifié', status: 'not_interested' }, true).etape_prospect, 'Ne pas recontacter');
+test('appel : « pas interesse » sans case : la note de relance du rang donne le libelle', () => {
+  const p = prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'Contacté', status: 'not_interested',
+    wantRelance: true, relanceDate: '2026-10-15', relanceNote: 'Revoir apres leur levee' }, true, AUJ);
+  assert.equal(p.prochaine_action_libelle, 'Revoir apres leur levee');
+  assert.equal(p.prochaine_action_date, '2027-03-29T09:00:00+02:00');   // la date de reveil reste +6 mois
+});
+
+test('appel : « pas interesse » sans case sur un non-Prospect => aucun changement d etape', () => {
+  for (const statut of ['Client', 'Candidat', 'Freelance']) {
+    assert.equal(prospectPatchDepuisAppel({ statut, status: 'not_interested' }, true, AUJ), null, statut);
+    assert.equal(prospectPatchDepuisAppel({ statut, status: 'not_interested', nePlusAppeler: false }, false, AUJ), null, statut);
+  }
+});
+
+test('appel : « pas interesse » + case « ne plus appeler » => Ne pas recontacter, Prospect comme Client', () => {
+  for (const statut of ['Prospect', 'Client', 'Candidat']) {
+    const p = prospectPatchDepuisAppel({ statut, etape_prospect: 'En discussion', status: 'not_interested', nePlusAppeler: true }, true, AUJ);
+    assert.equal(p.etape_prospect, 'Ne pas recontacter', statut);
+    assert.equal(p.prochaine_action_date, null);
+    assert.equal(p.prochaine_action_libelle, null);
+    assert.ok(p.motif_perte_precision);
+    assert.ok(p.updated_at);
+  }
+  // meme avec avancer=false (correction de session)
+  assert.equal(prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'RDV planifié', status: 'not_interested', nePlusAppeler: true }, false, AUJ).etape_prospect, 'Ne pas recontacter');
+});
+
+test('appel : la case n a d effet que sur « pas interesse »', () => {
+  assert.equal(prospectPatchDepuisAppel({ statut: 'Client', status: 'interested', nePlusAppeler: true }, true, AUJ), null);
+  assert.equal(prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'À contacter', status: 'called', nePlusAppeler: true }, true, AUJ).etape_prospect, 'Contacté');
+});
+
+test('appel : deja En veille + pas interesse => date de reveil repoussee a +6 mois ; Perdu reste Perdu', () => {
+  const v = prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'En veille', status: 'not_interested' }, true, AUJ);
+  assert.equal(v.etape_prospect, 'En veille');
+  assert.equal(v.prochaine_action_date, '2027-03-29T09:00:00+02:00');
+  assert.equal(prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'Perdu', status: 'not_interested' }, true, AUJ), null);
+  // Perdu + case cochee : la protection RGPD prime
+  assert.equal(prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'Perdu', status: 'not_interested', nePlusAppeler: true }, true, AUJ).etape_prospect, 'Ne pas recontacter');
+  assert.equal(etapeDepuisResultatAppel('not_interested', false, 'Perdu'), 'Perdu');
+  assert.equal(etapeDepuisResultatAppel('not_interested', false, 'En veille'), 'En veille');
+});
+
+test('relance de session : une date seule devient 09:00 avec decalage explicite (jamais naive)', () => {
+  assert.equal(prospectTacheEcheance('2026-10-15'), '2026-10-15T09:00:00+02:00');
+  assert.equal(prospectTacheEcheance('2026-12-15'), '2026-12-15T09:00:00+01:00');
 });
 
 test('appel : un contact deja Ne pas recontacter ne bouge plus (null), quel que soit le resultat', () => {
   for (const status of ['not_interested', 'interested', 'called', 'unreachable']) {
-    assert.equal(prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'Ne pas recontacter', status }, true), null, status);
+    assert.equal(prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'Ne pas recontacter', status, nePlusAppeler: status === 'not_interested' }, true, AUJ), null, status);
+    assert.equal(prospectPatchDepuisAppel({ statut: 'Client', etape_prospect: 'Ne pas recontacter', status }, true, AUJ), null, status);
   }
 });
 
@@ -309,7 +359,7 @@ test('appel : relance sans note => libelle par defaut de l etape', () => {
   assert.equal(p.prochaine_action_libelle, prospectTacheLibelle('En discussion'));
 });
 
-test('appel : avancer=false ne fait avancer aucune etape (seul NPC est pose)', () => {
+test('appel : avancer=false ne fait avancer aucune etape (seules les sorties « pas interesse » sont posees)', () => {
   assert.equal(prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'À contacter', status: 'interested' }, false), null);
   assert.equal(prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'À contacter', status: 'called' }, false), null);
 });

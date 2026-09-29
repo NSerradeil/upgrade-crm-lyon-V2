@@ -337,13 +337,18 @@ function prospectPatchEtape(etape, form) {
 }
 
 // Etape deduite du resultat d'un appel en session. Un appel ne fait jamais reculer une etape
-// deja avancee, mais une sortie (Perdu / Ne pas recontacter) reste toujours possible.
+// deja avancee, mais une sortie reste toujours possible.
+// « Pas interesse » laisse une porte ouverte : sans la case « Ne plus appeler » c'est « En veille »
+// (reveil dans 6 mois), avec la case c'est « Ne pas recontacter ». Un contact deja « Perdu » reste
+// Perdu, un contact deja « En veille » y reste (sa date est repoussee par prospectPatchDepuisAppel).
 // RGPD : « Ne pas recontacter » est terminal pour un appel, seule la levee protegee du stepper
-// (responsable ou admin) peut en sortir. Sans cette garde, un « pas interesse » sans ne-plus-appeler
-// ramenerait la personne a « Perdu » et la remettrait dans les selections d'appels.
+// (responsable ou admin) peut en sortir.
 function etapeDepuisResultatAppel(statutAppel, nePlusAppeler, etapeActuelle) {
   if (etapeActuelle === 'Ne pas recontacter') return etapeActuelle;
-  if (statutAppel === 'not_interested') return nePlusAppeler ? 'Ne pas recontacter' : 'Perdu';
+  if (statutAppel === 'not_interested') {
+    if (nePlusAppeler) return 'Ne pas recontacter';
+    return etapeActuelle === 'Perdu' ? 'Perdu' : 'En veille';
+  }
   var cible = { interested:'En discussion', unreachable:'Contacté', called:'Contacté' }[statutAppel];
   if (!cible) return etapeActuelle;
   // Un appel ne fait jamais reculer : on ne prend la cible que si elle est plus avancee.
@@ -354,23 +359,35 @@ function etapeDepuisResultatAppel(statutAppel, nePlusAppeler, etapeActuelle) {
 }
 
 // Patch contacts a poser en fin de session d'appels pour un contact appele (sc = ligne de session :
-// contact + status / wantRelance / relanceDate / relanceNote). Retourne null si rien a ecrire.
-// - « Pas interesse » pose « Ne pas recontacter » quel que soit le statut du contact (c'est l'ancien
-//   flag ne_pas_recontacter : la personne ne doit plus etre rappelee). nePlusAppeler est donc
-//   toujours vrai ici, comme l'etait l'ancienne pose automatique du flag.
+// contact + status / nePlusAppeler / wantRelance / relanceDate / relanceNote). Retourne null si rien a ecrire.
+// - « Pas interesse » + case « Ne plus appeler » pose « Ne pas recontacter » quel que soit le statut du
+//   contact (protection RGPD, y compris pour un Client).
+// - « Pas interesse » sans la case : un PROSPECT passe « En veille », reveil a aujourd'hui + 6 mois a 09:00
+//   (decalage explicite, jamais de datetime naive), libelle « Relance apres refus » sauf note de relance
+//   de la ligne. Un non-Prospect n'est pas touche. Un Prospect « Perdu » reste Perdu (null).
+//   Aucune tache CRM pour ce reveil : le badge « Reveil » du board fait le rappel.
 // - Les autres resultats font avancer l'etape des seuls PROSPECTS (jamais un Client ou un Candidat),
 //   et la relance saisie alimente la prochaine action. La tache de relance, elle, reste celle que
 //   la fin de session cree deja : on n'en cree pas une seconde.
-function prospectPatchDepuisAppel(sc, avancer) {
+// aujourdhui : date YYYY-MM-DD (defaut : getToday()), injectable pour les tests.
+function prospectPatchDepuisAppel(sc, avancer, aujourdhui) {
   var actuelle = prospectEtapeOuDefaut(sc);
   if (actuelle === 'Ne pas recontacter') return null;
   if (sc.status === 'not_interested') {
-    return {
-      etape_prospect: 'Ne pas recontacter',
-      prochaine_action_date: null, prochaine_action_libelle: null, motif_perte: null,
-      motif_perte_precision: 'Marqué "Pas intéressé" en session de prospection',
-      updated_at: new Date().toISOString()
-    };
+    if (sc.nePlusAppeler) {
+      return {
+        etape_prospect: 'Ne pas recontacter',
+        prochaine_action_date: null, prochaine_action_libelle: null, motif_perte: null,
+        motif_perte_precision: 'Marqué "Ne plus appeler" en session de prospection',
+        updated_at: new Date().toISOString()
+      };
+    }
+    if (sc.statut !== 'Prospect') return null;
+    if (etapeDepuisResultatAppel('not_interested', false, actuelle) !== 'En veille') return null;   // Perdu reste Perdu
+    return prospectPatchEtape('En veille', {
+      prochaine_action_date: prospectReveilPreset(aujourdhui || getToday(), '6m'),
+      prochaine_action_libelle: sc.relanceNote || 'Relance après refus'
+    });
   }
   if (!avancer || sc.statut !== 'Prospect') return null;
   var nouvelle = etapeDepuisResultatAppel(sc.status, false, actuelle);
@@ -11045,6 +11062,17 @@ function ProspectionContactCard({ sc, idx, updateItem, defaultExpanded }) {
         <div style={{marginTop:10}}>
           <textarea value={sc.notes} onChange={function(e){updateItem(idx,{notes:e.target.value});}} placeholder="Notes d appel..." rows={2}
             style={{width:'100%',fontSize:12,padding:'6px 8px',border:'2px solid #E4E4E6',borderRadius:0,resize:'vertical',fontFamily:'Outfit,sans-serif'}}/>
+          {sc.status==='not_interested'&&(
+            <div style={{marginTop:8,padding:'8px 12px',background:'#FFF0EF',borderLeft:'3px solid #FF3D2E'}}>
+              <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:11,fontWeight:700,color:'#1C1F35',textTransform:'uppercase',letterSpacing:'0.03em',fontFamily:'Outfit,sans-serif'}}>
+                <input type="checkbox" checked={!!sc.nePlusAppeler} onChange={function(e){updateItem(idx,{nePlusAppeler:e.target.checked});}}/>
+                Ne plus appeler
+              </label>
+              <div style={{marginTop:4,fontSize:10,color:'#666',fontFamily:'Outfit,sans-serif'}}>
+                {sc.nePlusAppeler?'Étape « Ne pas recontacter » : plus jamais dans une session.':'Sans la case : prospect en veille, réveil dans 6 mois.'}
+              </div>
+            </div>
+          )}
           <div style={{marginTop:8,padding:'8px 12px',background:'#FFFBF0',borderLeft:'3px solid #FFE500'}}>
             <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:11,fontWeight:700,color:'#1C1F35'}}>
               <input type="checkbox" checked={sc.wantRelance} onChange={function(e){updateItem(idx,{wantRelance:e.target.checked});}}/>
@@ -11582,6 +11610,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDo
       status: saved?saved.statut:'none',
       notes: saved?saved.notes||'':'',
       wantRelance: saved?!!saved.want_relance:false,
+      nePlusAppeler: false,
       relanceDate: saved?saved.relance_date||'':'',
       relanceNote: saved?saved.relance_note||'':'',
       editTel: saved&&saved.tel_saisi?saved.tel_saisi:(c.telephone||''),
@@ -11649,8 +11678,9 @@ function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDo
       if (sc.editVille && sc.editVille !== sc.ville) upd.ville = sc.editVille;
       if (sc.editRole && sc.editRole !== sc.role) upd.role = sc.editRole;
       if (sc.editAts && sc.editAts !== (sc.ats||sc.recruitee||'')) upd.ats = sc.editAts;
-      // Etape du pipeline : « Pas interesse » pose « Ne pas recontacter » (ex-flag), les autres
-      // resultats font avancer un prospect, la relance saisie alimente sa prochaine action.
+      // Etape du pipeline : « Pas interesse » = En veille 6 mois (Prospect) ou Ne pas recontacter si la case
+      // « Ne plus appeler » est cochee ; les autres resultats font avancer un prospect, la relance saisie
+      // alimente sa prochaine action.
       var patchAppel = prospectPatchDepuisAppel(sc, true);
       if (patchAppel) Object.assign(upd, patchAppel);
       if (Object.keys(upd).length > 0) {
@@ -11678,7 +11708,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDo
       var relanceInsert = await sb.from('taches').insert(relances.map(function(sc4,idx){return {
         id: 'tw_relance_'+sc4.id+'_'+Date.now()+'_'+idx,
         titre: ('Relance '+(sc4.prenom||'')+' '+sc4.nom+' — '+(sc4.groupe||'')).trim(),
-        statut: 'a_faire', due_date: sc4.relanceDate, contact_id: sc4.id,
+        statut: 'a_faire', due_date: prospectTacheEcheance(sc4.relanceDate), contact_id: sc4.id,
         session_prospection_id: session.id,
         notes: ['Session : '+session.nom,'Statut : '+LABELS[sc4.status],sc4.relanceNote||null].filter(Boolean).join('\n'),
         responsable: profile.nom,
@@ -11735,14 +11765,15 @@ function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDo
       }
     }
 
-    // « Pas intéressé » corrigé en session : pose l'étape « Ne pas recontacter » (ex-flag).
-    // En correction on n'avance PAS les autres étapes (avancer = false) : seule la protection RGPD est posée.
+    // « Pas intéressé » corrigé en session : En veille (Prospect). La case « Ne plus appeler » n'est pas
+    // persistée (aucune colonne) : en correction elle vaut « décochée », un contact déjà NPC le reste (garde).
+    // En correction on n'avance PAS les autres étapes (avancer = false).
     for (var pi2=0; pi2<appeles.length; pi2++) {
       var pic2 = appeles[pi2];
       var patchNpc = prospectPatchDepuisAppel(pic2, false);
       if (patchNpc) {
         var npcRes = await sb.from('contacts').update(patchNpc).eq('id',pic2.id);
-        if (npcRes.error) toast('⚠️ Ne pas recontacter non posé pour ' + (pic2.prenom||'') + ' ' + pic2.nom + ' : ' + npcRes.error.message, 'error');
+        if (npcRes.error) toast('⚠️ Étape non mise à jour pour ' + (pic2.prenom||'') + ' ' + pic2.nom + ' : ' + npcRes.error.message, 'error');
         else if (prospectEtapeFermeTaches(patchNpc.etape_prospect)) {
           var annT2 = await prospectAnnulerTachesOuvertes(pic2.id);
           if (annT2.error) toast('⚠️ Tâches de prospection non annulées pour ' + (pic2.prenom||'') + ' ' + pic2.nom, 'error');
@@ -11770,9 +11801,9 @@ function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDo
       var existing = existingRelances.find(function(r){return r.contact_id===sc3.id;});
       if (sc3.wantRelance && sc3.relanceDate) {
         if (existing) {
-          await sb.from('taches').update({due_date:sc3.relanceDate, notes:['Session : '+session.nom,sc3.relanceNote||null].filter(Boolean).join('\n')}).eq('id',existing.id);
+          await sb.from('taches').update({due_date:prospectTacheEcheance(sc3.relanceDate), notes:['Session : '+session.nom,sc3.relanceNote||null].filter(Boolean).join('\n')}).eq('id',existing.id);
         } else {
-          var ins = await sb.from('taches').insert({id:'tw_relance_'+sc3.id+'_'+Date.now()+'_'+k,titre:('Relance '+(sc3.prenom||'')+' '+sc3.nom+' — '+(sc3.groupe||'')).trim(),statut:'a_faire',due_date:sc3.relanceDate,contact_id:sc3.id,session_prospection_id:session.id,notes:['Session : '+session.nom,sc3.relanceNote||null].filter(Boolean).join('\n'),responsable:profile.nom});
+          var ins = await sb.from('taches').insert({id:'tw_relance_'+sc3.id+'_'+Date.now()+'_'+k,titre:('Relance '+(sc3.prenom||'')+' '+sc3.nom+' — '+(sc3.groupe||'')).trim(),statut:'a_faire',due_date:prospectTacheEcheance(sc3.relanceDate),contact_id:sc3.id,session_prospection_id:session.id,notes:['Session : '+session.nom,sc3.relanceNote||null].filter(Boolean).join('\n'),responsable:profile.nom});
           if(ins.error) toast('Erreur relance : '+ins.error.message,'error');
         }
       } else if (!sc3.wantRelance && existing) {
