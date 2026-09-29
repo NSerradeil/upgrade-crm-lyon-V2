@@ -113,11 +113,30 @@ test('le patch d une perte porte le motif et efface la prochaine action', () => 
   assert.equal(p.prochaine_action_libelle, null);
 });
 
-test('REVIEW FOCUS 3 — revenir en « A contacter » nettoie motif et action periemes', () => {
-  const p = prospectPatchEtape('À contacter', {});
+test('REVIEW FOCUS 3 — revenir en « A contacter » nettoie motif et action perimes', () => {
+  // Formulaire PRE-REMPLI : sans nettoyage, ces valeurs ressortiraient dans le patch.
+  const perime = { motif_perte: 'Choix concurrent', motif_perte_precision: 'Devoteam',
+                   prochaine_action_date: '2026-10-05', prochaine_action_libelle: 'Rappeler' };
+  const p = prospectPatchEtape('À contacter', perime);
   assert.equal(p.etape_prospect, 'À contacter');
   assert.equal(p.motif_perte, null);
   assert.equal(p.motif_perte_precision, null);
+  assert.equal(p.prochaine_action_date, null);
+  assert.equal(p.prochaine_action_libelle, null);
+});
+
+test('« A contacter » avec un formulaire vide reste propre', () => {
+  const p = prospectPatchEtape('À contacter', {});
+  assert.equal(p.motif_perte, null);
+  assert.equal(p.prochaine_action_date, null);
+});
+
+test('« Ne pas recontacter » garde la precision, pas de motif, efface la prochaine action', () => {
+  const p = prospectPatchEtape('Ne pas recontacter', { motif_perte_precision: 'a demandé le 12/09',
+    motif_perte: 'Choix concurrent', prochaine_action_date: '2026-10-05', prochaine_action_libelle: 'Rappeler' });
+  assert.equal(p.etape_prospect, 'Ne pas recontacter');
+  assert.equal(p.motif_perte_precision, 'a demandé le 12/09');
+  assert.equal(p.motif_perte, null);
   assert.equal(p.prochaine_action_date, null);
   assert.equal(p.prochaine_action_libelle, null);
 });
@@ -126,6 +145,7 @@ test('le patch de mise en veille porte la date de reveil comme prochaine action'
   const p = prospectPatchEtape('En veille', { prochaine_action_date: '2027-03-29' });
   assert.match(p.prochaine_action_date, /^2027-03-29T09:00/);
   assert.equal(p.prochaine_action_libelle, 'Réveil prospect');
+  assert.equal(p.motif_perte, null);
 });
 
 test('le patch porte toujours updated_at', () => {
