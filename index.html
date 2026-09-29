@@ -7621,6 +7621,7 @@ function AdminPanel({ orgDefaults, allProfiles, profile, onSave }) {
   var [filtMisStatut, setFiltMisStatut] = useState('');
   var [tachesView, setTachesView] = useState('list');
   var [besoinsView, setBesoinsView] = useState('list');
+  var [prospectsView, setProspectsView] = useState('list');
   var [pipeVent, setPipeVent] = useState('agence');
   var [tdbChart, setTdbChart] = useState('ca');
 
@@ -7640,6 +7641,7 @@ function AdminPanel({ orgDefaults, allProfiles, profile, onSave }) {
     setFiltMisStatut(p.missions_filter_statut||'');
     setTachesView(p.taches_view||'list');
     setBesoinsView(p.besoins_view||'list');
+    setProspectsView(p.prospects_view||'list');
     setPipeVent(p.pipe_ventilation||'agence');
     setTdbChart(p.tdb_default_chart||'ca');
   }
@@ -7666,6 +7668,7 @@ function AdminPanel({ orgDefaults, allProfiles, profile, onSave }) {
       missions_filter_statut: filtMisStatut,
       taches_view: tachesView,
       besoins_view: besoinsView,
+      prospects_view: prospectsView,
       pipe_ventilation: pipeVent,
       tdb_default_chart: tdbChart,
     };
@@ -7773,6 +7776,13 @@ function AdminPanel({ orgDefaults, allProfiles, profile, onSave }) {
             <div className="flex gap-0">
               <button onClick={function(){setBesoinsView('list');}} className={btnScope(besoinsView==='list')}>Liste</button>
               <button onClick={function(){setBesoinsView('kanban');}} className={btnScope(besoinsView==='kanban')}>Kanban</button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-carbon uppercase tracking-wide mb-1">Vue Prospects par défaut</label>
+            <div className="flex gap-0">
+              <button onClick={function(){setProspectsView('list');}} className={btnScope(prospectsView==='list')}>Liste</button>
+              <button onClick={function(){setProspectsView('kanban');}} className={btnScope(prospectsView==='kanban')}>Kanban</button>
             </div>
           </div>
           <div>
@@ -10573,6 +10583,7 @@ function PreferencesPanel({ prefs, onSave, profileNom, isPartner }) {
   const [defaultTab,setDefaultTab]=useState(prefs.default_tab||'taches');
   const [tachesView,setTachesView]=useState(prefs.taches_view||'list');
   const [besoinsView,setBesoinsView]=useState(prefs.besoins_view||'list');
+  const [prospectsView,setProspectsView]=useState(prefs.prospects_view||'list');
   const [pipeVent,setPipeVent]=useState(prefs.pipe_ventilation||'agence');
   const [tdbChart,setTdbChart]=useState(prefs.tdb_default_chart||'ca');
   const [filtResp,setFiltResp]=useState(prefs.filter_responsable===undefined?'moi':prefs.filter_responsable);
@@ -10596,8 +10607,8 @@ function PreferencesPanel({ prefs, onSave, profileNom, isPartner }) {
   const [secPipe,setSecPipe]=useState(true);
   const [secComportement,setSecComportement]=useState(true);
 
-  const buildPrefs=()=>({default_tab:defaultTab,taches_view:tachesView,besoins_view:besoinsView,pipe_ventilation:pipeVent,tdb_default_chart:tdbChart,filter_responsable:filtResp,besoins_filter_agence:filtBesAgence,missions_filter_agence:filtMisAgence,missions_filter_statut:filtMisStatut,contacts_filter_statut:filtContactsStatut,contacts_filter_responsable:filtContactsResp,taches_filter_echeance:filtTachesEcheance,pipe_filter_responsable:filtPipeResp,prospection_focus_mode:prospectionFocus});
-  const origPrefs=()=>({default_tab:prefs.default_tab||'taches',taches_view:prefs.taches_view||'list',besoins_view:prefs.besoins_view||'list',pipe_ventilation:prefs.pipe_ventilation||'agence',tdb_default_chart:prefs.tdb_default_chart||'ca',filter_responsable:prefs.filter_responsable===undefined?'moi':prefs.filter_responsable,besoins_filter_agence:prefs.besoins_filter_agence||'',missions_filter_agence:prefs.missions_filter_agence||'',missions_filter_statut:prefs.missions_filter_statut||'',contacts_filter_statut:prefs.contacts_filter_statut||'all',contacts_filter_responsable:prefs.contacts_filter_responsable||'all',taches_filter_echeance:prefs.taches_filter_echeance||'all',pipe_filter_responsable:prefs.pipe_filter_responsable||'moi',prospection_focus_mode:!!prefs.prospection_focus_mode});
+  const buildPrefs=()=>({default_tab:defaultTab,taches_view:tachesView,besoins_view:besoinsView,prospects_view:prospectsView,pipe_ventilation:pipeVent,tdb_default_chart:tdbChart,filter_responsable:filtResp,besoins_filter_agence:filtBesAgence,missions_filter_agence:filtMisAgence,missions_filter_statut:filtMisStatut,contacts_filter_statut:filtContactsStatut,contacts_filter_responsable:filtContactsResp,taches_filter_echeance:filtTachesEcheance,pipe_filter_responsable:filtPipeResp,prospection_focus_mode:prospectionFocus});
+  const origPrefs=()=>({default_tab:prefs.default_tab||'taches',taches_view:prefs.taches_view||'list',besoins_view:prefs.besoins_view||'list',prospects_view:prefs.prospects_view||'list',pipe_ventilation:prefs.pipe_ventilation||'agence',tdb_default_chart:prefs.tdb_default_chart||'ca',filter_responsable:prefs.filter_responsable===undefined?'moi':prefs.filter_responsable,besoins_filter_agence:prefs.besoins_filter_agence||'',missions_filter_agence:prefs.missions_filter_agence||'',missions_filter_statut:prefs.missions_filter_statut||'',contacts_filter_statut:prefs.contacts_filter_statut||'all',contacts_filter_responsable:prefs.contacts_filter_responsable||'all',taches_filter_echeance:prefs.taches_filter_echeance||'all',pipe_filter_responsable:prefs.pipe_filter_responsable||'moi',prospection_focus_mode:!!prefs.prospection_focus_mode});
   const hasChanges=JSON.stringify(buildPrefs())!==JSON.stringify(origPrefs());
 
   const handleSave=async()=>{
@@ -10608,7 +10619,7 @@ function PreferencesPanel({ prefs, onSave, profileNom, isPartner }) {
   };
   const handleCancel=()=>{
     const o=origPrefs();
-    setDefaultTab(o.default_tab);setTachesView(o.taches_view);setBesoinsView(o.besoins_view);setPipeVent(o.pipe_ventilation);setTdbChart(o.tdb_default_chart);
+    setDefaultTab(o.default_tab);setTachesView(o.taches_view);setBesoinsView(o.besoins_view);setProspectsView(o.prospects_view);setPipeVent(o.pipe_ventilation);setTdbChart(o.tdb_default_chart);
     setFiltResp(o.filter_responsable);setFiltBesAgence(o.besoins_filter_agence);setFiltMisAgence(o.missions_filter_agence);setFiltMisStatut(o.missions_filter_statut);
     setFiltContactsStatut(o.contacts_filter_statut);setFiltContactsResp(o.contacts_filter_responsable);setFiltTachesEcheance(o.taches_filter_echeance);setFiltPipeResp(o.pipe_filter_responsable);setProspectionFocus(o.prospection_focus_mode);
   };
@@ -10674,6 +10685,13 @@ function PreferencesPanel({ prefs, onSave, profileNom, isPartner }) {
               <div style={segGroup}>
                 <button onClick={()=>setBesoinsView('list')} style={segBtn(besoinsView==='list')}><Icon d={ICONS.list} size={12}/> Liste</button>
                 <button onClick={()=>setBesoinsView('kanban')} style={segBtn(besoinsView==='kanban')}>⬛ Kanban</button>
+              </div>
+            </div>
+            <div className="flex items-center justify-between py-3">
+              <span className="text-sm text-carbon font-medium">Prospects</span>
+              <div style={segGroup}>
+                <button onClick={()=>setProspectsView('list')} style={segBtn(prospectsView==='list')}><Icon d={ICONS.list} size={12}/> Liste</button>
+                <button onClick={()=>setProspectsView('kanban')} style={segBtn(prospectsView==='kanban')}>⬛ Kanban</button>
               </div>
             </div>
             <div className="flex items-center justify-between py-3">
