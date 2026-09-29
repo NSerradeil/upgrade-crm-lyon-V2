@@ -2317,8 +2317,11 @@ function ProspectMicroForm({ targetEtape, contact, onConfirm, onCancel, saving }
   );
 }
 
-function ContactDetail({ contact, contacts, historique, taches, missions, besoins, comptes, contactComptes, profile, allProfiles, onClose, onRefresh, onNavToBesoin, onNavToMission, onNavToTache, onNavToCompte, fromCompte, dropIntent, onIntentConsumed }) {
+function ContactDetail({ contact, contacts, historique, taches, missions, besoins, comptes, contactComptes, profile, allProfiles, onClose, onRefresh, onNavToBesoin, onNavToMission, onNavToTache, onNavToCompte, fromCompte, dropIntent, onIntentConsumed, onSoftRefresh }) {
   const [modal,setModal] = useState(null);
+  // onRefresh ferme le panneau (les 3 montages demontent ContactDetail) ; onSoftRefresh recharge les donnees SANS le demonter.
+  const softRefresh = onSoftRefresh||onRefresh;
+  const fermerProposition = () => { setModal(null); onRefresh(); };
   const [deleting,setDeleting] = useState(false);
   const [etapeCible,setEtapeCible]=useState(null);
   const [etapeSaving,setEtapeSaving]=useState(false);
@@ -2386,13 +2389,18 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
           if(!tErr) toast('📅 Tâche créée'); else toast('Étape enregistrée, tâche non créée','error');
         }
       }
+      let proposeBesoin=false;
       if(etape==='Qualifié'){
         // Jonction Qualifie -> Besoin (modele : proposeMission). Rien si un besoin actif existe deja.
         const {data:dejaBesoin,error:errBesoin}=await sb.from('besoins').select('id')
           .eq('contact_id',contact.id).neq('statut','Besoin Perdu').limit(1);
-        if(!errBesoin&&(!dejaBesoin||dejaBesoin.length===0)) setModal('proposeBesoin');
+        if(errBesoin){toast('Étape enregistrée, création de besoin non proposée (vérification impossible)','error');}
+        else if(!dejaBesoin||dejaBesoin.length===0) proposeBesoin=true;
       }
-      setEtapeCible(null);onRefresh();
+      setEtapeCible(null);
+      // Proposition ouverte : on NE demonte PAS le panneau (onRefresh le ferme), rafraichissement doux ;
+      // le rafraichissement complet part a la fermeture de la proposition.
+      if(proposeBesoin){setModal('proposeBesoin');softRefresh();} else onRefresh();
     }catch(e){
       toast('Erreur: '+(e&&e.message?e.message:e),'error');
     }finally{
@@ -2520,11 +2528,11 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
       </div>
       {modal==='edit'  && <ContactEditModal   contact={contact} contacts={contacts||[]} profile={profile} allProfiles={allProfiles} comptes={comptes} onClose={()=>setModal(null)} onSaved={saved} />}
       {modal==='proposeBesoin'&&(
-        <Modal title="Prospect qualifié" onClose={()=>setModal(null)}>
+        <Modal title="Prospect qualifié" onClose={fermerProposition}>
           <div className="text-center py-4 space-y-4">
             <p className="text-carbon">{contact.prenom} {contact.nom} est qualifié. Veux-tu créer le besoin associé ?</p>
             <div className="flex gap-3 justify-center">
-              <button onClick={()=>setModal(null)} className="px-4 py-2 text-sm text-slate border rounded-lg hover:bg-neutral-50">Plus tard</button>
+              <button onClick={fermerProposition} className="px-4 py-2 text-sm text-slate border rounded-lg hover:bg-neutral-50">Plus tard</button>
               <button onClick={()=>setModal('createBesoin')} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">Créer le besoin</button>
             </div>
           </div>
@@ -2534,7 +2542,7 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
         const cptPrincipal=linkedComptes.find(x=>x.is_primary)||linkedComptes[0]||null;
         return <AddBesoinModal contacts={contacts||[]} comptes={comptes||[]} profile={profile} allProfiles={allProfiles}
           initial={{statut:'Opportunité',contact_id:contact.id,compte_id:cptPrincipal?Number(cptPrincipal.id):null,compte:cptPrincipal?cptPrincipal.nom:null}}
-          onClose={()=>setModal(null)} onSaved={saved} onRefresh={onRefresh}/>;
+          onClose={fermerProposition} onSaved={saved} onRefresh={softRefresh}/>;
       })()}
       {modal==='hist'  && <AddHistoriqueModal contact={contact} profile={profile} onClose={()=>setModal(null)} onSaved={saved}/>}
       {modal==='tache' && <AddTacheModal contacts={[contact]} besoins={besoins||[]} missions={missions||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved} defaultContactId={contact.id}/>}
@@ -3263,7 +3271,7 @@ function MissionDetail({ mission, histMissions, missionPeriods, contacts, taches
       {modal==='edit'&&<MissionFormModal mission={mission} profile={profile} allProfiles={allProfiles} contacts={contacts} besoins={besoins} onClose={()=>setModal(null)} onSaved={saved}/>}
       {modal==='tache'&&<AddTacheModal contacts={contacts} besoins={besoins||[]} missions={missions||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved} defaultMissionId={mission.id}/>}
       {modal==='terminer'&&<TerminerMissionModal mission={mission} profile={profile} onClose={()=>setModal(null)} onSaved={()=>{setModal(null);onRefresh();onClose();}}/>}
-      {viewContact&&<ContactDetail contact={viewContact} contacts={contacts||[]} historique={[]} taches={[]} profile={profile} allProfiles={allProfiles} onClose={()=>setViewContact(null)} onRefresh={()=>{setViewContact(null);onRefresh();}}/>}
+      {viewContact&&<ContactDetail contact={viewContact} contacts={contacts||[]} historique={[]} taches={[]} profile={profile} allProfiles={allProfiles} onClose={()=>setViewContact(null)} onSoftRefresh={onRefresh} onRefresh={()=>{setViewContact(null);onRefresh();}}/>}
     </SidePanel>
   );
 }
@@ -4314,7 +4322,7 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
         </>}
       </>}
       {viewMode==='comptes'&&<ComptesView comptes={comptes||[]} contactComptes={contactComptes||[]} contacts={contacts} missions={allMissions||missions} historique={historique} taches={taches} histMissions={histMissions||[]} profile={profile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} selected={selectedCompte?((comptes||[]).find(c=>c.id===selectedCompte.id)||selectedCompte):null} onSelect={c=>{setSelectedCompte(c);setFromContact(null);}} onNavToContact={cid=>{const c=contacts.find(x=>x.id===cid);if(c)setSelected(c);}} fromContact={fromContact} onBackToContact={()=>{setSelected(fromContact);setSelectedCompte(null);setFromContact(null);setViewMode('contacts');}} onEditCompte={setEditingCompte} onDeleteCompte={setDeletingCompte}/>}
-      {selected&&<ContactDetail contact={selected} contacts={contacts||[]} historique={historique} taches={taches} missions={missions} besoins={besoins} comptes={comptes||[]} contactComptes={contactComptes||[]} profile={profile} allProfiles={allProfiles} fromCompte={viewMode==='comptes'?selectedCompte:null} dropIntent={dropIntent} onIntentConsumed={()=>setDropIntent(null)} onRefresh={()=>{onRefresh();setSelected(null);setDropIntent(null);}} onClose={()=>{setSelected(null);setDropIntent(null);}} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache} onNavToCompte={cid=>{const cmpt=(comptes||[]).find(x=>x.id===cid);if(cmpt){setFromContact(selected);setSelected(null);setSelectedCompte(cmpt);setViewMode('comptes');}}}/>}
+      {selected&&<ContactDetail contact={selected} contacts={contacts||[]} historique={historique} taches={taches} missions={missions} besoins={besoins} comptes={comptes||[]} contactComptes={contactComptes||[]} profile={profile} allProfiles={allProfiles} fromCompte={viewMode==='comptes'?selectedCompte:null} dropIntent={dropIntent} onIntentConsumed={()=>setDropIntent(null)} onSoftRefresh={onRefresh} onRefresh={()=>{onRefresh();setSelected(null);setDropIntent(null);}} onClose={()=>{setSelected(null);setDropIntent(null);}} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache} onNavToCompte={cid=>{const cmpt=(comptes||[]).find(x=>x.id===cid);if(cmpt){setFromContact(selected);setSelected(null);setSelectedCompte(cmpt);setViewMode('comptes');}}}/>}
       {showAdd&&<AddContactModal contacts={contacts||[]} profile={profile} allProfiles={allProfiles} comptes={comptes||[]} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
       {showAddCompte&&<CompteFormModal compte={null} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAddCompte(false)} onSaved={()=>{setShowAddCompte(false);onRefresh();}}/>}
       {editingCompte&&<CompteFormModal compte={editingCompte} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingCompte(null)} onSaved={()=>{setEditingCompte(null);onRefresh();}}/>}
@@ -6641,7 +6649,7 @@ function TabHistorique({ historique, contacts, contactMap, taches, besoins, prof
           Voir plus ({filtered.length-visibleCount} restantes)
         </button>
       )}
-      {selected&&<ContactDetail contact={selected} contacts={contacts||[]} historique={historique} taches={taches} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
+      {selected&&<ContactDetail contact={selected} contacts={contacts||[]} historique={historique} taches={taches} profile={profile} allProfiles={allProfiles} onClose={()=>setSelected(null)} onSoftRefresh={onRefresh} onRefresh={()=>{setSelected(null);onRefresh();}}/>}
     </div>
   );
 }
