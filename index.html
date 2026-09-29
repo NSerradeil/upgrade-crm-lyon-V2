@@ -2308,7 +2308,7 @@ function ProspectMicroForm({ targetEtape, contact, onConfirm, onCancel, saving }
   );
 }
 
-function ContactDetail({ contact, contacts, historique, taches, missions, besoins, comptes, contactComptes, profile, allProfiles, onClose, onRefresh, onNavToBesoin, onNavToMission, onNavToTache, onNavToCompte, fromCompte }) {
+function ContactDetail({ contact, contacts, historique, taches, missions, besoins, comptes, contactComptes, profile, allProfiles, onClose, onRefresh, onNavToBesoin, onNavToMission, onNavToTache, onNavToCompte, fromCompte, dropIntent }) {
   const [modal,setModal] = useState(null);
   const [deleting,setDeleting] = useState(false);
   const [etapeCible,setEtapeCible]=useState(null);
@@ -2338,6 +2338,13 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
   // Le panneau n'est pas remonté quand on passe d'un contact à l'autre (pas de key sur
   // ContactDetail) : sans ça, un micro-formulaire ouvert resterait ouvert sur le suivant.
   useEffect(()=>{ setEtapeCible(null); setEtapeSaving(false); },[contact.id]);
+  // Un drop sur le kanban est une INTENTION : il ouvre le micro-formulaire et n'ecrit
+  // qu'a la confirmation (glisser vers « Perdu » ecrirait sinon sans motif).
+  // ORDRE : cet effet DOIT rester APRES celui du reset ci-dessus. React execute les effets
+  // d'un meme rendu dans l'ordre de declaration ; au drop, contact.id et dropIntent changent
+  // ensemble, le reset passe d'abord et l'intention gagne. dropIntent est un objet neuf a
+  // chaque drop, pour que deux drops successifs sur la meme etape re-declenchent l'effet.
+  useEffect(()=>{ if(dropIntent&&dropIntent.contactId===contact.id&&contact.statut==='Prospect') setEtapeCible(dropIntent.etape); },[dropIntent]);
   const handleEtapeConfirm=async(etape,form)=>{
     setEtapeSaving(true);
     try{
@@ -3993,6 +4000,74 @@ function TabAgence({ contacts, missions, missionPeriods, intercos, taches, compt
     </div>
   );
 }
+// Kanban des prospects : clone du kanban des Besoins (KanbanView). Clone et non factorise :
+// celui des Besoins est couple en dur a BESOIN_STATUTS_ORDRE et besoinCandidats, le
+// generaliser ferait porter un risque de regression a un ecran qui marche.
+// Difference de fond : ici un drop n'ecrit RIEN, il remonte une intention (onDrop) que la
+// fiche contact confirme via son micro-formulaire.
+function ProspectsKanban({ contacts, onCardClick, onDrop }) {
+  const [sortiesOuvertes,setSortiesOuvertes]=useState(false);
+  const [overCol,setOverCol]=useState(null);
+  const [dragId,setDragId]=useState(null);
+  const colonnes=sortiesOuvertes?PROSPECT_ETAPES:PROSPECT_ETAPES_ACTIVES;
+  const parEtape=useMemo(()=>{
+    const m={}; PROSPECT_ETAPES.forEach(e=>{m[e]=[];});
+    (contacts||[]).forEach(c=>{ m[prospectEtapeOuDefaut(c)].push(c); });
+    PROSPECT_ETAPES.forEach(e=>m[e].sort((a,b)=>
+      (a.prochaine_action_date||'9999').localeCompare(b.prochaine_action_date||'9999')));
+    return m;
+  },[contacts]);
+  const nbSorties=PROSPECT_ETAPES_SORTIE.reduce((n,e)=>n+parEtape[e].length,0);
+  return (<>
+    <div style={{display:'flex',justifyContent:'flex-end',marginBottom:6}}>
+      <button onClick={()=>setSortiesOuvertes(v=>!v)} style={{fontSize:10,fontWeight:700,fontFamily:'Outfit,sans-serif',
+        padding:'4px 10px',border:'1px solid #E4E4E6',background:'#fff',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>
+        {sortiesOuvertes?'Masquer les sorties':'Afficher les sorties ('+nbSorties+')'}
+      </button>
+    </div>
+    <div className="kanban-board">
+      {colonnes.map(function(etape){
+        var bc=PROSPECT_BADGE_COLORS[etape];
+        var items=parEtape[etape];
+        return <div key={etape}
+          className={'kanban-col'+(overCol===etape?' drag-over':'')}
+          onDragOver={function(e){e.preventDefault();e.dataTransfer.dropEffect='move';setOverCol(etape);}}
+          onDragLeave={function(e){if(!e.currentTarget.contains(e.relatedTarget))setOverCol(null);}}
+          onDrop={function(e){
+            e.preventDefault();setOverCol(null);setDragId(null);
+            var id=e.dataTransfer.getData('text/plain');
+            var c=(contacts||[]).find(function(x){return String(x.id)===String(id);});
+            if(c&&prospectEtapeOuDefaut(c)!==etape) onDrop(c,etape);
+          }}>
+          <div style={{display:'flex',alignItems:'center',gap:4,fontSize:10,fontWeight:900,textTransform:'uppercase',
+            fontFamily:'Outfit,sans-serif',padding:'4px 2px',borderBottom:'3px solid '+bc.bg,marginBottom:6}}>
+            <span className="truncate">{etape}</span>
+            <span style={{marginLeft:'auto',color:'#A4A6AB'}}>{items.length}</span>
+          </div>
+          <div className="kanban-items" style={{minHeight:40}}>
+            {items.map(function(c){
+              var retard=prospectEnRetard(c);
+              return <div key={c.id} draggable data-detail tabIndex="0"
+                className={'kanban-card'+(dragId===c.id?' dragging':'')+' focus:outline-none focus:border-midnight'}
+                onDragStart={function(e){setDragId(c.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(c.id));}}
+                onDragEnd={function(){setDragId(null);setOverCol(null);}}
+                onClick={function(){onCardClick(c);}}
+                style={{borderLeft:retard?'3px solid #FF6B6B':'1px solid #E4E4E6'}}>
+                <div className="truncate" style={{fontSize:11,fontWeight:800}}>{c.prenom} {c.nom}</div>
+                {c.societe&&<div className="truncate" style={{fontSize:10,color:'#A4A6AB'}}>{c.societe}</div>}
+                {c.prochaine_action_date&&<div className="truncate" style={{fontSize:10,marginTop:2,
+                  color:retard?'#FF6B6B':'#1C1F35',fontWeight:retard?800:400}}>
+                  {fmtDT(c.prochaine_action_date,DEFAULT_TASK_TIME)}{c.prochaine_action_libelle?' '+c.prochaine_action_libelle:''}
+                </div>}
+              </div>;
+            })}
+          </div>
+        </div>;
+      })}
+    </div>
+  </>);
+}
+
 function TabProspects({ contacts, contactMap, historique, taches, histMissions, missions, allMissions, besoins, comptes, contactComptes, compteMap, profile, allProfiles, commerciauxParAgence, onRefresh, navContactId, navContactKey, navCompteId, navCompteKey, onNavToBesoin, onNavToMission, onNavToTache, prefs }) {
   const prefResp=prefs?.contacts_filter_responsable==='moi'?profile.nom:(prefs?.contacts_filter_responsable==='all'?'':(prefs?.filter_responsable==='moi'?profile.nom:(prefs?.filter_responsable||'')));
   const prefStatut=prefs?.contacts_filter_statut&&prefs.contacts_filter_statut!=='all'?prefs.contacts_filter_statut:'';
@@ -4005,6 +4080,8 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
   const [viewMode,setViewMode]=useState('contacts'); // 'contacts' | 'comptes'
   // Vue Prospect : 'list' | 'kanban'. Distinct de viewMode (Contacts/Comptes), ne pas fusionner.
   const [prospectView,setProspectView]=useState(prefs?.prospects_view||'list');
+  // Intention issue d'un drop kanban ({contactId,etape}, objet neuf a chaque drop), consommee par ContactDetail.
+  const [dropIntent,setDropIntent]=useState(null);
   // Sur le filtre Prospect le tri par defaut devient la prochaine action ; on restitue le tri d'origine en le quittant.
   useEffect(()=>{
     if(filterStatut==='Prospect'){ if(sortCol==='date_dernier'){ setSortCol('prochaine_action'); setSortDir('asc'); } }
@@ -4137,6 +4214,9 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
         </div>}
       </div>
       <div className="text-xs text-neutral-300 mb-2">{filtered.length} contact{filtered.length>1?'s':''}</div>
+      {filterStatut==='Prospect'&&prospectView==='kanban'
+        ? <ProspectsKanban contacts={filtered} onCardClick={c=>{setDropIntent(null);setSelected(c);}} onDrop={(c,e)=>{setSelected(c);setDropIntent({contactId:c.id,etape:e});}}/>
+        : <>
       {/* Vue cartes mobile */}
       <div className="md:hidden space-y-2">
         {visibleContacts.map(c=>(
@@ -4191,9 +4271,10 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
           </button>
         </div>
       )}
+        </>}
       </>}
       {viewMode==='comptes'&&<ComptesView comptes={comptes||[]} contactComptes={contactComptes||[]} contacts={contacts} missions={allMissions||missions} historique={historique} taches={taches} histMissions={histMissions||[]} profile={profile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} selected={selectedCompte?((comptes||[]).find(c=>c.id===selectedCompte.id)||selectedCompte):null} onSelect={c=>{setSelectedCompte(c);setFromContact(null);}} onNavToContact={cid=>{const c=contacts.find(x=>x.id===cid);if(c)setSelected(c);}} fromContact={fromContact} onBackToContact={()=>{setSelected(fromContact);setSelectedCompte(null);setFromContact(null);setViewMode('contacts');}} onEditCompte={setEditingCompte} onDeleteCompte={setDeletingCompte}/>}
-      {selected&&<ContactDetail contact={selected} contacts={contacts||[]} historique={historique} taches={taches} missions={missions} besoins={besoins} comptes={comptes||[]} contactComptes={contactComptes||[]} profile={profile} allProfiles={allProfiles} fromCompte={viewMode==='comptes'?selectedCompte:null} onRefresh={()=>{onRefresh();setSelected(null);}} onClose={()=>setSelected(null)} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache} onNavToCompte={cid=>{const cmpt=(comptes||[]).find(x=>x.id===cid);if(cmpt){setFromContact(selected);setSelected(null);setSelectedCompte(cmpt);setViewMode('comptes');}}}/>}
+      {selected&&<ContactDetail contact={selected} contacts={contacts||[]} historique={historique} taches={taches} missions={missions} besoins={besoins} comptes={comptes||[]} contactComptes={contactComptes||[]} profile={profile} allProfiles={allProfiles} fromCompte={viewMode==='comptes'?selectedCompte:null} dropIntent={dropIntent} onRefresh={()=>{onRefresh();setSelected(null);setDropIntent(null);}} onClose={()=>{setSelected(null);setDropIntent(null);}} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache} onNavToCompte={cid=>{const cmpt=(comptes||[]).find(x=>x.id===cid);if(cmpt){setFromContact(selected);setSelected(null);setSelectedCompte(cmpt);setViewMode('comptes');}}}/>}
       {showAdd&&<AddContactModal contacts={contacts||[]} profile={profile} allProfiles={allProfiles} comptes={comptes||[]} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
       {showAddCompte&&<CompteFormModal compte={null} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAddCompte(false)} onSaved={()=>{setShowAddCompte(false);onRefresh();}}/>}
       {editingCompte&&<CompteFormModal compte={editingCompte} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingCompte(null)} onSaved={()=>{setEditingCompte(null);onRefresh();}}/>}
