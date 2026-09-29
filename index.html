@@ -4330,9 +4330,17 @@ function ProspectsKanban({ contacts, onCardClick, onDrop }) {
   </>);
 }
 
+// Onglet au démarrage « Prospects » (préférence default_tab='prospects_pipeline') : on ouvre
+// l'onglet Contacts filtré sur Prospect, UNE fois. Les ouvertures suivantes de l'onglet Contacts
+// retombent sur le filtre statut habituel, sinon on ne pourrait plus revenir aux contacts.
+var _demarrageSurProspects = false;
+function consommerDemarrageSurProspects() {
+  var v = _demarrageSurProspects; _demarrageSurProspects = false; return v;
+}
+
 function TabProspects({ contacts, contactMap, historique, taches, histMissions, missions, allMissions, besoins, comptes, contactComptes, compteMap, profile, allProfiles, commerciauxParAgence, onRefresh, navContactId, navContactKey, navEtape, onNavEtapeConsumed, navCompteId, navCompteKey, onNavToBesoin, onNavToMission, onNavToTache, prefs }) {
   const prefResp=prefs?.contacts_filter_responsable==='moi'?profile.nom:(prefs?.contacts_filter_responsable==='all'?'':(prefs?.filter_responsable==='moi'?profile.nom:(prefs?.filter_responsable||'')));
-  const prefStatut=prefs?.contacts_filter_statut&&prefs.contacts_filter_statut!=='all'?prefs.contacts_filter_statut:'';
+  const prefStatut=consommerDemarrageSurProspects()?'Prospect':(prefs?.contacts_filter_statut&&prefs.contacts_filter_statut!=='all'?prefs.contacts_filter_statut:'');
   const [search,setSearch]=useState(''); const [filterStatut,setFilterStatut]=useState(prefStatut);
   const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState(prefResp);
   const [filterAgence,setFilterAgence]=useState('');
@@ -7825,7 +7833,7 @@ function AdminPanel({ orgDefaults, allProfiles, profile, onSave }) {
   var [tdbChart, setTdbChart] = useState('ca');
 
   var AGENCES = ['Lyon', 'Paris', 'Bordeaux', 'Nantes'];
-  var TAB_OPTIONS = [{v:'taches',l:'Tâches'},{v:'agence',l:'Agence'},{v:'prospects',l:'Contacts'},{v:'prospection',l:'Prospection'},{v:'besoins',l:'Besoins'},{v:'pipe',l:'Pipe'},{v:'tdb',l:'Missions'},{v:'historique',l:'Historique'}];
+  var TAB_OPTIONS = [{v:'taches',l:'Tâches'},{v:'agence',l:'Agence'},{v:'prospects',l:'Contacts'},{v:'prospects_pipeline',l:'Prospects'},{v:'prospection',l:'Prospection'},{v:'besoins',l:'Besoins'},{v:'pipe',l:'Pipe'},{v:'tdb',l:'Missions'},{v:'historique',l:'Historique'}];
 
   function loadFromOrgDefaults(s, sv) {
     var row = null;
@@ -10823,7 +10831,7 @@ function PreferencesPanel({ prefs, onSave, profileNom, isPartner }) {
     setFiltContactsStatut(o.contacts_filter_statut);setFiltContactsResp(o.contacts_filter_responsable);setFiltTachesEcheance(o.taches_filter_echeance);setFiltPipeResp(o.pipe_filter_responsable);setProspectionFocus(o.prospection_focus_mode);
   };
 
-  const TAB_OPTIONS=[{v:'taches',l:'Tâches'},{v:'agence',l:'Agence'},{v:'prospects',l:'Contacts'},{v:'prospection',l:'Prospection'},{v:'besoins',l:'Besoins'},{v:'pipe',l:'Pipe'},{v:'tdb',l:'Missions'},{v:'historique',l:'Historique'},{v:'jules',l:'Jules'}];
+  const TAB_OPTIONS=[{v:'taches',l:'Tâches'},{v:'agence',l:'Agence'},{v:'prospects',l:'Contacts'},{v:'prospects_pipeline',l:'Prospects'},{v:'prospection',l:'Prospection'},{v:'besoins',l:'Besoins'},{v:'pipe',l:'Pipe'},{v:'tdb',l:'Missions'},{v:'historique',l:'Historique'},{v:'jules',l:'Jules'}];
   const AGENCES=['Lyon','Paris','Bordeaux','Nantes'];
 
   const selectStyle={appearance:'none',padding:'9px 36px 9px 12px',border:'1px solid #e2e8f0',borderRadius:9,fontSize:'13.5px',fontWeight:500,color:'#1e293b',background:'white url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 12 12\'%3E%3Cpath d=\'M3 4.5L6 7.5L9 4.5\' fill=\'none\' stroke=\'%2394a3b8\' stroke-width=\'1.5\' stroke-linecap=\'round\'/%3E%3C/svg%3E") no-repeat right 12px center',boxShadow:'0 1px 2px rgba(0,0,0,.04)',width:'100%',outline:'none'};
@@ -10850,7 +10858,7 @@ function PreferencesPanel({ prefs, onSave, profileNom, isPartner }) {
         {secNav&&<div className="mt-4">
           <label className="block text-sm font-medium text-carbon mb-1.5">Onglet au démarrage</label>
           <select value={defaultTab} onChange={e=>setDefaultTab(e.target.value)} style={selectStyle}>
-            {TAB_OPTIONS.filter(o=>!isPartner||PARTNER_TABS.includes(o.v)).map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+            {TAB_OPTIONS.filter(o=>!isPartner||PARTNER_TABS.includes(o.v==='prospects_pipeline'?'prospects':o.v)).map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
           </select>
           <p className="text-xs text-neutral-300 mt-1.5">L'onglet affiché dès que vous ouvrez le CRM</p>
         </div>}
@@ -12373,7 +12381,7 @@ function App() {
       setProfile(p);
       if(p){
         setTimeout(function(){loadAchievements(p.nom).then(function(a){setAchievements(a);});},2000);
-        if(!initialTabSetRef.current&&!julesDeepLink&&p.preferences&&p.preferences.default_tab){setTab(p.preferences.default_tab);initialTabSetRef.current=true;}
+        if(!initialTabSetRef.current&&!julesDeepLink&&p.preferences&&p.preferences.default_tab){var _dt=p.preferences.default_tab;if(_dt==='prospects_pipeline'){_demarrageSurProspects=true;_dt='prospects';}setTab(_dt);initialTabSetRef.current=true;}
         setPrefs(p.preferences||{});
       } else {
         setPrefs({});
