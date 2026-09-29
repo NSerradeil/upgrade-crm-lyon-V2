@@ -64,7 +64,7 @@ test('refus : la fiche liee passe En veille a 6 mois et une ligne d historique e
   assert.equal(f.tables.contacts[0].etape_prospect, 'En veille');
   assert.equal(f.tables.contacts[0].prochaine_action_date, '2027-03-29T09:00:00+02:00');
   assert.deepEqual(f.tables.historique_actions, [{ id_prospect: 7, date: '2026-09-29', type_action: 'LinkedIn',
-    details: 'Campagne Prospection DSI Lyon : refus (sortie par Nicolas Serradeil) · étape → En veille', responsable: 'Nicolas Serradeil' }]);
+    details: 'Campagne Prospection DSI Lyon : refus (le 29/09/2026), sortie par Nicolas Serradeil · étape → En veille', responsable: 'Nicolas Serradeil' }]);
 });
 
 test('ne plus contacter : Ne pas recontacter pose directement (Nicolas decide) et taches de prospection annulees', async () => {

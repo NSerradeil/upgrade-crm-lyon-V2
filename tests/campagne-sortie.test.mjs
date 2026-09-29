@@ -52,7 +52,7 @@ test('refus : En veille, reveil a 6 mois 09h00 avec decalage, detail avec l etap
   assert.equal(p.patch.etape_prospect, 'En veille');
   assert.equal(p.patch.prochaine_action_date, '2027-03-29T09:00:00+02:00');
   assert.equal(p.patch.prochaine_action_libelle, 'Réveil prospect');
-  assert.equal(p.detail, 'Campagne Prospection DSI Lyon : refus (sortie par Nicolas Serradeil) · étape → En veille');
+  assert.equal(p.detail, 'Campagne Prospection DSI Lyon : refus (le 29/09/2026), sortie par Nicolas Serradeil · étape → En veille');
   assert.equal(p.tache, null); assert.equal(p.fermeTaches, false);
 });
 
@@ -85,11 +85,40 @@ test('pas le bon profil : Perdu, motif Pas le bon interlocuteur, taches fermees'
 test('autre : historique seul ; doublon : rien a ecrire', () => {
   const autre = campagneSortiePlan('autre', P('Contacté'), CTX);
   assert.equal(autre.patch, null);
-  assert.equal(autre.detail, 'Campagne Prospection DSI Lyon : sortie de campagne (sortie par Nicolas Serradeil)');
+  assert.equal(autre.detail, 'Campagne Prospection DSI Lyon : sortie de campagne (le 29/09/2026), sortie par Nicolas Serradeil');
   assert.equal(campagneSortiePlan('doublon', P('Contacté'), CTX).detail, null);
 });
 
 test('aucun tiret cadratin ni demi-cadratin dans le code ajoute', () => {
   const src = ['CAMPAGNE_LIBELLES_SORTIE', 'campagneEffetSortie', 'campagneJourOuvreSuivant', 'campagneSortiePlan'].map(extrait).join('\n');
   assert.doesNotMatch(src, /[–—]/);
+});
+
+// Formule du MCP repliquee (upgrade-crm-mcp-wt-campagnes) : server/campagne-crm.mjs:152-157 (texteEvenement,
+// cas non mail/appel : `Campagne ${campagne} : ${l} (le ${fmtJour(dateParis(quand))})`), server/campagne-rules.mjs:12-13
+// (LIBELLES_SORTIE), :48-56 (dateParis = jour Europe/Paris, fmtJour = JJ/MM/AAAA). Le MCP cherche son temoin
+// d'idempotence par prefixe (campagne-crm.mjs:~233, details like `${texte}*`).
+const MCP_LIBELLES_SORTIE = { converti: 'RDV pris', refus: 'refus', silence: 'fin des relances sans réponse',
+  profil: 'pas le bon profil', npc: 'ne me contactez plus', doublon: 'doublon', autre: 'sortie de campagne' };
+const mcpDateParis = (instant) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(instant));
+const mcpFmtJour = (ymd) => { const [y, m, d] = ymd.slice(0, 10).split('-'); return `${d}/${m}/${y}`; };
+const mcpTexteSortie = (motif, campagne, instant) =>
+  `Campagne ${campagne} : ${MCP_LIBELLES_SORTIE[motif] || MCP_LIBELLES_SORTIE.autre} (le ${mcpFmtJour(mcpDateParis(instant))})`;
+
+test('la ligne de sortie manuelle commence exactement comme celle du MCP (temoin d idempotence)', () => {
+  assert.deepEqual(API.CAMPAGNE_LIBELLES_SORTIE, MCP_LIBELLES_SORTIE);
+  // 23h30 UTC le 29/09 = 01h30 le 30/09 a Paris : le jour de reference est le jour Paris
+  const instant = '2026-09-29T23:30:00Z';
+  const aujourdhui = mcpDateParis(instant);
+  assert.equal(aujourdhui, '2026-09-30');
+  for (const motif of Object.keys(MCP_LIBELLES_SORTIE)) {
+    const p = campagneSortiePlan(motif, P('Contacté'), { ...CTX, aujourdhui });
+    if (!p.detail) continue;   // aucun effet sur la fiche : pas de ligne
+    const attendu = mcpTexteSortie(motif, CTX.campagne, instant);
+    assert.ok(p.detail.startsWith(attendu), `${motif} : ${p.detail}`);
+    assert.ok(p.detail.startsWith(attendu + ', sortie par Nicolas Serradeil'), motif);
+    assert.ok(!/[\u2013\u2014]/.test(p.detail), motif);
+  }
+  const refus = campagneSortiePlan('refus', P('Contacté'), { ...CTX, aujourdhui });
+  assert.equal(refus.detail, 'Campagne Prospection DSI Lyon : refus (le 30/09/2026), sortie par Nicolas Serradeil · étape → En veille');
 });

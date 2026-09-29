@@ -569,15 +569,16 @@ function campagneJourOuvreSuivant(aujourdhui) {
 // Plan d'une sortie manuelle depuis le cockpit (Nicolas decide : les sorties qui passent par son GO
 // cote Jules s'appliquent ici directement). ctx = { campagne, aujourdhui (YYYY-MM-DD), responsable,
 // precision }. Rend { effet, patch, tache, fermeTaches, detail } ; detail null = rien a ecrire.
-// Le detail commence comme la ligne d'historique du MCP (« Campagne <titre> : <libelle> ») : un
-// evenement rejoue ensuite par Jules retrouve cette ligne et ne la double pas.
+// Le detail commence exactement comme la ligne d'historique du MCP (« Campagne <titre> : <libelle> (le JJ/MM/AAAA) »,
+// jour Paris) : le temoin d'idempotence du MCP, par prefixe, la retrouve et ne double pas la ligne.
 function campagneSortiePlan(motif, contact, ctx) {
   ctx = ctx || {};
   var e = campagneEffetSortie(motif, contact);
   var plan = { effet: e, patch: null, tache: null, fermeTaches: false, detail: null };
   if (e.action === 'rien') return plan;
+  var jf = String(ctx.aujourdhui || '').slice(0, 10).split('-');   // YYYY-MM-DD (jour Paris) -> JJ/MM/AAAA, comme fmtJour du MCP
   var base = 'Campagne ' + (ctx.campagne || '') + ' : ' + (CAMPAGNE_LIBELLES_SORTIE[motif] || CAMPAGNE_LIBELLES_SORTIE.autre)
-    + ' (sortie par ' + (ctx.responsable || 'Nicolas') + ')';
+    + ' (le ' + jf[2] + '/' + jf[1] + '/' + jf[0] + '), sortie par ' + (ctx.responsable || 'Nicolas');
   if (e.action === 'historique') { plan.detail = base; return plan; }
   var precision = ctx.precision || null;
   if (e.etape === 'En veille') {
