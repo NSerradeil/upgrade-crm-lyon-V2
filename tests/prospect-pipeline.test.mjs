@@ -25,7 +25,7 @@ const NOMS = ['DEFAULT_TASK_TIME', 'combineDT', 'PROSPECT_ETAPES', 'PROSPECT_ETA
               'prospectSurLeBoard', 'prospectTacheEstProspection', 'etapeDepuisResultatAppel',
               'prospectPatchDepuisAppel', 'prospectRepartitionBoard', 'prospectEtapeFermeTaches',
               'prospectTacheBoucleEtape', 'PROSPECT_FILTRE_ACTIFS', 'prospectSectionsListe',
-              'prospectDerniereActionMap', 'prospectDerniereActionTexte'];
+              'prospectDerniereActionMap', 'prospectDerniereActionTexte', 'prospectSectionsVisibles'];
 const src = NOMS.map(extrait).join('\n');
 const API = new Function(`${src}\nreturn {${NOMS.join(',')}};`)();
 const { PROSPECT_ETAPES, PROSPECT_ETAPES_ACTIVES, PROSPECT_ETAPES_SORTIE,
@@ -35,7 +35,7 @@ const { PROSPECT_ETAPES, PROSPECT_ETAPES_ACTIVES, PROSPECT_ETAPES_SORTIE,
         prospectSurLeBoard, prospectTacheEstProspection, etapeDepuisResultatAppel,
         prospectPatchDepuisAppel, prospectRepartitionBoard, prospectEtapeFermeTaches,
         prospectTacheBoucleEtape, PROSPECT_FILTRE_ACTIFS, prospectSectionsListe,
-        prospectDerniereActionMap, prospectDerniereActionTexte } = API;
+        prospectDerniereActionMap, prospectDerniereActionTexte, prospectSectionsVisibles } = API;
 
 test('les 8 etapes, dans l ordre, avec les accents exacts', () => {
   assert.deepEqual(PROSPECT_ETAPES, ['À contacter', 'Contacté', 'En discussion',
@@ -530,4 +530,14 @@ test('liste: contact sans historique, et texte de derniere action', () => {
   assert.equal(prospectDerniereActionTexte({ type_action: 'Appel', date: '2026-09-20', details: 'Ligne 1\n  ligne 2' }), 'Appel · 20/09 · Ligne 1 ligne 2');
   assert.equal(prospectDerniereActionTexte({ type_action: 'Mail', date: '2026-09-20' }), 'Mail · 20/09');
   assert.ok(!/[—–]/.test(prospectDerniereActionTexte(undefined)));
+});
+
+test('liste: pagination = max N cartes au total, dans l ordre des sections, comptes sur la liste complete', () => {
+  const cs = [cl(1,'À contacter'), cl(2,'À contacter'), cl(3,'À contacter'), cl(4,'Contacté'), cl(5,'Contacté')];
+  const secs = prospectSectionsListe(cs, PROSPECT_FILTRE_ACTIFS, NOW_L);
+  const v = prospectSectionsVisibles(secs, 4);
+  assert.deepEqual(v.map(s => [s.etape, s.contacts.length, s.visibles.length]), [['À contacter',3,3],['Contacté',2,1]]);
+  const v2 = prospectSectionsVisibles(secs, 2);
+  assert.deepEqual(v2.map(s => [s.etape, s.contacts.length, s.visibles.length]), [['À contacter',3,2]]);
+  assert.equal(prospectSectionsVisibles(secs, 200).reduce((n, s) => n + s.visibles.length, 0), 5);
 });

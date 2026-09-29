@@ -305,6 +305,19 @@ function prospectSectionsListe(contacts, filtre, now) {
   return out;
 }
 
+// Pagination de la vue cartes : au plus `max` cartes au total, dans l'ordre des sections. `contacts` reste
+// la liste complete (compteurs), `visibles` la tranche affichee. Une section sans carte visible est omise.
+function prospectSectionsVisibles(sections, max) {
+  var reste = max, out = [];
+  (sections || []).forEach(function(sec) {
+    if (reste <= 0) return;
+    var v = sec.contacts.slice(0, reste);
+    reste -= v.length;
+    out.push({ etape: sec.etape, contacts: sec.contacts, reveil: sec.reveil, visibles: v });
+  });
+  return out;
+}
+
 // Derniere action de l'historique par contact, calculee une fois. Plus recente par date, a egalite l'id le plus eleve.
 function prospectDerniereActionMap(historique) {
   var m = {};
@@ -4420,7 +4433,7 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
     return rows;
   },[contacts,besoins,search,filterStatut,filterPeriode,filterResp,filterAgence,filterMine,profile.nom,sortCol,sortDir,primaryCompteByContact,compteMap]);
 
-  const nbProspects=useMemo(()=>contacts.filter(c=>c.statut==='Prospect').length,[contacts]);
+  const nbProspects=useMemo(()=>contacts.filter(c=>c.statut==='Prospect'&&prospectSurLeBoard(c,besoins)).length,[contacts,besoins]);
   // Vue liste en cartes : sections par etape sur la liste DEJA filtree (recherche, resp, agence, mine, board).
   const sectionsListe=useMemo(()=>(filterStatut==='Prospect'&&prospectView==='list')?prospectSectionsListe(filtered,prospectFiltre):[],[filtered,filterStatut,prospectView,prospectFiltre]);
   const nbListe=sectionsListe.reduce((n,sec)=>n+sec.contacts.length,0);
@@ -4429,8 +4442,9 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
   // Virtualisation liste contacts : n'afficher que visibleCount lignes (anti-crash mobile). La recherche/tri restent sur TOUT le dataset.
   const PAGE_SIZE = (typeof window!=='undefined' && window.innerWidth<768) ? 50 : 200;
   const [visibleCount,setVisibleCount] = useState(PAGE_SIZE);
-  useEffect(()=>{ setVisibleCount(PAGE_SIZE); },[search,filterStatut,filterPeriode,filterResp,filterAgence,filterMine,sortCol,sortDir,viewMode]);
+  useEffect(()=>{ setVisibleCount(PAGE_SIZE); },[search,filterStatut,filterPeriode,filterResp,filterAgence,filterMine,sortCol,sortDir,viewMode,prospectFiltre,prospectView]);
   const visibleContacts = filtered.slice(0,visibleCount);
+  const sectionsAffichees=useMemo(()=>prospectSectionsVisibles(sectionsListe,visibleCount),[sectionsListe,visibleCount]);
   const thCls="px-4 py-3 text-left font-medium cursor-pointer select-none hover:text-azure-100 whitespace-nowrap";
   return (
     <div className="tab-content">
@@ -4494,7 +4508,7 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
           </div>
           <div className="text-xs text-neutral-300 mb-3">{nbListe} prospect{nbListe>1?'s':''}{prospectFiltre===PROSPECT_FILTRE_ACTIFS?' actif'+(nbListe>1?'s':''):''}</div>
           <div className="space-y-6">
-            {sectionsListe.map(sec=>{
+            {sectionsAffichees.map(sec=>{
               const bc=PROSPECT_BADGE_COLORS[sec.etape]||{bg:'#E4E4E6',color:'#1C1F35'};
               return (
                 <div key={sec.etape}>
@@ -4502,7 +4516,7 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
                     <span style={{backgroundColor:bc.bg,color:bc.color,padding:'2px 8px',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em',whiteSpace:'nowrap'}}>{sec.etape}</span>
                     <span className="text-xs font-bold text-slate">{sec.contacts.length}</span>
                   </div>
-                  <div className="space-y-2">{sec.contacts.map(c=>{
+                  <div className="space-y-2">{sec.visibles.map(c=>{
                     const retard=prospectEnRetard(c);
                     const dernier=derniereActionMap[c.id];
                     return (
@@ -4528,6 +4542,13 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
               );
             })}
             {nbListe===0&&<div className="text-center py-16"><div className="font-bold text-midnight text-lg mb-1">Aucun prospect</div><div className="text-sm text-neutral-300">Aucun prospect ne correspond à ces filtres.</div></div>}
+            {nbListe>visibleCount&&(
+              <div className="flex justify-center">
+                <button onClick={()=>setVisibleCount(v=>v+PAGE_SIZE)} className="px-4 py-2 text-sm font-medium border-2 border-neutral-200 text-carbon hover:border-midnight transition-colors">
+                  Charger plus ({nbListe-visibleCount} restant{nbListe-visibleCount>1?'s':''})
+                </button>
+              </div>
+            )}
           </div>
         </>
         : <>
