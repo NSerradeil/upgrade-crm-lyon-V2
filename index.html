@@ -2421,6 +2421,22 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
     }
     if(onIntentConsumed) onIntentConsumed();
   },[dropIntent]);
+  // Levee du refus pour un contact qui n'est PAS un Prospect (pas de stepper : Client, Candidat, Freelance).
+  // Meme protection que le stepper : responsable ou admin seulement (canDelete). L'etape revient a null.
+  const handleLeverNpc=async()=>{
+    if(!canDelete){ toast('Seul le responsable du contact ou un administrateur peut le remettre en jeu','error'); return; }
+    setEtapeSaving(true);
+    try{
+      const {error}=await sb.from('contacts').update({etape_prospect:null,motif_perte_precision:null,updated_at:new Date().toISOString()}).eq('id',contact.id);
+      if(error){toast('Erreur: '+error.message,'error');return;}
+      const {error:errHist}=await sb.from('historique_actions').insert({id_prospect:contact.id,date:getToday(),
+        type_action:'Changement d\'étape',details:'Refus de recontact levé par '+profile.nom,responsable:profile.nom});
+      if(errHist){toast('Refus levé, historique non tracé','error');}
+      else{toast('Refus de recontact levé');}
+      onRefresh();
+    }catch(e){ toast('Erreur: '+(e&&e.message||e),'error'); }
+    finally{ setEtapeSaving(false); }
+  };
   const handleEtapeConfirm=async(etape,form)=>{
     // Dernier rempart, au point d'ecriture unique : quel que soit le chemin (stepper, drop kanban,
     // tache), personne d'autre que le responsable ou un admin ne sort un contact de « Ne pas recontacter ».
@@ -2504,6 +2520,9 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
             {contact.motif_perte_precision&&<div style={{fontWeight:400,fontSize:11,marginTop:2}}>{contact.motif_perte_precision}</div>}
             {contact.statut==='Prospect'&&<div style={{fontWeight:400,fontSize:10,opacity:0.8}}>Seul le responsable du contact ou un administrateur peut le remettre en jeu (étapes ci-dessous).</div>}
           </div>
+          {contact.statut!=='Prospect'&&<button onClick={handleLeverNpc} disabled={!canDelete||etapeSaving}
+            title={!canDelete?'Seul le responsable du contact ou un administrateur peut remettre ce contact en jeu':'Remettre ce contact en jeu'}
+            style={{fontSize:10,background:'rgba(255,255,255,0.2)',border:'1px solid rgba(255,255,255,0.4)',color:'#fff',padding:'4px 8px',cursor:(!canDelete||etapeSaving)?'not-allowed':'pointer',opacity:(!canDelete||etapeSaving)?0.5:1,borderRadius:0,fontWeight:700,fontFamily:'Outfit,sans-serif',textTransform:'uppercase',letterSpacing:'0.03em'}}>Lever le refus</button>}
         </div>
       )}
       {contact.statut==='Prospect'&&<>
