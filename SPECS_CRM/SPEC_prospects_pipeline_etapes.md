@@ -102,9 +102,16 @@ update contacts set etape_prospect = 'À contacter'
   where statut = 'Prospect' and etape_prospect is null;
 
 -- Reprise du flag ne_pas_recontacter (supprimé en migration 52).
+-- Volontairement SANS filtre sur statut : un contact qui portait le flag puis est passé Client
+-- ou Candidat doit garder son refus d'être recontacté (RGPD). Le board ne lit que les prospects,
+-- donc aucun effet de bord. La date de la demande est conservée dans motif_perte_precision.
 update contacts set etape_prospect = 'Ne pas recontacter',
-                    motif_perte_precision = coalesce(motif_perte_precision, ne_pas_recontacter_note)
-  where statut = 'Prospect' and ne_pas_recontacter = true;
+                    motif_perte_precision = coalesce(motif_perte_precision,
+                      case when ne_pas_recontacter_date is not null
+                           then 'Depuis le ' || to_char(ne_pas_recontacter_date, 'DD/MM/YYYY')
+                                || coalesce(' : ' || ne_pas_recontacter_note, '')
+                           else ne_pas_recontacter_note end)
+  where ne_pas_recontacter = true;
 
 create index if not exists idx_contacts_etape_prospect
   on contacts (etape_prospect) where statut = 'Prospect';
