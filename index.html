@@ -282,6 +282,23 @@ function prospectReveilPreset(base, preset) {
   d.setUTCDate(Math.min(jour, dernier));
   return d.toISOString().slice(0, 10);
 }
+
+function prospectPatchEtape(etape, form) {
+  form = form || {};
+  var r = prospectEtapeRequiert(etape);
+  var garde = r.date;   // seules les etapes qui exigent une date la conservent
+  return {
+    etape_prospect: etape,
+    prochaine_action_date: garde ? prospectTacheEcheance(form.prochaine_action_date) : null,
+    prochaine_action_libelle: garde
+      ? (form.prochaine_action_libelle || prospectTacheLibelle(etape))
+      : null,
+    motif_perte: etape === 'Perdu' ? (form.motif_perte || null) : null,
+    motif_perte_precision: (etape === 'Perdu' || etape === 'Ne pas recontacter')
+      ? (form.motif_perte_precision || null) : null,
+    updated_at: new Date().toISOString()
+  };
+}
 const TYPES_ACTION     = ['Tel','Mail envoyé','Mail reçu','RDV','LinkedIn','Note interne','Autre'];
 const STATUTS_ENTRETIEN = ['candidat','freelance','prestataire'];
 const isEntretienStatut = s => s && STATUTS_ENTRETIEN.includes(s.toLowerCase());

@@ -18,13 +18,13 @@ function extrait(nom) {
 const NOMS = ['PROSPECT_ETAPES', 'PROSPECT_ETAPES_ACTIVES', 'PROSPECT_ETAPES_SORTIE',
               'PROSPECT_MOTIFS_PERTE', 'prospectEtapeOuDefaut', 'prospectEtapeRequiert',
               'prospectCanSubmit', 'prospectEnRetard', 'prospectTacheLibelle',
-              'prospectTacheEcheance', 'prospectReveilPreset'];
+              'prospectTacheEcheance', 'prospectReveilPreset', 'prospectPatchEtape'];
 const src = NOMS.map(extrait).join('\n');
 const API = new Function(`${src}\nreturn {${NOMS.join(',')}};`)();
 const { PROSPECT_ETAPES, PROSPECT_ETAPES_ACTIVES, PROSPECT_ETAPES_SORTIE,
         prospectEtapeOuDefaut, prospectEtapeRequiert, prospectCanSubmit,
         prospectEnRetard, prospectTacheLibelle, prospectTacheEcheance,
-        prospectReveilPreset } = API;
+        prospectReveilPreset, prospectPatchEtape } = API;
 
 test('les 8 etapes, dans l ordre, avec les accents exacts', () => {
   assert.deepEqual(PROSPECT_ETAPES, ['À contacter', 'Contacté', 'En discussion',
@@ -93,4 +93,41 @@ test('les presets de reveil tombent a 3 mois, 6 mois, 1 an', () => {
   assert.equal(prospectReveilPreset('2026-09-29', '1a'), '2027-09-29');
   // fin de mois : le 31 aout + 6 mois ne doit pas deborder sur mars
   assert.equal(prospectReveilPreset('2026-08-31', '6m'), '2027-02-28');
+});
+
+test('le patch porte la date et le libelle pour une etape active', () => {
+  const p = prospectPatchEtape('Contacté', { prochaine_action_date: '2026-10-05',
+                                             prochaine_action_libelle: 'Rappeler le matin' });
+  assert.equal(p.etape_prospect, 'Contacté');
+  assert.match(p.prochaine_action_date, /^2026-10-05T09:00/);
+  assert.equal(p.prochaine_action_libelle, 'Rappeler le matin');
+  assert.equal(p.motif_perte, null);
+});
+
+test('le patch d une perte porte le motif et efface la prochaine action', () => {
+  const p = prospectPatchEtape('Perdu', { motif_perte: 'Choix concurrent', motif_perte_precision: 'Devoteam' });
+  assert.equal(p.etape_prospect, 'Perdu');
+  assert.equal(p.motif_perte, 'Choix concurrent');
+  assert.equal(p.motif_perte_precision, 'Devoteam');
+  assert.equal(p.prochaine_action_date, null);
+  assert.equal(p.prochaine_action_libelle, null);
+});
+
+test('REVIEW FOCUS 3 — revenir en « A contacter » nettoie motif et action periemes', () => {
+  const p = prospectPatchEtape('À contacter', {});
+  assert.equal(p.etape_prospect, 'À contacter');
+  assert.equal(p.motif_perte, null);
+  assert.equal(p.motif_perte_precision, null);
+  assert.equal(p.prochaine_action_date, null);
+  assert.equal(p.prochaine_action_libelle, null);
+});
+
+test('le patch de mise en veille porte la date de reveil comme prochaine action', () => {
+  const p = prospectPatchEtape('En veille', { prochaine_action_date: '2027-03-29' });
+  assert.match(p.prochaine_action_date, /^2027-03-29T09:00/);
+  assert.equal(p.prochaine_action_libelle, 'Réveil prospect');
+});
+
+test('le patch porte toujours updated_at', () => {
+  assert.ok(prospectPatchEtape('À contacter', {}).updated_at);
 });
