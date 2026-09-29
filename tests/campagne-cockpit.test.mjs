@@ -21,6 +21,7 @@ function extrait(nom) {
 const NOMS = ['DEFAULT_TASK_TIME', 'combineDT', 'PROSPECT_ETAPES', 'PROSPECT_ETAPES_ACTIVES', 'PROSPECT_ETAPES_SORTIE',
               'prospectEtapeOuDefaut', 'prospectEtapeRequiert', 'prospectTacheLibelle', 'prospectTacheEcheance',
               'prospectReveilPreset', 'prospectPatchEtape', 'prospectTachePayload', 'prospectAnnulerTachesOuvertes',
+              'prospectEntreeNpc', 'prospectStopperSequencesLiees',
               'CAMPAGNE_MOTIF_PERTE_PROFIL', 'CAMPAGNE_LIBELLES_SORTIE', 'campagneEstProspection', 'campagneEffetSortie',
               'campagneJourOuvreSuivant', 'campagneSortiePlan', 'julesSortieCampagneCrm', 'JULES_RAISONS_SORTIE'];
 const SRC = NOMS.map(extrait).join('\n');
@@ -73,6 +74,20 @@ test('ne plus contacter : Ne pas recontacter pose directement (Nicolas decide) e
   assert.equal(f.tables.contacts[0].etape_prospect, 'Ne pas recontacter');
   assert.equal(f.tables.contacts[0].motif_perte_precision, 'a demande a ne plus etre sollicite');
   assert.equal(f.tables.taches[0].statut, 'annule');
+});
+
+test('ne plus contacter : les autres sequences liees a la fiche sont arretees (I3), une fiche deja NPC ne les touche pas', async () => {
+  const f = fauxSb({ contacts: [JEAN('Contacté')], agent_sequences: [
+    { id: 'S2', contact_id: 7, statut: 'active', next_due_at: '2026-10-01T08:00:00Z', notes: null },
+    { id: 'S3', contact_id: 8, statut: 'active', next_due_at: '2026-10-01T08:00:00Z', notes: null }] });
+  const plan = await charge(f.sb).julesSortieCampagneCrm(SEQ, 'npc', PROSPECTION, 'Nicolas Serradeil', '');
+  assert.equal(f.tables.agent_sequences[0].statut, 'stopped');
+  assert.equal(f.tables.agent_sequences[0].next_due_at, null);
+  assert.equal(f.tables.agent_sequences[1].statut, 'active');
+  assert.equal(plan.avertissement, undefined);
+  const g = fauxSb({ contacts: [JEAN('Ne pas recontacter')], agent_sequences: [{ id: 'S2', contact_id: 7, statut: 'active', notes: null }] });
+  await charge(g.sb).julesSortieCampagneCrm(SEQ, 'npc', PROSPECTION, 'Nicolas Serradeil', '');
+  assert.equal(g.tables.agent_sequences[0].statut, 'active');
 });
 
 test('converti : tache Confirmer la date du RDV creee, sauf si une tache de prospection est deja ouverte', async () => {

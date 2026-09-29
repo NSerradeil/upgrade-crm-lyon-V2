@@ -492,6 +492,36 @@ async function prospectAnnulerTachesOuvertes(contactId) {
   return { error: res.error || null, annulees: res.error ? 0 : ids.length };
 }
 
+// Entree en « Ne pas recontacter » (et seulement elle) : les sequences de campagne liees a la fiche
+// doivent s'arreter, sinon la relance suivante partirait quand meme. Sortir de NPC n'arrete rien.
+function prospectEntreeNpc(etapeAvant, etapeApres) {
+  return etapeApres === 'Ne pas recontacter' && etapeAvant !== 'Ne pas recontacter';
+}
+
+// Arrete les sequences active / replied / paused liees a la fiche (agent_sequences.contact_id). Retourne
+// { error, arretees }. Base avant la migration 54 (colonne absente) : l'erreur revient en { error }, l'appelant
+// la signale par un avertissement et ne fait jamais echouer l'ecriture de la fiche.
+async function prospectStopperSequencesLiees(contactId) {
+  var lues = await sb.from('agent_sequences').select('id,notes').eq('contact_id', parseInt(contactId)).in('statut', ['active', 'replied', 'paused']);
+  if (lues.error) return { error: lues.error, arretees: 0 };
+  var jour = new Date().toLocaleDateString('fr-FR');
+  var arretees = 0, erreur = null;
+  var lignes = lues.data || [];
+  for (var i = 0; i < lignes.length; i++) {
+    var note = [lignes[i].notes, '[' + jour + '] Arrêt : fiche passée en Ne pas recontacter'].filter(Boolean).join('\n');
+    var r = await sb.from('agent_sequences').update({ statut: 'stopped', next_due_at: null, notes: note }).eq('id', lignes[i].id);
+    if (r.error) erreur = erreur || r.error; else arretees++;
+  }
+  return { error: erreur, arretees: arretees };
+}
+
+// Sortie manuelle « Ne plus contacter » d'une campagne de prospection sans fiche liee : rien ne peut etre
+// pose au CRM, on le dit au lieu de se taire. Retourne le texte du toast, ou null.
+function campagneAvertissementSansFiche(motif, mission, s) {
+  if (motif !== 'npc' || !campagneEstProspection(mission) || (s && s.contact_id)) return null;
+  return 'Aucune fiche liée : CRM non modifié, à poser à la main';
+}
+
 function prospectTachePayload(contact, etape, form, responsable) {
   form = form || {};
   if (!form.creer_tache) return null;
@@ -612,6 +642,7 @@ async function julesSortieCampagneCrm(s, motif, mission, responsable, precision)
   if (lu.error) throw new Error(lu.error.message);
   if (!lu.data) return null;
   var c = lu.data;
+  var etapeAvantSortie = c.etape_prospect || null;
   var qui = responsable || c.responsable;
   // Meme precision par defaut que le MCP quand la sortie donne En veille, pour que les deux cotes
   // ecrivent le meme libelle.
@@ -628,6 +659,10 @@ async function julesSortieCampagneCrm(s, motif, mission, responsable, precision)
   if (plan.fermeTaches) {
     var fermees = await prospectAnnulerTachesOuvertes(c.id);
     if (fermees.error) throw new Error(fermees.error.message);
+  }
+  if (plan.patch && prospectEntreeNpc(etapeAvantSortie, plan.patch.etape_prospect)) {
+    var arret = await prospectStopperSequencesLiees(c.id);
+    if (arret.error) plan.avertissement = 'séquences liées non arrêtées (' + arret.error.message + ')';
   }
   // Historique AVANT la tache : si la creation de la tache echoue, la fiche ne bouge pas sans trace.
   var h = await sb.from('historique_actions').insert({ id_prospect: c.id, date: getToday(), type_action: 'LinkedIn',
@@ -2721,6 +2756,10 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
       if(prospectEtapeFermeTaches(etape)){
         const rAnn=await prospectAnnulerTachesOuvertes(contact.id);
         if(rAnn.error) toast('Étape enregistrée, tâches de prospection ouvertes non annulées','error');
+      }
+      if(prospectEntreeNpc(prospectEtapeOuDefaut(contact),etape)){
+        const rSeq=await prospectStopperSequencesLiees(contact.id);
+        if(rSeq.error) toast('Étape enregistrée, séquences de campagne liées non arrêtées','error');
       }
       const tache=prospectTachePayload(contact,etape,form,profile.nom);
       if(tache){
@@ -9537,6 +9576,9 @@ const julesActions = {
     try {
       const plan = await julesSortieCampagneCrm(s, motif, mission, responsable, texte);
       if (plan && plan.detail) toast('Fiche CRM mise à jour : ' + plan.detail);
+      if (plan && plan.avertissement) toast('Fiche CRM mise à jour, mais ' + plan.avertissement + '. À faire à la main.', 'error');
+      const sansFiche = campagneAvertissementSansFiche(motif, mission, s);
+      if (sansFiche) toast(sansFiche, 'error');
     } catch (e) {
       toast('Sortie enregistrée, mais la fiche CRM n\'a pas été mise à jour : ' + e.message, 'error');
     }
@@ -11982,6 +12024,10 @@ function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDo
           var annT = await prospectAnnulerTachesOuvertes(sc.id);
           if (annT.error) toast('⚠️ Tâches de prospection non annulées pour ' + (sc.prenom||'') + ' ' + sc.nom, 'error');
         }
+        if (!updRes.error && patchAppel && prospectEntreeNpc(prospectEtapeOuDefaut(sc), patchAppel.etape_prospect)) {
+          var stopS = await prospectStopperSequencesLiees(sc.id);
+          if (stopS.error) toast('⚠️ Séquences de campagne non arrêtées pour ' + (sc.prenom||'') + ' ' + sc.nom, 'error');
+        }
       }
     }
 
@@ -12068,6 +12114,10 @@ function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDo
         else if (prospectEtapeFermeTaches(patchNpc.etape_prospect)) {
           var annT2 = await prospectAnnulerTachesOuvertes(pic2.id);
           if (annT2.error) toast('⚠️ Tâches de prospection non annulées pour ' + (pic2.prenom||'') + ' ' + pic2.nom, 'error');
+        }
+        if (!npcRes.error && prospectEntreeNpc(prospectEtapeOuDefaut(pic2), patchNpc.etape_prospect)) {
+          var stopS2 = await prospectStopperSequencesLiees(pic2.id);
+          if (stopS2.error) toast('⚠️ Séquences de campagne non arrêtées pour ' + (pic2.prenom||'') + ' ' + pic2.nom, 'error');
         }
       }
     }
