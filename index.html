@@ -600,6 +600,49 @@ function campagneSortiePlan(motif, contact, ctx) {
   return plan;
 }
 
+// Sortie manuelle d'une personne depuis le cockpit Jules, campagne de prospection : applique a la
+// fiche LIEE (s.contact_id) le plan de campagneSortiePlan. Aucune recherche ni creation de fiche ici :
+// c'est le MCP qui lie et cree. Rend le plan applique, ou null si rien n'etait a faire. Leve une
+// erreur si une ecriture echoue (l'appelant la signale, la sequence reste sortie).
+async function julesSortieCampagneCrm(s, motif, mission, responsable, precision) {
+  if (!campagneEstProspection(mission) || !s || !s.contact_id) return null;
+  var lu = await sb.from('contacts').select('id,prenom,nom,statut,responsable,etape_prospect')
+    .eq('id', parseInt(s.contact_id)).maybeSingle();
+  if (lu.error) throw new Error(lu.error.message);
+  if (!lu.data) return null;
+  var c = lu.data;
+  var qui = responsable || c.responsable;
+  // Meme precision par defaut que le MCP quand la sortie donne En veille, pour que les deux cotes
+  // ecrivent le meme libelle.
+  var defaut = null;
+  if (campagneEffetSortie(motif, c).etape === 'En veille') {
+    defaut = motif === 'silence' ? 'Sans réponse à la campagne ' + mission.titre : 'Refus en campagne ' + mission.titre;
+  }
+  var plan = campagneSortiePlan(motif, c, { campagne: mission.titre, aujourdhui: getToday(), responsable: qui, precision: precision || defaut });
+  if (!plan.detail) return null;
+  if (plan.patch) {
+    var maj = await sb.from('contacts').update(plan.patch).eq('id', c.id);
+    if (maj.error) throw new Error(maj.error.message);
+  }
+  if (plan.fermeTaches) {
+    var fermees = await prospectAnnulerTachesOuvertes(c.id);
+    if (fermees.error) throw new Error(fermees.error.message);
+  }
+  if (plan.tache) {
+    var lues = await sb.from('taches').select('id,statut').eq('contact_id', c.id).like('id', 'tw_prospect_%');
+    if (lues.error) throw new Error(lues.error.message);
+    var ouvertes = (lues.data || []).filter(function(t){ return t.statut !== 'fait' && t.statut !== 'annule'; });
+    if (ouvertes.length === 0) {
+      var cree = await sb.from('taches').insert(plan.tache);
+      if (cree.error) throw new Error(cree.error.message);
+    }
+  }
+  var h = await sb.from('historique_actions').insert({ id_prospect: c.id, date: getToday(), type_action: 'LinkedIn',
+    details: plan.detail, responsable: qui });
+  if (h.error) throw new Error(h.error.message);
+  return plan;
+}
+
 const TYPES_ACTION     = ['Tel','Mail envoyé','Mail reçu','RDV','LinkedIn','Note interne','Autre'];
 const STATUTS_ENTRETIEN = ['candidat','freelance','prestataire'];
 const isEntretienStatut = s => s && STATUTS_ENTRETIEN.includes(s.toLowerCase());
@@ -9465,7 +9508,7 @@ const julesActions = {
   // pareil dans un bilan, et sans elle on ne sait jamais pourquoi un vivier s'est vidé.
   // Converti a son propre statut en base ; tout le reste est un arrêt, distingué par sa
   // raison écrite dans les notes et dans l'événement.
-  async arreterSuivi(s, raison) {
+  async arreterSuivi(s, raison, mission, responsable) {
     const motif = (raison && raison.cle) || 'autre';
     const cible = motif === 'converti' ? 'converted' : 'stopped';
     const texte = (raison && raison.texte) || '';
@@ -9486,6 +9529,15 @@ const julesActions = {
       kind: cible === 'converted' ? 'sequence.converted' : 'sequence.stopped',
       sequence_id:s.id, mission_id:s.mission_id,
       message: s.target_label + ' — ' + libelle + (texte ? ' : ' + texte : '')});
+    // Campagne de prospection (SPEC_campagnes_prospection_etapes.md) : la sortie applique a la fiche
+    // liee la meme correspondance que le MCP. La sequence est deja sortie : un echec CRM ne l'annule
+    // pas, il est signale.
+    try {
+      const plan = await julesSortieCampagneCrm(s, motif, mission, responsable, texte);
+      if (plan && plan.detail) toast('Fiche CRM mise à jour : ' + plan.detail);
+    } catch (e) {
+      toast('Sortie enregistrée, mais la fiche CRM n\'a pas été mise à jour : ' + e.message, 'error');
+    }
   },
   // -- barre de transport d'un suivi (Nicolas 23/09) ------------------------------------
   // Trois gestes de plus que « Sortir », qui existaient dans la tête de Nicolas mais pas
@@ -9599,7 +9651,7 @@ const JULES_SEQ_STATUT_MOT = {
 // agent_tasks n'est pas chargée globalement : une mission peut en porter beaucoup et elles ne
 // servent qu'ici (« le seul endroit où les tâches sont listées », spec §3.4). Lecture à l'ouverture,
 // ce qui borne le trafic du sondage des 30 s.
-function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
+function JulesDetail({ missionId, data, onClose, actions, occupe, discuter, onNavToContact }) {
   const mission = useMemo(()=>(data.missions||[]).find(m=>m.id===missionId),[data.missions,missionId]);
   const [taches,setTaches] = useState(null);
   const [seqOuvert,setSeqOuvert] = useState(null);         // id de la séquence dépliée (Personnes suivies)
@@ -9840,6 +9892,17 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
                             textTransform:'uppercase', letterSpacing:'0.05em', minHeight:32}}>
                     {deplie?'▾ masquer le détail':'▸ voir le détail'}
                   </button>
+                  {/* Fiche CRM liee (SPEC_campagnes_prospection_etapes.md §6.4) : posee par le MCP au
+                      premier vrai contact d'une campagne de prospection. Un clic ouvre la fiche. */}
+                  {s.contact_id&&onNavToContact&&(
+                    <button type="button" onClick={()=>{ onClose(); onNavToContact(s.contact_id); }}
+                      title="Ouvrir la fiche CRM liée à cette personne"
+                      style={{background:'none', border:'2px solid '+JULES_NOIR, borderRadius:0, padding:'4px 8px', cursor:'pointer',
+                              fontFamily:'Outfit, sans-serif', fontSize:11, fontWeight:700, color:JULES_NOIR,
+                              textTransform:'uppercase', letterSpacing:'0.03em', minHeight:32}}>
+                      Fiche CRM
+                    </button>
+                  )}
                   {discuter&&<JulesSlackBtn small label="Discuter"
                     onClick={()=>discuter({kind:'free', ref_id:s.id, mission_id:s.mission_id||mission.id, titre:s.target_label+' — '+mission.titre})}/>}
                   {/* « Sortir » vit sur la ligne d'actions, pas dans l'en-tête (Nicolas 22/09) :
@@ -9920,7 +9983,7 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
       </Field>
       {geste&&geste.geste==='stop'&&<JulesSortirSequence seq={geste.seq} onClose={()=>setGeste(null)}
         saving={occupe===geste.seq.id}
-        onSave={raison=>{ const sq=geste.seq; setGeste(null); actions.arreterSuivi(sq, raison); }}/>}
+        onSave={raison=>{ const sq=geste.seq; setGeste(null); actions.arreterSuivi(sq, raison, mission); }}/>}
       {geste&&geste.geste!=='stop'&&<JulesSeqGeste seq={geste.seq} geste={geste.geste}
         parcours={julesSeqParcours(geste.seq, cfg)} config={cfg}
         onClose={()=>setGeste(null)} saving={occupe===geste.seq.id}
@@ -9951,6 +10014,7 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
 const JULES_RAISONS_SORTIE = [
   {cle:'converti', label:'Converti — RDV pris ou placement', variant:'success'},
   {cle:'refus',    label:'Refus de la personne',             variant:'danger'},
+  {cle:'npc',      label:'Ne plus contacter, à sa demande',  variant:'danger'},
   {cle:'profil',   label:'Pas le bon profil finalement',     variant:'edit'},
   {cle:'silence',  label:'Bout des relances, sans réponse',  variant:'close'},
   {cle:'doublon',  label:'Doublon, déjà suivi ailleurs',     variant:'edit'},
@@ -10547,7 +10611,7 @@ function JulesModifierMission({ mission, onClose, onSave, saving }) {
   );
 }
 
-function TabJules({ profile, prefs, deepLink }) {
+function TabJules({ profile, prefs, deepLink, onNavToContact }) {
   const J = useJulesData();
   const [detailId,setDetailId] = useState(null);
   const [occupe,setOccupe] = useState(null);      // id de l'objet en cours d'écriture
@@ -10647,10 +10711,10 @@ function TabJules({ profile, prefs, deepLink }) {
       {apercu&&<JulesApercuAppro entree={apercu} occupe={occupe} onClose={()=>setApercu(null)}
         onAccorder={approOnAccorder} onAjuster={approOnAjuster}
         onRefuser={approOnRefuser} onRepondre={approOnRepondre} onDiscuter={discuter} events={J.data.events}/>}
-      {detailId&&<JulesDetail missionId={detailId} data={J.data} onClose={()=>setDetailId(null)}
+      {detailId&&<JulesDetail missionId={detailId} data={J.data} onClose={()=>setDetailId(null)} onNavToContact={onNavToContact}
         occupe={occupe} discuter={discuter}
         actions={{basculerPause:m=>agir(m.id,()=>julesActions.basculerPause(m)),
-                  arreterSuivi:s=>agir(s.id,()=>julesActions.arreterSuivi(s)),
+                  arreterSuivi:(s,raison,mission)=>agir(s.id,()=>julesActions.arreterSuivi(s,raison,mission,profile&&profile.nom)),
                   relancerTache:t=>agir(t.id,()=>julesActions.relancerTache(t)),
                   modifier:m=>setAModifier(m),
                   fermer:m=>setAFermer(m)}}/>}
@@ -12766,7 +12830,7 @@ function App() {
         {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} comptes={vComptes} compteMap={compteMap} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToCompte={navToCompte} prefs={prefs}/>}
         {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} contactMap={contactMap} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache}/>}
         {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} missionPeriods={missionPeriods} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navMissionId={navMissionId} navMissionKey={navMissionKey} comptes={vComptes} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache} onNavToCompte={navToCompte} prefs={prefs}/>}
-        {tab==='jules'    &&julesOn&&<TabJules profile={profile} prefs={prefs} deepLink={julesDeepLink}/>}
+        {tab==='jules'    &&julesOn&&<TabJules profile={profile} prefs={prefs} deepLink={julesDeepLink} onNavToContact={navToContact}/>}
         {tab==='settings' &&<TabSettings user={user} profile={activeProfile} taches={vTaches} subTab={settingsSubTab} onSubTabChange={setSettingsSubTab} prefs={prefs} onSavePrefs={viewAs?null:savePrefs} achievements={activeAchievements} viewAs={!!viewAs}/>}
       </div>
       {/* Shortcuts modal */}
