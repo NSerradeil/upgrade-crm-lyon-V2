@@ -511,6 +511,95 @@ function prospectTachePayload(contact, etape, form, responsable) {
     responsable: responsable
   };
 }
+// ═══ Campagnes de prospection de Jules : cf. SPECS_CRM/SPEC_campagnes_prospection_etapes.md ═══
+// La correspondance « sortie d'une personne -> effet sur sa fiche » existe DEUX fois : ici et dans le
+// MCP (server/campagne-rules.mjs, effetSortie). Elle est verrouillee par un jeu de cas commun,
+// tests/fixtures/campagne-sortie-cas.json, en copie identique dans les deux repos.
+const CAMPAGNE_MOTIF_PERTE_PROFIL = 'Pas le bon interlocuteur';
+const CAMPAGNE_LIBELLES_SORTIE = { converti:'RDV pris', refus:'refus', silence:'fin des relances sans réponse', profil:'pas le bon profil', npc:'ne me contactez plus', doublon:'doublon', autre:'sortie de campagne' };
+
+// Seule une campagne au preset prospection EXPLICITE touche au pipeline.
+function campagneEstProspection(mission) {
+  return !!(mission && mission.kind === 'campagne' && mission.config && mission.config.preset === 'prospection');
+}
+
+// { action: 'rien'|'historique'|'etape'|'go', etape, motif_perte, reveil6m } : miroir exact de effetSortie.
+function campagneEffetSortie(motif, contact) {
+  function r(action, etape, motifPerte, reveil) {
+    return { action: action, etape: etape || null, motif_perte: motifPerte || null, reveil6m: !!reveil };
+  }
+  if (!contact) return r('rien');
+  if (contact.etape_prospect === 'Ne pas recontacter') return r('rien');
+  if (motif === 'doublon') return r('rien');
+  if (motif === 'npc') return r('go', 'Ne pas recontacter');
+  if (contact.statut !== 'Prospect') return motif === 'profil' ? r('rien') : r('historique');
+  var etape = prospectEtapeOuDefaut(contact);
+  if (etape === 'Perdu') return r('historique');
+  var rang = PROSPECT_ETAPES_ACTIVES.indexOf(etape);
+  if (motif === 'profil') return rang >= 0 ? r('go', 'Perdu', CAMPAGNE_MOTIF_PERTE_PROFIL) : r('historique');
+  if (motif === 'refus' || motif === 'silence') return r('etape', 'En veille', null, true);
+  if (motif === 'converti') {
+    return (etape === 'En veille' || (rang >= 0 && rang < PROSPECT_ETAPES_ACTIVES.indexOf('RDV planifié')))
+      ? r('etape', 'RDV planifié') : r('historique');
+  }
+  return r('historique');
+}
+
+// Jour ouvre suivant une date YYYY-MM-DD : ni samedi, ni dimanche, ni ferie francais (fixes, lundi de
+// Paques, Ascension, lundi de Pentecote). Meme calcul que jourOuvreSuivant du MCP.
+function campagneJourOuvreSuivant(aujourdhui) {
+  var p = String(aujourdhui).slice(0, 10).split('-');
+  var d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2], 12));
+  function paques(y) {
+    var a=y%19,b=Math.floor(y/100),c=y%100,dd=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),
+      h=(19*a+b-dd-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),
+      mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;
+    return Date.UTC(y, mo - 1, da, 12);
+  }
+  function ferie(x) {
+    var md = x.toISOString().slice(5, 10);
+    if (['01-01','05-01','05-08','07-14','08-15','11-01','11-11','12-25'].indexOf(md) >= 0) return true;
+    var p0 = paques(x.getUTCFullYear()), t = x.getTime(), j = 86400000;
+    return t === p0 + j || t === p0 + 39 * j || t === p0 + 50 * j;
+  }
+  do { d = new Date(d.getTime() + 86400000); } while (d.getUTCDay() === 0 || d.getUTCDay() === 6 || ferie(d));
+  return d.toISOString().slice(0, 10);
+}
+
+// Plan d'une sortie manuelle depuis le cockpit (Nicolas decide : les sorties qui passent par son GO
+// cote Jules s'appliquent ici directement). ctx = { campagne, aujourdhui (YYYY-MM-DD), responsable,
+// precision }. Rend { effet, patch, tache, fermeTaches, detail } ; detail null = rien a ecrire.
+// Le detail commence comme la ligne d'historique du MCP (« Campagne <titre> : <libelle> ») : un
+// evenement rejoue ensuite par Jules retrouve cette ligne et ne la double pas.
+function campagneSortiePlan(motif, contact, ctx) {
+  ctx = ctx || {};
+  var e = campagneEffetSortie(motif, contact);
+  var plan = { effet: e, patch: null, tache: null, fermeTaches: false, detail: null };
+  if (e.action === 'rien') return plan;
+  var base = 'Campagne ' + (ctx.campagne || '') + ' : ' + (CAMPAGNE_LIBELLES_SORTIE[motif] || CAMPAGNE_LIBELLES_SORTIE.autre)
+    + ' (sortie par ' + (ctx.responsable || 'Nicolas') + ')';
+  if (e.action === 'historique') { plan.detail = base; return plan; }
+  var precision = ctx.precision || null;
+  if (e.etape === 'En veille') {
+    plan.patch = prospectPatchEtape('En veille', { prochaine_action_date: prospectReveilPreset(ctx.aujourdhui, '6m'),
+      motif_perte_precision: precision });
+  } else if (e.etape === 'RDV planifié') {
+    var jour = campagneJourOuvreSuivant(ctx.aujourdhui);
+    var form = { creer_tache: true, prochaine_action_date: jour, prochaine_action_libelle: 'Confirmer la date du RDV' };
+    plan.patch = prospectPatchEtape('RDV planifié', form);
+    plan.tache = prospectTachePayload(contact, 'RDV planifié', form, contact.responsable || ctx.responsable);
+  } else if (e.etape === 'Perdu') {
+    plan.patch = prospectPatchEtape('Perdu', { motif_perte: e.motif_perte, motif_perte_precision: precision });
+    plan.fermeTaches = true;
+  } else if (e.etape === 'Ne pas recontacter') {
+    plan.patch = prospectPatchEtape('Ne pas recontacter', { motif_perte_precision: precision || ('Demande en campagne ' + (ctx.campagne || '')) });
+    plan.fermeTaches = true;
+  }
+  var bouge = plan.patch && plan.patch.etape_prospect !== prospectEtapeOuDefaut(contact);
+  plan.detail = base + (bouge ? ' · étape → ' + plan.patch.etape_prospect : '');
+  return plan;
+}
+
 const TYPES_ACTION     = ['Tel','Mail envoyé','Mail reçu','RDV','LinkedIn','Note interne','Autre'];
 const STATUTS_ENTRETIEN = ['candidat','freelance','prestataire'];
 const isEntretienStatut = s => s && STATUTS_ENTRETIEN.includes(s.toLowerCase());
