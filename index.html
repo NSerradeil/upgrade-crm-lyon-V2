@@ -2308,7 +2308,7 @@ function ProspectMicroForm({ targetEtape, contact, onConfirm, onCancel, saving }
   );
 }
 
-function ContactDetail({ contact, contacts, historique, taches, missions, besoins, comptes, contactComptes, profile, allProfiles, onClose, onRefresh, onNavToBesoin, onNavToMission, onNavToTache, onNavToCompte, fromCompte, dropIntent }) {
+function ContactDetail({ contact, contacts, historique, taches, missions, besoins, comptes, contactComptes, profile, allProfiles, onClose, onRefresh, onNavToBesoin, onNavToMission, onNavToTache, onNavToCompte, fromCompte, dropIntent, onIntentConsumed }) {
   const [modal,setModal] = useState(null);
   const [deleting,setDeleting] = useState(false);
   const [etapeCible,setEtapeCible]=useState(null);
@@ -2344,7 +2344,14 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
   // d'un meme rendu dans l'ordre de declaration ; au drop, contact.id et dropIntent changent
   // ensemble, le reset passe d'abord et l'intention gagne. dropIntent est un objet neuf a
   // chaque drop, pour que deux drops successifs sur la meme etape re-declenchent l'effet.
-  useEffect(()=>{ if(dropIntent&&dropIntent.contactId===contact.id&&contact.statut==='Prospect') setEtapeCible(dropIntent.etape); },[dropIntent]);
+  // L'intention est CONSOMMEE ici (onIntentConsumed) des qu'elle est lue : une intention non
+  // consommee survivrait aux chemins qui changent de contact sans passer par onClose
+  // (retour depuis un compte, clic liste, navContactId) et rouvrirait le formulaire au remontage.
+  useEffect(()=>{
+    if(!dropIntent) return;
+    if(dropIntent.contactId===contact.id&&contact.statut==='Prospect') setEtapeCible(dropIntent.etape);
+    if(onIntentConsumed) onIntentConsumed();
+  },[dropIntent]);
   const handleEtapeConfirm=async(etape,form)=>{
     setEtapeSaving(true);
     try{
@@ -2412,7 +2419,7 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
       )}
       {contact.statut==='Prospect'&&<>
         <ProspectStatusStepper contact={contact} onEtapeClick={setEtapeCible}/>
-        {etapeCible&&<ProspectMicroForm key={etapeCible} targetEtape={etapeCible} contact={contact} saving={etapeSaving}
+        {etapeCible&&<ProspectMicroForm key={contact.id+'|'+etapeCible} targetEtape={etapeCible} contact={contact} saving={etapeSaving}
           onCancel={()=>setEtapeCible(null)}
           onConfirm={handleEtapeConfirm}/>}
       </>}
@@ -4274,7 +4281,7 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
         </>}
       </>}
       {viewMode==='comptes'&&<ComptesView comptes={comptes||[]} contactComptes={contactComptes||[]} contacts={contacts} missions={allMissions||missions} historique={historique} taches={taches} histMissions={histMissions||[]} profile={profile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} selected={selectedCompte?((comptes||[]).find(c=>c.id===selectedCompte.id)||selectedCompte):null} onSelect={c=>{setSelectedCompte(c);setFromContact(null);}} onNavToContact={cid=>{const c=contacts.find(x=>x.id===cid);if(c)setSelected(c);}} fromContact={fromContact} onBackToContact={()=>{setSelected(fromContact);setSelectedCompte(null);setFromContact(null);setViewMode('contacts');}} onEditCompte={setEditingCompte} onDeleteCompte={setDeletingCompte}/>}
-      {selected&&<ContactDetail contact={selected} contacts={contacts||[]} historique={historique} taches={taches} missions={missions} besoins={besoins} comptes={comptes||[]} contactComptes={contactComptes||[]} profile={profile} allProfiles={allProfiles} fromCompte={viewMode==='comptes'?selectedCompte:null} dropIntent={dropIntent} onRefresh={()=>{onRefresh();setSelected(null);setDropIntent(null);}} onClose={()=>{setSelected(null);setDropIntent(null);}} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache} onNavToCompte={cid=>{const cmpt=(comptes||[]).find(x=>x.id===cid);if(cmpt){setFromContact(selected);setSelected(null);setSelectedCompte(cmpt);setViewMode('comptes');}}}/>}
+      {selected&&<ContactDetail contact={selected} contacts={contacts||[]} historique={historique} taches={taches} missions={missions} besoins={besoins} comptes={comptes||[]} contactComptes={contactComptes||[]} profile={profile} allProfiles={allProfiles} fromCompte={viewMode==='comptes'?selectedCompte:null} dropIntent={dropIntent} onIntentConsumed={()=>setDropIntent(null)} onRefresh={()=>{onRefresh();setSelected(null);setDropIntent(null);}} onClose={()=>{setSelected(null);setDropIntent(null);}} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache} onNavToCompte={cid=>{const cmpt=(comptes||[]).find(x=>x.id===cid);if(cmpt){setFromContact(selected);setSelected(null);setSelectedCompte(cmpt);setViewMode('comptes');}}}/>}
       {showAdd&&<AddContactModal contacts={contacts||[]} profile={profile} allProfiles={allProfiles} comptes={comptes||[]} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
       {showAddCompte&&<CompteFormModal compte={null} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAddCompte(false)} onSaved={()=>{setShowAddCompte(false);onRefresh();}}/>}
       {editingCompte&&<CompteFormModal compte={editingCompte} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingCompte(null)} onSaved={()=>{setEditingCompte(null);onRefresh();}}/>}
