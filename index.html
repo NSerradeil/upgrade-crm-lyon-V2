@@ -294,7 +294,7 @@ function prospectPatchEtape(etape, form) {
       ? (form.prochaine_action_libelle || prospectTacheLibelle(etape))
       : null,
     motif_perte: etape === 'Perdu' ? (form.motif_perte || null) : null,
-    motif_perte_precision: (etape === 'Perdu' || etape === 'Ne pas recontacter')
+    motif_perte_precision: (etape === 'Perdu' || etape === 'Ne pas recontacter' || etape === 'En veille')
       ? (form.motif_perte_precision || null) : null,
     updated_at: new Date().toISOString()
   };
@@ -2235,7 +2235,7 @@ function ProspectMicroForm({ targetEtape, contact, onConfirm, onCancel, saving }
   var bc = PROSPECT_BADGE_COLORS[targetEtape]||{bg:'#E4E4E6'};
   var r = prospectEtapeRequiert(targetEtape);
   var canSubmit = prospectCanSubmit(targetEtape, formData);
-  var aujourdhui = new Date().toISOString().slice(0,10);
+  var aujourdhui = getToday();
 
   return (
     <div style={{border:'2px solid #1C1F35',boxShadow:'4px 4px 0 '+bc.bg,background:'#FAFAFA',padding:16,margin:'8px 0',borderRadius:0}}>
@@ -2265,7 +2265,7 @@ function ProspectMicroForm({ targetEtape, contact, onConfirm, onCancel, saving }
 
       {targetEtape==='Perdu'&&<>
         <Field label="Motif *"><select value={formData.motif_perte||''} onChange={function(e){upd('motif_perte',e.target.value);}} className={inputCls}>
-          <option value="">Choisir</option>
+          <option value="">Choisir un motif</option>
           {PROSPECT_MOTIFS_PERTE.map(function(m){return <option key={m}>{m}</option>;})}
         </select></Field>
         <Field label="Commentaire"><textarea value={formData.motif_perte_precision||''} onChange={function(e){upd('motif_perte_precision',e.target.value);}} rows={2} className={inputCls+' resize-none'}/></Field>
@@ -2315,15 +2315,25 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
     if(res.error){toast('Erreur : '+res.error.message);setDeleting(false);return;}
     toast('Contact supprimé');onRefresh(); onClose();
   };
+  // Le panneau n'est pas remonté quand on passe d'un contact à l'autre (pas de key sur
+  // ContactDetail) : sans ça, un micro-formulaire ouvert resterait ouvert sur le suivant.
+  useEffect(()=>{ setEtapeCible(null); setEtapeSaving(false); },[contact.id]);
   const handleEtapeConfirm=async(etape,form)=>{
     setEtapeSaving(true);
-    const patch=prospectPatchEtape(etape,form);
-    const {error}=await sb.from('contacts').update(patch).eq('id',contact.id);
-    if(error){toast('Erreur: '+error.message,'error');setEtapeSaving(false);return;}
-    await sb.from('historique_actions').insert({id_prospect:contact.id,date:getToday(),
-      type_action:'Changement d\'étape',details:`Étape → ${etape}`,responsable:profile.nom});
-    toast('Étape → '+etape);
-    setEtapeCible(null);setEtapeSaving(false);onRefresh();
+    try{
+      const patch=prospectPatchEtape(etape,form);
+      const {error}=await sb.from('contacts').update(patch).eq('id',contact.id);
+      if(error){toast('Erreur: '+error.message,'error');return;}
+      const {error:errHist}=await sb.from('historique_actions').insert({id_prospect:contact.id,date:getToday(),
+        type_action:'Changement d\'étape',details:`Étape → ${etape}`,responsable:profile.nom});
+      if(errHist){toast('Étape enregistrée, historique non tracé','error');}
+      else{toast('Étape → '+etape);}
+      setEtapeCible(null);onRefresh();
+    }catch(e){
+      toast('Erreur: '+(e&&e.message?e.message:e),'error');
+    }finally{
+      setEtapeSaving(false);
+    }
   };
   const actions = (
     <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
@@ -2360,7 +2370,7 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
       )}
       {contact.statut==='Prospect'&&<>
         <ProspectStatusStepper contact={contact} onEtapeClick={setEtapeCible}/>
-        {etapeCible&&<ProspectMicroForm targetEtape={etapeCible} contact={contact} saving={etapeSaving}
+        {etapeCible&&<ProspectMicroForm key={etapeCible} targetEtape={etapeCible} contact={contact} saving={etapeSaving}
           onCancel={()=>setEtapeCible(null)}
           onConfirm={handleEtapeConfirm}/>}
       </>}

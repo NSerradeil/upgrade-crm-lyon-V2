@@ -148,6 +148,13 @@ test('le patch de mise en veille porte la date de reveil comme prochaine action'
   assert.equal(p.motif_perte, null);
 });
 
+test('le patch de mise en veille conserve le commentaire', () => {
+  const p = prospectPatchEtape('En veille', { prochaine_action_date: '2027-03-29',
+    motif_perte_precision: 'Budget gelé jusqu\'à la rentrée' });
+  assert.equal(p.motif_perte_precision, 'Budget gelé jusqu\'à la rentrée');
+  assert.equal(p.motif_perte, null);
+});
+
 test('le patch porte toujours updated_at', () => {
   assert.ok(prospectPatchEtape('À contacter', {}).updated_at);
 });
