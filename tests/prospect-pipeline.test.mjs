@@ -5,22 +5,26 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+// Le decalage explicite de combineDT depend du fuseau du poste : on fige Paris pour que les cas ete/hiver soient stables.
+process.env.TZ = 'Europe/Paris';
+
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 function extrait(nom) {
   for (const re of [new RegExp(`\\nfunction ${nom}\\(([\\s\\S]*?)\\n\\}\\n`),
-                    new RegExp(`\\nconst ${nom} = [^\\n]*;\\n`),
+                    new RegExp(`\\nconst ${nom} ?= ?[^\\n]*;\\n`),
                     new RegExp(`\\nconst ${nom} = \\{[\\s\\S]*?\\n\\};\\n`)]) {
     const m = html.match(re);
     if (m) return m[0];
   }
   throw new Error(`${nom} introuvable dans index.html`);
 }
-const NOMS = ['PROSPECT_ETAPES', 'PROSPECT_ETAPES_ACTIVES', 'PROSPECT_ETAPES_SORTIE',
+const NOMS = ['DEFAULT_TASK_TIME', 'combineDT', 'PROSPECT_ETAPES', 'PROSPECT_ETAPES_ACTIVES', 'PROSPECT_ETAPES_SORTIE',
               'PROSPECT_MOTIFS_PERTE', 'prospectEtapeOuDefaut', 'prospectEtapeRequiert',
               'prospectCanSubmit', 'prospectEnRetard', 'prospectTacheLibelle',
               'prospectTacheEcheance', 'prospectReveilPreset', 'prospectPatchEtape', 'prospectTachePayload',
               'prospectSurLeBoard', 'prospectTacheEstProspection', 'etapeDepuisResultatAppel',
-              'prospectPatchDepuisAppel'];
+              'prospectPatchDepuisAppel', 'prospectRepartitionBoard', 'prospectEtapeFermeTaches',
+              'prospectTacheBoucleEtape'];
 const src = NOMS.map(extrait).join('\n');
 const API = new Function(`${src}\nreturn {${NOMS.join(',')}};`)();
 const { PROSPECT_ETAPES, PROSPECT_ETAPES_ACTIVES, PROSPECT_ETAPES_SORTIE,
@@ -28,7 +32,8 @@ const { PROSPECT_ETAPES, PROSPECT_ETAPES_ACTIVES, PROSPECT_ETAPES_SORTIE,
         prospectEnRetard, prospectTacheLibelle, prospectTacheEcheance,
         prospectReveilPreset, prospectPatchEtape, prospectTachePayload,
         prospectSurLeBoard, prospectTacheEstProspection, etapeDepuisResultatAppel,
-        prospectPatchDepuisAppel } = API;
+        prospectPatchDepuisAppel, prospectRepartitionBoard, prospectEtapeFermeTaches,
+        prospectTacheBoucleEtape } = API;
 
 test('les 8 etapes, dans l ordre, avec les accents exacts', () => {
   assert.deepEqual(PROSPECT_ETAPES, ['À contacter', 'Contacté', 'En discussion',
@@ -80,6 +85,35 @@ test('REVIEW FOCUS 2 — une date de reveil dans le passe compte comme retard', 
 test('l echeance de tache est forcee a 09h00 quand l heure est absente', () => {
   assert.match(prospectTacheEcheance('2026-10-05'), /^2026-10-05T09:00/);
   assert.match(prospectTacheEcheance('2026-10-05T14:30'), /^2026-10-05T14:30/);
+});
+
+// C1 : une chaine naive serait lue en UTC par Supabase et reviendrait decalee de 1 ou 2 h.
+test('C1 l echeance porte un decalage explicite, ete +02:00 et hiver +01:00', () => {
+  assert.equal(prospectTacheEcheance('2026-10-05'), '2026-10-05T09:00:00+02:00');
+  assert.equal(prospectTacheEcheance('2027-01-12'), '2027-01-12T09:00:00+01:00');
+  assert.equal(prospectTacheEcheance('2026-10-05T14:30'), '2026-10-05T14:30:00+02:00');
+  assert.equal(prospectTacheEcheance('2027-01-12T14:30'), '2027-01-12T14:30:00+01:00');
+  // le decalage suit la date visee, pas la date du jour : 27 mars 2027 hiver, 29 mars 2027 ete
+  assert.equal(prospectTacheEcheance('2027-03-27'), '2027-03-27T09:00:00+01:00');
+  assert.equal(prospectTacheEcheance('2027-03-29'), '2027-03-29T09:00:00+02:00');
+});
+
+test('C1 une valeur deja datee avec un decalage passe telle quelle, vide reste null', () => {
+  assert.equal(prospectTacheEcheance('2026-10-05T09:00:00+02:00'), '2026-10-05T09:00:00+02:00');
+  assert.equal(prospectTacheEcheance('2026-10-05T07:00:00Z'), '2026-10-05T07:00:00Z');
+  assert.equal(prospectTacheEcheance(''), null);
+  assert.equal(prospectTacheEcheance(null), null);
+});
+
+test('C1 relecture : 09:00 stocke revient a 09:00 heure de Paris (instant identique)', () => {
+  // Supabase renvoie le timestamptz en UTC ; l'app l'affiche en Europe/Paris (extractTime).
+  for (const [d, off] of [['2026-10-05', 2], ['2027-01-12', 1]]) {
+    const ecrit = prospectTacheEcheance(d);
+    const instant = new Date(ecrit);
+    assert.equal(instant.toISOString(), `${d}T${String(9 - off).padStart(2, '0')}:00:00.000Z`);
+    const relu = instant.toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit', hour12: false });
+    assert.equal(relu, '09:00');
+  }
 });
 
 test('le libelle de tache est pre-rempli depuis l etape visee', () => {
@@ -298,4 +332,51 @@ test('appel : une etape de sortie (Perdu) ne recoit pas de prochaine action', ()
   const p = prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'Perdu', status: 'interested',
     wantRelance: true, relanceDate: '2026-10-15' }, true);
   assert.equal(p, null);
+});
+
+// I4 : la cloture d'une tache de prospection ne reboucle sur l'etape que si le contact est encore dans le pipeline.
+test('I4 prospectEtapeFermeTaches : Perdu et Ne pas recontacter seulement', () => {
+  assert.equal(prospectEtapeFermeTaches('Perdu'), true);
+  assert.equal(prospectEtapeFermeTaches('Ne pas recontacter'), true);
+  for (const e of ['À contacter', 'Contacté', 'En discussion', 'RDV planifié', 'Qualifié', 'En veille']) {
+    assert.equal(prospectEtapeFermeTaches(e), false, e);
+  }
+});
+
+test('I4 la boucle d etape ne s applique pas a un contact Perdu ou NPC', () => {
+  const t = { id: 'tw_prospect_12_1700000000000', contact_id: 12 };
+  assert.equal(prospectTacheBoucleEtape(t, { statut: 'Prospect', etape_prospect: 'Contacté' }), true);
+  assert.equal(prospectTacheBoucleEtape(t, { statut: 'Prospect', etape_prospect: 'En veille' }), true);
+  assert.equal(prospectTacheBoucleEtape(t, { statut: 'Prospect', etape_prospect: 'Perdu' }), false);
+  assert.equal(prospectTacheBoucleEtape(t, { statut: 'Prospect', etape_prospect: 'Ne pas recontacter' }), false);
+  assert.equal(prospectTacheBoucleEtape(t, { statut: 'Client', etape_prospect: null }), false);
+  assert.equal(prospectTacheBoucleEtape(t, null), false);
+  // tache ordinaire : jamais de boucle
+  assert.equal(prospectTacheBoucleEtape({ id: 'tw_1700000000000', contact_id: 12 }, { statut: 'Prospect' }), false);
+  assert.equal(prospectTacheBoucleEtape({ id: 'tw_relance_12_1', contact_id: 12 }, { statut: 'Prospect' }), false);
+});
+
+// I5 : spec R4, le reveil remonte en tete de « À contacter » avec un badge, sans changer l'etape.
+test('I5 un En veille echu remonte en tete de « À contacter », badge Reveil, etape inchangee', () => {
+  const now = '2026-10-10T08:00:00Z';
+  const echu = { id: 1, statut: 'Prospect', etape_prospect: 'En veille', prochaine_action_date: '2026-10-01T09:00:00+02:00' };
+  const futur = { id: 2, statut: 'Prospect', etape_prospect: 'En veille', prochaine_action_date: '2027-01-01T09:00:00+01:00' };
+  const ac1 = { id: 3, statut: 'Prospect', etape_prospect: 'À contacter', prochaine_action_date: '2026-09-01T09:00:00+02:00' };
+  const ac2 = { id: 4, statut: 'Prospect', etape_prospect: null };
+  const r = prospectRepartitionBoard([ac1, ac2, echu, futur], now);
+  assert.deepEqual(r.parEtape['À contacter'].map(c => c.id), [1, 3, 4]);
+  assert.deepEqual(r.parEtape['En veille'].map(c => c.id), [2]);
+  assert.deepEqual(Object.keys(r.reveil), ['1']);
+  assert.equal(echu.etape_prospect, 'En veille');           // rien n'est reecrit
+  for (const e of PROSPECT_ETAPES) assert.ok(Array.isArray(r.parEtape[e]), e);
+});
+
+test('I5 un En veille sans date ou a date future reste en veille', () => {
+  const now = '2026-10-10T08:00:00Z';
+  const r = prospectRepartitionBoard([
+    { id: 1, statut: 'Prospect', etape_prospect: 'En veille' },
+    { id: 2, statut: 'Prospect', etape_prospect: 'Perdu', prochaine_action_date: '2020-01-01T09:00:00Z' }], now);
+  assert.deepEqual(r.parEtape['En veille'].map(c => c.id), [1]);
+  assert.deepEqual(r.parEtape['Perdu'].map(c => c.id), [2]);
+  assert.deepEqual(r.reveil, {});
 });

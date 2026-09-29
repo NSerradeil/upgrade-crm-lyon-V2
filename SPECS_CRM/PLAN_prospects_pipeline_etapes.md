@@ -304,9 +304,11 @@ Créer `db/52_drop_ne_pas_recontacter.sql` :
 ```sql
 -- SPEC_prospects_pipeline_etapes.md — differee d une semaine apres la 51.
 -- NE PAS APPLIQUER avant d avoir verifie qu aucun contact NPC n a ete perdu :
---   select count(*) from contacts where ne_pas_recontacter = true
---     and etape_prospect is distinct from 'Ne pas recontacter';
---   -- doit retourner 0
+--   select count(*) from contacts c where c.ne_pas_recontacter = true
+--     and c.etape_prospect is distinct from 'Ne pas recontacter'
+--     and not exists (select 1 from historique_actions h
+--                     where h.id_prospect = c.id and h.type_action = 'Changement d''étape');
+--   -- doit retourner 0 (voir db/52 : les contacts levés depuis la mise en service sont ignorés)
 alter table contacts drop column if exists ne_pas_recontacter;
 alter table contacts drop column if exists ne_pas_recontacter_note;
 alter table contacts drop column if exists ne_pas_recontacter_date;
@@ -327,7 +329,7 @@ Expected: toutes les lignes ont une étape ; les deux compteurs de contrôle val
 
 - [ ] **Step 4: Ajouter les colonnes au select**
 
-Dans `index.html:11573`, ajouter à la liste des colonnes du select contacts, sans en retirer aucune :
+Dans `index.html:11573`, ajouter à la liste des colonnes du select contacts (et, dans le commit final de la branche, retirer `ne_pas_recontacter`, `ne_pas_recontacter_note`, `ne_pas_recontacter_date` : plus rien ne les lit) :
 
 ```
 ,etape_prospect,prochaine_action_date,prochaine_action_libelle,motif_perte,motif_perte_precision
@@ -1350,10 +1352,12 @@ git commit -m "build(mcp): paquet 8.26.0 avec le pipeline prospect"
 - [ ] **Step 1: Vérifier qu'aucun contact n'a été perdu**
 
 ```sql
-select count(*) from contacts where ne_pas_recontacter = true
-  and etape_prospect is distinct from 'Ne pas recontacter';
+select count(*) from contacts c where c.ne_pas_recontacter = true
+  and c.etape_prospect is distinct from 'Ne pas recontacter'
+  and not exists (select 1 from historique_actions h
+                  where h.id_prospect = c.id and h.type_action = 'Changement d''étape');
 ```
-Expected: `0`. Si ce n'est pas 0, **ne pas appliquer** la migration : investiguer d'abord.
+Expected: `0`. Le contrôle ignore les contacts dont l'étape a changé depuis la mise en service (une levée de refus légitime laisse l'ancien flag à true). Si ce n'est pas 0, **ne pas appliquer** la migration : investiguer d'abord.
 
 - [ ] **Step 2: Vérifier qu'aucun code ne lit plus le flag**
 
@@ -1362,7 +1366,7 @@ Expected: aucune occurrence hors commentaire historique.
 
 - [ ] **Step 3: Appliquer `db/52_drop_ne_pas_recontacter.sql`**
 
-- [ ] **Step 4: Retirer les colonnes du select si elles y figuraient encore**
+- [x] **Step 4: (fait dans la branche)** Les colonnes `ne_pas_recontacter*` ont été retirées du select contacts dès la branche (revue finale, I1) : rien à retirer après coup.
 
 - [ ] **Step 5: Commit**
 

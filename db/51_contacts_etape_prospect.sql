@@ -1,5 +1,8 @@
 -- db/51_contacts_etape_prospect.sql : SPEC_prospects_pipeline_etapes.md, 29/09/2026
--- A coller dans le SQL Editor Supabase. Idempotent.
+-- A coller dans le SQL Editor Supabase. Rejouable AVANT la mise en service uniquement :
+-- une fois l'app en production, le bloc de reprise du flag ci-dessous remettrait en
+-- 'Ne pas recontacter' tous les contacts que le responsable a leves depuis (l'ancien flag
+-- n'est plus remis a false par l'app). Ne pas la rejouer apres la mise en service.
 -- Pipeline des prospects : étape, prochaine action datée, motif de sortie.
 
 alter table contacts add column if not exists etape_prospect text;

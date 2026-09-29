@@ -267,6 +267,27 @@ function prospectEnRetard(contact, now) {
   return t <= (now ? new Date(now).getTime() : Date.now());
 }
 
+// Repartition du board par colonne (spec R4). Un « En veille » dont la date de reveil est passee
+// remonte en tete de « À contacter » avec le badge Reveil, SANS changer son etape en base.
+// Retourne { parEtape: {etape: [contacts]}, reveil: {contactId: true} }.
+function prospectRepartitionBoard(contacts, now) {
+  var parEtape = {}; PROSPECT_ETAPES.forEach(function(e){ parEtape[e] = []; });
+  var reveil = {};
+  (contacts || []).forEach(function(c) {
+    var e = prospectEtapeOuDefaut(c);
+    if (e === 'En veille' && prospectEnRetard(c, now)) { reveil[c.id] = true; e = 'À contacter'; }
+    parEtape[e].push(c);
+  });
+  PROSPECT_ETAPES.forEach(function(e) {
+    parEtape[e].sort(function(a, b) {
+      var ra = reveil[a.id] ? 0 : 1, rb = reveil[b.id] ? 0 : 1;
+      if (ra !== rb) return ra - rb;
+      return String(a.prochaine_action_date || '9999').localeCompare(String(b.prochaine_action_date || '9999'));
+    });
+  });
+  return { parEtape: parEtape, reveil: reveil };
+}
+
 function prospectTacheLibelle(etape) {
   var L = { 'Contacté':'Rappeler', 'En discussion':'Relancer', 'RDV planifié':'RDV prospect',
             'Qualifié':'Qualifier le besoin', 'En veille':'Réveil prospect',
@@ -275,9 +296,15 @@ function prospectTacheLibelle(etape) {
   return L[etape] || 'Suivi prospect';
 }
 
+// Ecrit toujours avec un decalage explicite (combineDT) : une chaine naive serait lue en UTC par
+// Supabase et reviendrait decalee de 1 ou 2 h. Date seule = 09:00 (DEFAULT_TASK_TIME) heure locale.
 function prospectTacheEcheance(dateISO) {
   if (!dateISO) return null;
-  return dateISO.length > 10 ? dateISO : (dateISO + 'T09:00');
+  var s = String(dateISO);
+  if (/T\d{2}:\d{2}.*(Z|[+-]\d{2}:?\d{2})$/.test(s)) return s;   // deja avec decalage
+  var date = s.slice(0, 10);
+  var heure = (s.length >= 16 && s.charAt(10) === 'T') ? s.slice(11, 16) : DEFAULT_TASK_TIME;
+  return combineDT(date, heure);
 }
 
 function prospectReveilPreset(base, preset) {
@@ -363,6 +390,32 @@ function prospectPatchDepuisAppel(sc, avancer) {
 function prospectTacheEstProspection(t) {
   return !!(t && String(t.id).indexOf('tw_prospect_') === 0
     && t.contact_id !== null && t.contact_id !== undefined && t.contact_id !== '');
+}
+
+// Perdu et Ne pas recontacter ferment le pipeline : plus aucune tache de prospection ne doit rester ouverte.
+function prospectEtapeFermeTaches(etape) {
+  return etape === 'Perdu' || etape === 'Ne pas recontacter';
+}
+
+// La cloture d'une tache de prospection redemande l'etape, sauf si le contact est deja sorti du
+// pipeline (Perdu / NPC) : la tache se clot alors normalement, sans boucle (sinon un non-responsable
+// serait renvoye vers un formulaire NPC qu'il ne peut pas soumettre).
+function prospectTacheBoucleEtape(t, contact) {
+  if (!prospectTacheEstProspection(t)) return false;
+  if (!contact || contact.statut !== 'Prospect') return false;
+  return !prospectEtapeFermeTaches(prospectEtapeOuDefaut(contact));
+}
+
+// Annule les taches tw_prospect_ ouvertes d'un contact (predicat « ouverte » du fichier : ni fait ni annule).
+// Retourne { error } si une lecture ou une ecriture echoue, pour que l'appelant previenne l'utilisateur.
+async function prospectAnnulerTachesOuvertes(contactId) {
+  var lues = await sb.from('taches').select('id,statut').eq('contact_id', parseInt(contactId)).like('id', 'tw_prospect_%');
+  if (lues.error) return { error: lues.error };
+  var ids = (lues.data || []).filter(function(t){ return t.statut !== 'fait' && t.statut !== 'annule'; })
+    .map(function(t){ return t.id; });
+  if (ids.length === 0) return { error: null, annulees: 0 };
+  var res = await sb.from('taches').update({ statut: 'annule', updated_at: new Date().toISOString() }).in('id', ids);
+  return { error: res.error || null, annulees: res.error ? 0 : ids.length };
 }
 
 function prospectTachePayload(contact, etape, form, responsable) {
@@ -2457,6 +2510,10 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
         if(errClose) toast('Étape enregistrée, tâche non clôturée','error');
         setTacheAClore(null);
       }
+      if(prospectEtapeFermeTaches(etape)){
+        const rAnn=await prospectAnnulerTachesOuvertes(contact.id);
+        if(rAnn.error) toast('Étape enregistrée, tâches de prospection ouvertes non annulées','error');
+      }
       const tache=prospectTachePayload(contact,etape,form,profile.nom);
       if(tache){
         // Garde anti-doublon sur donnees fraiches (Supabase, pas le state React : un autre poste
@@ -4142,13 +4199,9 @@ function ProspectsKanban({ contacts, onCardClick, onDrop }) {
   const [overCol,setOverCol]=useState(null);
   const [dragId,setDragId]=useState(null);
   const colonnes=sortiesOuvertes?PROSPECT_ETAPES:PROSPECT_ETAPES_ACTIVES;
-  const parEtape=useMemo(()=>{
-    const m={}; PROSPECT_ETAPES.forEach(e=>{m[e]=[];});
-    (contacts||[]).forEach(c=>{ m[prospectEtapeOuDefaut(c)].push(c); });
-    PROSPECT_ETAPES.forEach(e=>m[e].sort((a,b)=>
-      (a.prochaine_action_date||'9999').localeCompare(b.prochaine_action_date||'9999')));
-    return m;
-  },[contacts]);
+  const repartition=useMemo(()=>prospectRepartitionBoard(contacts),[contacts]);
+  const parEtape=repartition.parEtape;
+  const reveil=repartition.reveil;
   const nbSorties=PROSPECT_ETAPES_SORTIE.reduce((n,e)=>n+parEtape[e].length,0);
   return (<>
     <div style={{display:'flex',justifyContent:'flex-end',marginBottom:6}}>
@@ -4185,6 +4238,9 @@ function ProspectsKanban({ contacts, onCardClick, onDrop }) {
                 onDragEnd={function(){setDragId(null);setOverCol(null);}}
                 onClick={function(){onCardClick(c);}}
                 style={{borderLeft:retard?'3px solid #FF6B6B':'1px solid #E4E4E6'}}>
+                {reveil[c.id]&&<span style={{display:'inline-block',fontSize:9,fontWeight:900,padding:'1px 6px',marginBottom:3,
+                  background:'#8B5CF6',color:'#fff',borderRadius:0,textTransform:'uppercase',letterSpacing:'0.03em',
+                  fontFamily:'Outfit,sans-serif',boxShadow:'2px 2px 0 #1C1F35'}}>Réveil</span>}
                 <div className="truncate" style={{fontSize:11,fontWeight:800}}>{c.prenom} {c.nom}</div>
                 {c.societe&&<div className="truncate" style={{fontSize:10,color:'#A4A6AB'}}>{c.societe}</div>}
                 {c.prochaine_action_date&&<div className="truncate" style={{fontSize:10,marginTop:2,
@@ -5536,7 +5592,7 @@ function TabTaches({ taches, contacts, contactMap, besoins, missions, historique
     // Boucle de retour : clore une tache de prospection redemande l'etape (la tache sera close a la confirmation ;
     // si l'utilisateur annule, elle reste ouverte). Toute autre tache garde la cloture habituelle.
     const c=prospectTacheEstProspection(t)?contactMap[t.contact_id]:null;
-    if(c&&c.statut==='Prospect'&&onNavToEtapeTache){ onNavToEtapeTache(t,c); return; }
+    if(c&&prospectTacheBoucleEtape(t,c)&&onNavToEtapeTache){ onNavToEtapeTache(t,c); return; }
     setCompletingModal(t);
   };
   const handleDelete=(t)=>{ setDetailTask(null); setDeletingTask(t); };
@@ -11602,6 +11658,9 @@ function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDo
         if (updRes.error) {
           console.error('[Prospection] Erreur mise à jour contact', sc.id, updRes.error);
           toast('⚠️ Contact non mis à jour : ' + (sc.prenom||'') + ' ' + sc.nom + ' (' + updRes.error.message + ')', 'error');
+        } else if (patchAppel && prospectEtapeFermeTaches(patchAppel.etape_prospect)) {
+          var annT = await prospectAnnulerTachesOuvertes(sc.id);
+          if (annT.error) toast('⚠️ Tâches de prospection non annulées pour ' + (sc.prenom||'') + ' ' + sc.nom, 'error');
         }
       }
     }
@@ -11684,6 +11743,10 @@ function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDo
       if (patchNpc) {
         var npcRes = await sb.from('contacts').update(patchNpc).eq('id',pic2.id);
         if (npcRes.error) toast('⚠️ Ne pas recontacter non posé pour ' + (pic2.prenom||'') + ' ' + pic2.nom + ' : ' + npcRes.error.message, 'error');
+        else if (prospectEtapeFermeTaches(patchNpc.etape_prospect)) {
+          var annT2 = await prospectAnnulerTachesOuvertes(pic2.id);
+          if (annT2.error) toast('⚠️ Tâches de prospection non annulées pour ' + (pic2.prenom||'') + ' ' + pic2.nom, 'error');
+        }
       }
     }
 
@@ -12086,7 +12149,7 @@ function App() {
         {data:partnerConsultants,error:e11},
         {data:intercos,error:e12},
       ] = await Promise.all([
-        sb.from('contacts').select('id,statut,prenom,nom,ville,role,telephone,email,linkedin,besoins,responsable,date_dernier,commentaires,ats,updated_at,agence,created_at,date_dernier_suivi_client,ne_pas_recontacter,ne_pas_recontacter_note,ne_pas_recontacter_date,cjm,employeur,date_entree,date_sortie,salaire_annuel,cjm_manuel,statut_rh,statut_rh_depuis,type_presta,manager_trigramme,responsabilite,trigramme,ancien_statut,etape_prospect,prochaine_action_date,prochaine_action_libelle,motif_perte,motif_perte_precision').order('id').limit(L),
+        sb.from('contacts').select('id,statut,prenom,nom,ville,role,telephone,email,linkedin,besoins,responsable,date_dernier,commentaires,ats,updated_at,agence,created_at,date_dernier_suivi_client,cjm,employeur,date_entree,date_sortie,salaire_annuel,cjm_manuel,statut_rh,statut_rh_depuis,type_presta,manager_trigramme,responsabilite,trigramme,ancien_statut,etape_prospect,prochaine_action_date,prochaine_action_libelle,motif_perte,motif_perte_precision').order('id').limit(L),
         sb.from('historique_actions').select('id,id_prospect,date,type_action,details,responsable,tache_id,besoin_id').order('date',{ascending:false}).limit(histLimit),
         sb.from('taches').select('id,titre,statut,due_date,contact_id,mission_id,besoin_id,notes,responsable,date_completion,session_prospection_id,updated_at').order('due_date',{ascending:true,nullsFirst:false}).limit(L),
         sb.from('besoins').select('id,titre,statut,lien,compte_id,contact_id,description,budget,budget_tjm,budget_jours,budget_date_debut,budget_date_fin,candidat_id,consultant_id,date_entretien,compte_rendu,date_demarrage,date_fin,tjm_vente,cjm_achat,motif_perte,motif_perte_precision,responsable,agence,created_at,updated_at').order('created_at',{ascending:false}).limit(L),
