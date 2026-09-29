@@ -380,3 +380,15 @@ test('I5 un En veille sans date ou a date future reste en veille', () => {
   assert.deepEqual(r.parEtape['Perdu'].map(c => c.id), [2]);
   assert.deepEqual(r.reveil, {});
 });
+
+// I3 : jeu de cas commun avec le MCP (copie identique de tests/fixtures/prospect-patch-cas.json
+// dans upgrade-crm-mcp-src-next). Si l'une des deux moities diverge, ce test ou son jumeau casse.
+test('I3 jeu de cas commun : prospectPatchEtape nettoie comme le serveur MCP', () => {
+  const cas = JSON.parse(readFileSync(new URL('./fixtures/prospect-patch-cas.json', import.meta.url), 'utf8')).cas;
+  assert.ok(cas.length >= 9);
+  for (const c of cas) {
+    const p = prospectPatchEtape(c.etape, c.form);
+    assert.equal(p.etape_prospect, c.etape);
+    for (const [k, v] of Object.entries(c.attendu)) assert.equal(p[k], v, `${c.nom} : ${k}`);
+  }
+});
