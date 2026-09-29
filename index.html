@@ -4000,9 +4000,16 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
   const [filterPeriode,setFilterPeriode]=useState(''); const [filterResp,setFilterResp]=useState(prefResp);
   const [filterAgence,setFilterAgence]=useState('');
   const [filterMine,setFilterMine]=useState(false);
-  const [sortCol,setSortCol]=useState('date_dernier'); const [sortDir,setSortDir]=useState('desc');
+  const [sortCol,setSortCol]=useState(prefStatut==='Prospect'?'prochaine_action':'date_dernier'); const [sortDir,setSortDir]=useState(prefStatut==='Prospect'?'asc':'desc');
   const [selected,setSelected]=useState(null); const [showAdd,setShowAdd]=useState(false);
   const [viewMode,setViewMode]=useState('contacts'); // 'contacts' | 'comptes'
+  // Vue Prospect : 'list' | 'kanban'. Distinct de viewMode (Contacts/Comptes), ne pas fusionner.
+  const [prospectView,setProspectView]=useState(prefs?.prospects_view||'list');
+  // Sur le filtre Prospect le tri par defaut devient la prochaine action ; on restitue le tri d'origine en le quittant.
+  useEffect(()=>{
+    if(filterStatut==='Prospect'){ if(sortCol==='date_dernier'){ setSortCol('prochaine_action'); setSortDir('asc'); } }
+    else if(sortCol==='prochaine_action'){ setSortCol('date_dernier'); setSortDir('desc'); }
+  },[filterStatut]);
   const [selectedCompte,setSelectedCompte]=useState(null);
   const [fromContact,setFromContact]=useState(null); // contact origine pour breadcrumb sur CompteSidebar
   const [showAddCompte,setShowAddCompte]=useState(false);
@@ -4058,7 +4065,14 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
       });
     rows.sort((a,b)=>{
       let va,vb;
-      if(sortCol==='nom')               { va=(a.nom||'').toLowerCase();   vb=(b.nom||'').toLowerCase(); }
+      if(sortCol==='prochaine_action') {
+        // contacts sans date en fin de liste, quel que soit le sens
+        if(!a.prochaine_action_date&&!b.prochaine_action_date) return 0;
+        if(!a.prochaine_action_date) return 1;
+        if(!b.prochaine_action_date) return -1;
+        va=String(a.prochaine_action_date); vb=String(b.prochaine_action_date);
+      }
+      else if(sortCol==='nom')               { va=(a.nom||'').toLowerCase();   vb=(b.nom||'').toLowerCase(); }
       else if(sortCol==='groupe')       { va=(a.societe||'').toLowerCase(); vb=(b.societe||'').toLowerCase(); }
       else if(sortCol==='ville')        { va=(a.ville||'').toLowerCase();  vb=(b.ville||'').toLowerCase(); }
       else if(sortCol==='statut')       { va=(a.statut||'').toLowerCase(); vb=(b.statut||'').toLowerCase(); }
@@ -4113,6 +4127,14 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
         </select>
         <button onClick={function(){setFilterMine(!filterMine);if(!filterMine){setFilterAgence('');setFilterResp('');}}} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:filterMine?'0':'2px solid #E4E4E6',background:filterMine?'#1C1F35':'#fff',color:filterMine?'#fff':'#1C1F35',cursor:'pointer',borderRadius:0,textTransform:'uppercase',boxShadow:filterMine?'3px 3px 0 #FFE500':'none',transition:'all 120ms'}}>Mes contacts ({contacts.filter(function(c){return c.responsable===profile.nom;}).length})</button>
         {hasFilter&&<button onClick={resetAll} className="px-2 sm:px-3 py-2 text-sm text-slate hover:text-carbon">✕</button>}
+        {filterStatut==='Prospect'&&<div style={{display:'flex',gap:0,marginLeft:'auto'}}>
+          {[['list','Liste'],['kanban','Kanban']].map(function(v){
+            return <button key={v[0]} onClick={function(){setProspectView(v[0]);}}
+              style={{padding:'6px 12px',fontSize:11,fontWeight:prospectView===v[0]?900:700,fontFamily:'Outfit,sans-serif',
+                background:prospectView===v[0]?'#1C1F35':'#fff',color:prospectView===v[0]?'#fff':'#1C1F35',
+                border:'1px solid #E4E4E6',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>{v[1]}</button>;
+          })}
+        </div>}
       </div>
       <div className="text-xs text-neutral-300 mb-2">{filtered.length} contact{filtered.length>1?'s':''}</div>
       {/* Vue cartes mobile */}
@@ -4145,6 +4167,8 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
             <th className={thCls} onClick={()=>toggleSort('statut')}>Statut<SortIcon col="statut"/></th>
             <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('responsable')}>Responsable<SortIcon col="responsable"/></th>
             <th className={thCls+" hidden lg:table-cell"} onClick={()=>toggleSort('date_dernier')}>Dernier contact<SortIcon col="date_dernier"/></th>
+            {filterStatut==='Prospect'&&<th className={thCls}>Étape</th>}
+            {filterStatut==='Prospect'&&<th className={thCls} onClick={()=>toggleSort('prochaine_action')}>Prochaine action<SortIcon col="prochaine_action"/></th>}
           </tr></thead>
           <tbody>{visibleContacts.map(c=>(
             <tr key={c.id} onClick={()=>setSelected(c)} data-detail tabIndex="0" className={`border-t border-neutral-50 hover:bg-lemon-20 focus:bg-azure-20 focus:outline-none cursor-pointer transition-colors${selected&&selected.id===c.id?' bg-azure-20':''}`}>
@@ -4154,6 +4178,8 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
               <td className="px-4 py-3"><div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'nowrap'}}><StatutBadge statut={c.statut}/>{c.ne_pas_recontacter&&<span title="Ne pas recontacter" style={{display:'inline-flex',alignItems:'center',padding:'1px 5px',borderRadius:0,fontSize:9,fontWeight:700,letterSpacing:'0.05em',backgroundColor:'#FF3D2E',color:'#fff',border:'none',lineHeight:1,whiteSpace:'nowrap'}}>NPC</span>}</div></td>
               <td className="px-4 py-3 text-slate text-xs hidden lg:table-cell">{c.responsable||'—'}</td>
               <td className="px-4 py-3 hidden lg:table-cell">{c.jours<999?<span className={c.jours>90?'text-coral-100 font-medium':'text-slate'}>{c.jours}j</span>:<span className="text-neutral-200">—</span>}</td>
+              {filterStatut==='Prospect'&&<td className="px-4 py-3">{(function(){var e=prospectEtapeOuDefaut(c);var bc=PROSPECT_BADGE_COLORS[e]||{bg:'#E4E4E6',color:'#1C1F35'};return <ColorBadge label={e} bg={bc.bg} color={bc.color}/>;})()}</td>}
+              {filterStatut==='Prospect'&&<td className="px-4 py-3 text-xs" style={{borderLeft:prospectEnRetard(c)?'3px solid #FF6B6B':'3px solid transparent'}}>{c.prochaine_action_date?<><span className="text-slate">{fmtDT(c.prochaine_action_date,DEFAULT_TASK_TIME)}</span>{c.prochaine_action_libelle&&<span className="text-neutral-300"> {c.prochaine_action_libelle}</span>}</>:<span className="text-neutral-200">-</span>}</td>}
             </tr>
           ))}</tbody>
         </table>
