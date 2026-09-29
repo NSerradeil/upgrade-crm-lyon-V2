@@ -234,6 +234,15 @@ function prospectEtapeOuDefaut(contact) {
   return (e && PROSPECT_ETAPES.indexOf(e) >= 0) ? e : 'À contacter';
 }
 
+function prospectSurLeBoard(contact, besoins) {
+  // C'est l'existence d'un besoin ACTIF qui sort le prospect du board, pas l'etape :
+  // un besoin perdu doit rendre le prospect au pipeline.
+  var lies = (besoins||[]).filter(function(b){
+    return String(b.contact_id) === String(contact.id) && b.statut !== 'Besoin Perdu';
+  });
+  return lies.length === 0;
+}
+
 function prospectEtapeRequiert(etape) {
   return {
     date: etape === 'En veille' || (PROSPECT_ETAPES_ACTIVES.indexOf(etape) > 0),
@@ -2377,6 +2386,12 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
           if(!tErr) toast('📅 Tâche créée'); else toast('Étape enregistrée, tâche non créée','error');
         }
       }
+      if(etape==='Qualifié'){
+        // Jonction Qualifie -> Besoin (modele : proposeMission). Rien si un besoin actif existe deja.
+        const {data:dejaBesoin,error:errBesoin}=await sb.from('besoins').select('id')
+          .eq('contact_id',contact.id).neq('statut','Besoin Perdu').limit(1);
+        if(!errBesoin&&(!dejaBesoin||dejaBesoin.length===0)) setModal('proposeBesoin');
+      }
       setEtapeCible(null);onRefresh();
     }catch(e){
       toast('Erreur: '+(e&&e.message?e.message:e),'error');
@@ -2504,6 +2519,23 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
         }
       </div>
       {modal==='edit'  && <ContactEditModal   contact={contact} contacts={contacts||[]} profile={profile} allProfiles={allProfiles} comptes={comptes} onClose={()=>setModal(null)} onSaved={saved} />}
+      {modal==='proposeBesoin'&&(
+        <Modal title="Prospect qualifié" onClose={()=>setModal(null)}>
+          <div className="text-center py-4 space-y-4">
+            <p className="text-carbon">{contact.prenom} {contact.nom} est qualifié. Veux-tu créer le besoin associé ?</p>
+            <div className="flex gap-3 justify-center">
+              <button onClick={()=>setModal(null)} className="px-4 py-2 text-sm text-slate border rounded-lg hover:bg-neutral-50">Plus tard</button>
+              <button onClick={()=>setModal('createBesoin')} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">Créer le besoin</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {modal==='createBesoin'&&(()=>{
+        const cptPrincipal=linkedComptes.find(x=>x.is_primary)||linkedComptes[0]||null;
+        return <AddBesoinModal contacts={contacts||[]} comptes={comptes||[]} profile={profile} allProfiles={allProfiles}
+          initial={{statut:'Opportunité',contact_id:contact.id,compte_id:cptPrincipal?Number(cptPrincipal.id):null,compte:cptPrincipal?cptPrincipal.nom:null}}
+          onClose={()=>setModal(null)} onSaved={saved} onRefresh={onRefresh}/>;
+      })()}
       {modal==='hist'  && <AddHistoriqueModal contact={contact} profile={profile} onClose={()=>setModal(null)} onSaved={saved}/>}
       {modal==='tache' && <AddTacheModal contacts={[contact]} besoins={besoins||[]} missions={missions||[]} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onSaved={saved} defaultContactId={contact.id}/>}
     </SidePanel>
@@ -4140,6 +4172,7 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
       .filter(c=>{
         if(filterMine&&c.responsable!==profile.nom) return false;
         if(filterStatut&&c.statut!==filterStatut) return false;
+        if(filterStatut==='Prospect'&&!prospectSurLeBoard(c,besoins)) return false;
         if(!filterMine&&filterAgence&&c.agence!==filterAgence&&c.responsable!==profile.nom) return false;
         if(!filterMine&&filterResp&&c.responsable!==filterResp) return false;
         if(filterPeriode==='7j'&&c.jours>7) return false;
@@ -4168,7 +4201,7 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
       return 0;
     });
     return rows;
-  },[contacts,search,filterStatut,filterPeriode,filterResp,filterAgence,filterMine,profile.nom,sortCol,sortDir,primaryCompteByContact,compteMap]);
+  },[contacts,besoins,search,filterStatut,filterPeriode,filterResp,filterAgence,filterMine,profile.nom,sortCol,sortDir,primaryCompteByContact,compteMap]);
 
   const hasFilter=search||filterStatut||filterPeriode||filterResp||filterAgence||filterMine;
   const resetAll=()=>{setSearch('');setFilterStatut('');setFilterPeriode('');setFilterResp('');setFilterAgence('');setFilterMine(false);};
@@ -5727,9 +5760,9 @@ function BesoinStatusStepper({ value, onChange }) {
 }
 
 // Modal création besoin
-function AddBesoinModal({ contacts, comptes, profile, allProfiles, onClose, onSaved, onRefresh }) {
+function AddBesoinModal({ contacts, comptes, profile, allProfiles, onClose, onSaved, onRefresh, initial }) {
   const isAdmin=profile.role==='admin';
-  const [f,setF]=useState({titre:'',statut:'Besoin ouvert',type:'regie',lien:'',compte:'',compte_id:null,contact_id:null,description:'',budget:10000,budget_tjm:null,budget_jours:null,budget_date_debut:null,budget_date_fin:null,candidat_id:null,responsable:profile.nom});
+  const [f,setF]=useState({titre:'',statut:'Besoin ouvert',type:'regie',lien:'',compte:'',compte_id:null,contact_id:null,description:'',budget:10000,budget_tjm:null,budget_jours:null,budget_date_debut:null,budget_date_fin:null,candidat_id:null,responsable:profile.nom,...(initial||{})});
   const [saving,setSaving]=useState(false);const [err,setErr]=useState('');
   const save=async()=>{
     if(!f.titre.trim()){setErr('Le titre est obligatoire.');return;}

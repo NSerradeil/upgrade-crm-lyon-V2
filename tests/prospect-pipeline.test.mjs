@@ -18,13 +18,15 @@ function extrait(nom) {
 const NOMS = ['PROSPECT_ETAPES', 'PROSPECT_ETAPES_ACTIVES', 'PROSPECT_ETAPES_SORTIE',
               'PROSPECT_MOTIFS_PERTE', 'prospectEtapeOuDefaut', 'prospectEtapeRequiert',
               'prospectCanSubmit', 'prospectEnRetard', 'prospectTacheLibelle',
-              'prospectTacheEcheance', 'prospectReveilPreset', 'prospectPatchEtape', 'prospectTachePayload'];
+              'prospectTacheEcheance', 'prospectReveilPreset', 'prospectPatchEtape', 'prospectTachePayload',
+              'prospectSurLeBoard'];
 const src = NOMS.map(extrait).join('\n');
 const API = new Function(`${src}\nreturn {${NOMS.join(',')}};`)();
 const { PROSPECT_ETAPES, PROSPECT_ETAPES_ACTIVES, PROSPECT_ETAPES_SORTIE,
         prospectEtapeOuDefaut, prospectEtapeRequiert, prospectCanSubmit,
         prospectEnRetard, prospectTacheLibelle, prospectTacheEcheance,
-        prospectReveilPreset, prospectPatchEtape, prospectTachePayload } = API;
+        prospectReveilPreset, prospectPatchEtape, prospectTachePayload,
+        prospectSurLeBoard } = API;
 
 test('les 8 etapes, dans l ordre, avec les accents exacts', () => {
   assert.deepEqual(PROSPECT_ETAPES, ['À contacter', 'Contacté', 'En discussion',
@@ -182,4 +184,21 @@ test('la tache porte le contact, l echeance a 09h00 et le responsable', () => {
 test('pas de tache pour une etape sans date', () => {
   assert.equal(prospectTachePayload({id:42}, 'Perdu', {motif_perte:'Autre', creer_tache:true},
     'Nicolas Serradeil'), null);
+});
+
+test('un prospect avec un besoin actif quitte le board', () => {
+  const c = { id: 7, statut: 'Prospect', etape_prospect: 'Qualifié' };
+  assert.equal(prospectSurLeBoard(c, []), true);
+  assert.equal(prospectSurLeBoard(c, [{ contact_id: 7, statut: 'Opportunité' }]), false);
+  assert.equal(prospectSurLeBoard(c, [{ contact_id: 7, statut: 'Besoin Gagné' }]), false);
+});
+
+test('un besoin perdu rend le prospect au board', () => {
+  const c = { id: 7, statut: 'Prospect', etape_prospect: 'Qualifié' };
+  assert.equal(prospectSurLeBoard(c, [{ contact_id: 7, statut: 'Besoin Perdu' }]), true);
+});
+
+test('un besoin sur un AUTRE contact ne sort personne', () => {
+  const c = { id: 7, statut: 'Prospect' };
+  assert.equal(prospectSurLeBoard(c, [{ contact_id: 99, statut: 'Opportunité' }]), true);
 });
