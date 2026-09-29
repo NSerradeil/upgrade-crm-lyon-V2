@@ -24,7 +24,8 @@ const NOMS = ['DEFAULT_TASK_TIME', 'combineDT', 'PROSPECT_ETAPES', 'PROSPECT_ETA
               'prospectTacheEcheance', 'prospectReveilPreset', 'prospectPatchEtape', 'prospectTachePayload',
               'prospectSurLeBoard', 'prospectTacheEstProspection', 'etapeDepuisResultatAppel',
               'prospectPatchDepuisAppel', 'prospectRepartitionBoard', 'prospectEtapeFermeTaches',
-              'prospectTacheBoucleEtape'];
+              'prospectTacheBoucleEtape', 'PROSPECT_FILTRE_ACTIFS', 'prospectSectionsListe',
+              'prospectDerniereActionMap', 'prospectDerniereActionTexte'];
 const src = NOMS.map(extrait).join('\n');
 const API = new Function(`${src}\nreturn {${NOMS.join(',')}};`)();
 const { PROSPECT_ETAPES, PROSPECT_ETAPES_ACTIVES, PROSPECT_ETAPES_SORTIE,
@@ -33,7 +34,8 @@ const { PROSPECT_ETAPES, PROSPECT_ETAPES_ACTIVES, PROSPECT_ETAPES_SORTIE,
         prospectReveilPreset, prospectPatchEtape, prospectTachePayload,
         prospectSurLeBoard, prospectTacheEstProspection, etapeDepuisResultatAppel,
         prospectPatchDepuisAppel, prospectRepartitionBoard, prospectEtapeFermeTaches,
-        prospectTacheBoucleEtape } = API;
+        prospectTacheBoucleEtape, PROSPECT_FILTRE_ACTIFS, prospectSectionsListe,
+        prospectDerniereActionMap, prospectDerniereActionTexte } = API;
 
 test('les 8 etapes, dans l ordre, avec les accents exacts', () => {
   assert.deepEqual(PROSPECT_ETAPES, ['À contacter', 'Contacté', 'En discussion',
@@ -462,4 +464,70 @@ test('I3 jeu de cas commun : prospectPatchEtape nettoie comme le serveur MCP', (
     assert.equal(p.etape_prospect, c.etape);
     for (const [k, v] of Object.entries(c.attendu)) assert.equal(p[k], v, `${c.nom} : ${k}`);
   }
+});
+
+// ── Vue liste en cartes groupees par etape ──
+const NOW_L = '2026-09-29T10:00:00+02:00';
+const cl = (id, etape, date) => ({ id, etape_prospect: etape, prochaine_action_date: date || null });
+const etapesDe = r => r.map(s => s.etape);
+
+test('liste: ACTIFS exclut Perdu, NPC et En veille pas echu, inclut En veille echu', () => {
+  const cs = [cl(1,'Perdu'), cl(2,'Ne pas recontacter'), cl(3,'En veille','2026-12-01'),
+              cl(4,'En veille','2026-09-01'), cl(5,'Contacté','2026-10-01'), cl(6,'En discussion')];
+  const r = prospectSectionsListe(cs, PROSPECT_FILTRE_ACTIFS, NOW_L);
+  const ids = r.flatMap(s => s.contacts.map(c => c.id)).sort();
+  assert.deepEqual(ids, [4,5,6]);
+  assert.ok(!etapesDe(r).some(e => ['Perdu','Ne pas recontacter','En veille'].includes(e)));
+});
+
+test('liste: l En veille echu rejoint la section A contacter, en tete, avec reveil', () => {
+  const cs = [cl(1,'À contacter','2026-09-20'), cl(2,'En veille','2026-09-25')];
+  const r = prospectSectionsListe(cs, PROSPECT_FILTRE_ACTIFS, NOW_L);
+  assert.equal(r.length, 1);
+  assert.deepEqual(r[0].contacts.map(c => c.id), [2,1]);
+  assert.equal(r[0].reveil[2], true);
+  assert.equal(r[0].reveil[1], undefined);
+});
+
+test('liste: TOUS garde toutes les etapes, dans l ordre PROSPECT_ETAPES, sections vides masquees', () => {
+  const cs = [cl(1,'Perdu'), cl(2,'Qualifié','2026-10-02'), cl(3,'À contacter'), cl(4,'Ne pas recontacter'), cl(5,'En veille','2026-12-01')];
+  const r = prospectSectionsListe(cs, '', NOW_L);
+  assert.deepEqual(etapesDe(r), ['À contacter','Qualifié','En veille','Perdu','Ne pas recontacter']);
+});
+
+test('liste: dans une section, date croissante, sans date en dernier', () => {
+  const cs = [cl(1,'Contacté'), cl(2,'Contacté','2026-11-05'), cl(3,'Contacté','2026-10-01')];
+  const r = prospectSectionsListe(cs, PROSPECT_FILTRE_ACTIFS, NOW_L);
+  assert.deepEqual(r[0].contacts.map(c => c.id), [3,2,1]);
+});
+
+test('liste: filtre sur une etape ne montre que celle-la', () => {
+  const cs = [cl(1,'Contacté'), cl(2,'Qualifié'), cl(3,'En veille','2026-12-01')];
+  assert.deepEqual(etapesDe(prospectSectionsListe(cs, 'Qualifié', NOW_L)), ['Qualifié']);
+  assert.deepEqual(etapesDe(prospectSectionsListe(cs, 'En veille', NOW_L)), ['En veille']);
+  assert.deepEqual(prospectSectionsListe([], PROSPECT_FILTRE_ACTIFS, NOW_L), []);
+});
+
+test('liste: derniere action = la plus recente par date, egalite = id le plus eleve', () => {
+  const h = [
+    { id: 1, id_prospect: 7, date: '2026-09-01', type_action: 'Appel' },
+    { id: 2, id_prospect: 7, date: '2026-09-20', type_action: 'Mail' },
+    { id: 9, id_prospect: 7, date: '2026-09-20', type_action: 'RDV' },
+    { id: 3, id_prospect: 8, date: '2026-08-01', type_action: 'Note' },
+    { id: 4, id_prospect: null, date: '2026-09-28', type_action: 'Orpheline' }
+  ];
+  const m = prospectDerniereActionMap(h);
+  assert.equal(m[7].type_action, 'RDV');
+  assert.equal(m[8].type_action, 'Note');
+  assert.equal(m[null], undefined);
+  assert.equal(prospectDerniereActionMap([{ id: 10, id_prospect: 7, date: '2026-09-20', type_action: 'X' }, { id: 2, id_prospect: 7, date: '2026-09-20', type_action: 'Y' }])[7].type_action, 'X');
+});
+
+test('liste: contact sans historique, et texte de derniere action', () => {
+  const m = prospectDerniereActionMap([]);
+  assert.equal(m[42], undefined);
+  assert.equal(prospectDerniereActionTexte(undefined), 'Aucune action');
+  assert.equal(prospectDerniereActionTexte({ type_action: 'Appel', date: '2026-09-20', details: 'Ligne 1\n  ligne 2' }), 'Appel · 20/09 · Ligne 1 ligne 2');
+  assert.equal(prospectDerniereActionTexte({ type_action: 'Mail', date: '2026-09-20' }), 'Mail · 20/09');
+  assert.ok(!/[—–]/.test(prospectDerniereActionTexte(undefined)));
 });

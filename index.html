@@ -288,6 +288,46 @@ function prospectRepartitionBoard(contacts, now) {
   return { parEtape: parEtape, reveil: reveil };
 }
 
+// Vue liste en cartes. Filtre etape : PROSPECT_FILTRE_ACTIFS (defaut), '' (tous) ou un nom d'etape.
+// Meme regle de Reveil que le kanban (via prospectRepartitionBoard) : un « En veille » echu compte dans
+// « À contacter » (en tete, badge Reveil), donc il est inclus dans ACTIFS et dans le filtre « À contacter ».
+// Retourne [{ etape, contacts, reveil }] dans l'ordre PROSPECT_ETAPES, sections vides omises.
+const PROSPECT_FILTRE_ACTIFS = '__actifs__';
+function prospectSectionsListe(contacts, filtre, now) {
+  var rep = prospectRepartitionBoard(contacts, now);
+  var etapes = filtre === PROSPECT_FILTRE_ACTIFS ? PROSPECT_ETAPES_ACTIVES
+             : (filtre ? [filtre] : PROSPECT_ETAPES);
+  var out = [];
+  etapes.forEach(function(e) {
+    var liste = rep.parEtape[e] || [];
+    if (liste.length) out.push({ etape: e, contacts: liste, reveil: rep.reveil });
+  });
+  return out;
+}
+
+// Derniere action de l'historique par contact, calculee une fois. Plus recente par date, a egalite l'id le plus eleve.
+function prospectDerniereActionMap(historique) {
+  var m = {};
+  (historique || []).forEach(function(h) {
+    if (h.id_prospect == null) return;
+    var cur = m[h.id_prospect];
+    if (!cur) { m[h.id_prospect] = h; return; }
+    var dh = String(h.date || ''), dc = String(cur.date || '');
+    if (dh > dc || (dh === dc && Number(h.id) > Number(cur.id))) m[h.id_prospect] = h;
+  });
+  return m;
+}
+
+function prospectDerniereActionTexte(h) {
+  if (!h) return 'Aucune action';
+  var parts = [h.type_action || 'Action'];
+  var d = String(h.date || '').slice(0, 10).split('-');
+  if (d.length === 3) parts.push(d[2] + '/' + d[1]);
+  var det = String(h.details || '').replace(/\s+/g, ' ').trim();
+  if (det) parts.push(det);
+  return parts.join(' · ');
+}
+
 function prospectTacheLibelle(etape) {
   var L = { 'Contacté':'Rappeler', 'En discussion':'Relancer', 'RDV planifié':'RDV prospect',
             'Qualifié':'Qualifier le besoin', 'En veille':'Réveil prospect',
@@ -4291,6 +4331,10 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
   const [prospectView,setProspectView]=useState(prefs?.prospects_view||'list');
   // Intention issue d'un drop kanban ({contactId,etape}, objet neuf a chaque drop), consommee par ContactDetail.
   const [dropIntent,setDropIntent]=useState(null);
+  // Vue liste en cartes : filtre d'etape (pastilles). Defaut = ACTIFS. N'agit que sur cette vue.
+  const [prospectFiltre,setProspectFiltre]=useState(PROSPECT_FILTRE_ACTIFS);
+  // Derniere action par contact : construite UNE fois sur l'historique, jamais un filter par carte.
+  const derniereActionMap=useMemo(()=>prospectDerniereActionMap(historique),[historique]);
   // Sur le filtre Prospect le tri par defaut devient la prochaine action ; on restitue le tri d'origine en le quittant.
   useEffect(()=>{
     if(filterStatut==='Prospect'){ if(sortCol==='date_dernier'){ setSortCol('prochaine_action'); setSortDir('asc'); } }
@@ -4376,6 +4420,10 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
     return rows;
   },[contacts,besoins,search,filterStatut,filterPeriode,filterResp,filterAgence,filterMine,profile.nom,sortCol,sortDir,primaryCompteByContact,compteMap]);
 
+  const nbProspects=useMemo(()=>contacts.filter(c=>c.statut==='Prospect').length,[contacts]);
+  // Vue liste en cartes : sections par etape sur la liste DEJA filtree (recherche, resp, agence, mine, board).
+  const sectionsListe=useMemo(()=>(filterStatut==='Prospect'&&prospectView==='list')?prospectSectionsListe(filtered,prospectFiltre):[],[filtered,filterStatut,prospectView,prospectFiltre]);
+  const nbListe=sectionsListe.reduce((n,sec)=>n+sec.contacts.length,0);
   const hasFilter=search||filterStatut||filterPeriode||filterResp||filterAgence||filterMine;
   const resetAll=()=>{setSearch('');setFilterStatut('');setFilterPeriode('');setFilterResp('');setFilterAgence('');setFilterMine(false);};
   // Virtualisation liste contacts : n'afficher que visibleCount lignes (anti-crash mobile). La recherche/tri restent sur TOUT le dataset.
@@ -4389,7 +4437,8 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
       {/* Toggle Contacts / Comptes */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex border rounded-lg overflow-hidden text-sm">
-          <button onClick={()=>setViewMode('contacts')} className={`px-3 py-2 font-medium ${viewMode==='contacts'?'bg-midnight text-white':'bg-white text-slate hover:bg-neutral-50'}`}>Contacts ({contacts.length})</button>
+          <button onClick={()=>{setViewMode('contacts');if(filterStatut==='Prospect')setFilterStatut('');}} className={`px-3 py-2 font-medium ${viewMode==='contacts'&&filterStatut!=='Prospect'?'bg-midnight text-white':'bg-white text-slate hover:bg-neutral-50'}`}>Contacts ({contacts.length})</button>
+          <button onClick={()=>{setViewMode('contacts');setFilterStatut('Prospect');}} className={`px-3 py-2 font-medium border-l ${viewMode==='contacts'&&filterStatut==='Prospect'?'bg-midnight text-white':'bg-white text-slate hover:bg-neutral-50'}`}>Prospects ({nbProspects})</button>
           <button onClick={()=>setViewMode('comptes')} className={`px-3 py-2 font-medium border-l ${viewMode==='comptes'?'bg-midnight text-white':'bg-white text-slate hover:bg-neutral-50'}`}>Comptes ({(comptes||[]).length})</button>
         </div>
         {viewMode==='contacts'&&<button onClick={()=>setShowAdd(true)} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">+ Nouveau contact</button>}
@@ -4426,9 +4475,61 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
           })}
         </div>}
       </div>
-      <div className="text-xs text-neutral-300 mb-2">{filtered.length} contact{filtered.length>1?'s':''}</div>
+      {!(filterStatut==='Prospect'&&prospectView==='list')&&<div className="text-xs text-neutral-300 mb-2">{filtered.length} contact{filtered.length>1?'s':''}</div>}
       {filterStatut==='Prospect'&&prospectView==='kanban'
         ? <ProspectsKanban contacts={filtered} onCardClick={c=>{setDropIntent(null);setSelected(c);}} onDrop={(c,e)=>{setSelected(c);setDropIntent({contactId:c.id,etape:e});}}/>
+        : filterStatut==='Prospect'
+        ? <>
+          <div className="flex gap-1.5 flex-wrap mb-4">
+            {[{label:'ACTIFS',value:PROSPECT_FILTRE_ACTIFS},{label:'TOUS',value:''}].concat(PROSPECT_ETAPES.map(e=>({label:e.toUpperCase(),value:e}))).map(btn=>{
+              const active=prospectFiltre===btn.value;
+              const bc=btn.value&&btn.value!==PROSPECT_FILTRE_ACTIFS?PROSPECT_BADGE_COLORS[btn.value]:null;
+              return <button key={btn.label} onClick={()=>setProspectFiltre(btn.value)}
+                style={active&&bc?{backgroundColor:bc.bg,color:bc.color}:active&&btn.value===PROSPECT_FILTRE_ACTIFS?{backgroundColor:'#FFE500',color:'#1C1F35'}:active?{backgroundColor:'#1C1F35',color:'#fff'}:{}}
+                className={`px-3 py-1.5 text-[11px] font-bold border-2 transition-colors whitespace-nowrap tracking-[0.04em]
+                  ${active?'border-transparent':'bg-white text-slate border-neutral-200 hover:border-midnight hover:text-midnight'}`}>
+                {btn.label}
+              </button>;
+            })}
+          </div>
+          <div className="text-xs text-neutral-300 mb-3">{nbListe} prospect{nbListe>1?'s':''}{prospectFiltre===PROSPECT_FILTRE_ACTIFS?' actif'+(nbListe>1?'s':''):''}</div>
+          <div className="space-y-6">
+            {sectionsListe.map(sec=>{
+              const bc=PROSPECT_BADGE_COLORS[sec.etape]||{bg:'#E4E4E6',color:'#1C1F35'};
+              return (
+                <div key={sec.etape}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span style={{backgroundColor:bc.bg,color:bc.color,padding:'2px 8px',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.04em',whiteSpace:'nowrap'}}>{sec.etape}</span>
+                    <span className="text-xs font-bold text-slate">{sec.contacts.length}</span>
+                  </div>
+                  <div className="space-y-2">{sec.contacts.map(c=>{
+                    const retard=prospectEnRetard(c);
+                    const dernier=derniereActionMap[c.id];
+                    return (
+                      <div key={c.id} onClick={()=>{setDropIntent(null);setSelected(c);}} data-detail tabIndex="0" className="bg-white border-2 border-neutral-200 p-3 sm:p-4 cursor-pointer hover:border-blue-200 focus:outline-none focus:border-midnight transition-colors">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <span className="font-semibold text-midnight text-sm truncate">{c.prenom} {(c.nom||'').toUpperCase()}</span>
+                            </div>
+                            {c.societe&&<div className="text-xs text-slate truncate">{c.societe}</div>}
+                            {c.prochaine_action_date&&<div className="text-xs mt-1 flex items-center gap-2 flex-wrap" style={{color:retard?'#FF3D2E':'#1C1F35',fontWeight:retard?700:500}}>
+                              <span>{fmtDT(c.prochaine_action_date,DEFAULT_TASK_TIME)}{c.prochaine_action_libelle?' '+c.prochaine_action_libelle:''}</span>
+                              {sec.reveil[c.id]&&<span style={{background:'#FFE500',color:'#1C1F35',padding:'1px 5px',fontSize:9,fontWeight:700,letterSpacing:'0.05em',textTransform:'uppercase'}}>Réveil</span>}
+                            </div>}
+                            <div className="text-[10px] text-neutral-300 mt-1 truncate">{prospectDerniereActionTexte(dernier)}</div>
+                          </div>
+                          <div className="shrink-0 text-xs text-neutral-300">{c.responsable}</div>
+                        </div>
+                      </div>
+                    );
+                  })}</div>
+                </div>
+              );
+            })}
+            {nbListe===0&&<div className="text-center py-16"><div className="font-bold text-midnight text-lg mb-1">Aucun prospect</div><div className="text-sm text-neutral-300">Aucun prospect ne correspond à ces filtres.</div></div>}
+          </div>
+        </>
         : <>
       {/* Vue cartes mobile */}
       <div className="md:hidden space-y-2">
