@@ -492,6 +492,36 @@ async function prospectAnnulerTachesOuvertes(contactId) {
   return { error: res.error || null, annulees: res.error ? 0 : ids.length };
 }
 
+// Entree en « Ne pas recontacter » (et seulement elle) : les sequences de campagne liees a la fiche
+// doivent s'arreter, sinon la relance suivante partirait quand meme. Sortir de NPC n'arrete rien.
+function prospectEntreeNpc(etapeAvant, etapeApres) {
+  return etapeApres === 'Ne pas recontacter' && etapeAvant !== 'Ne pas recontacter';
+}
+
+// Arrete les sequences active / replied / paused liees a la fiche (agent_sequences.contact_id). Retourne
+// { error, arretees }. Base avant la migration 54 (colonne absente) : l'erreur revient en { error }, l'appelant
+// la signale par un avertissement et ne fait jamais echouer l'ecriture de la fiche.
+async function prospectStopperSequencesLiees(contactId) {
+  var lues = await sb.from('agent_sequences').select('id,notes').eq('contact_id', parseInt(contactId)).in('statut', ['active', 'replied', 'paused']);
+  if (lues.error) return { error: lues.error, arretees: 0 };
+  var jour = new Date().toLocaleDateString('fr-FR');
+  var arretees = 0, erreur = null;
+  var lignes = lues.data || [];
+  for (var i = 0; i < lignes.length; i++) {
+    var note = [lignes[i].notes, '[' + jour + '] Arrêt : fiche passée en Ne pas recontacter'].filter(Boolean).join('\n');
+    var r = await sb.from('agent_sequences').update({ statut: 'stopped', next_due_at: null, notes: note }).eq('id', lignes[i].id);
+    if (r.error) erreur = erreur || r.error; else arretees++;
+  }
+  return { error: erreur, arretees: arretees };
+}
+
+// Sortie manuelle « Ne plus contacter » d'une campagne de prospection sans fiche liee : rien ne peut etre
+// pose au CRM, on le dit au lieu de se taire. Retourne le texte du toast, ou null.
+function campagneAvertissementSansFiche(motif, mission, s) {
+  if (motif !== 'npc' || !campagneEstProspection(mission) || (s && s.contact_id)) return null;
+  return 'Aucune fiche liée : CRM non modifié, à poser à la main';
+}
+
 function prospectTachePayload(contact, etape, form, responsable) {
   form = form || {};
   if (!form.creer_tache) return null;
@@ -511,6 +541,145 @@ function prospectTachePayload(contact, etape, form, responsable) {
     responsable: responsable
   };
 }
+// ═══ Campagnes de prospection de Jules : cf. SPECS_CRM/SPEC_campagnes_prospection_etapes.md ═══
+// La correspondance « sortie d'une personne -> effet sur sa fiche » existe DEUX fois : ici et dans le
+// MCP (server/campagne-rules.mjs, effetSortie). Elle est verrouillee par un jeu de cas commun,
+// tests/fixtures/campagne-sortie-cas.json, en copie identique dans les deux repos.
+const CAMPAGNE_MOTIF_PERTE_PROFIL = 'Pas le bon interlocuteur';
+const CAMPAGNE_LIBELLES_SORTIE = { converti:'RDV pris', refus:'refus', silence:'fin des relances sans réponse', profil:'pas le bon profil', npc:'ne me contactez plus', doublon:'doublon', autre:'sortie de campagne' };
+
+// Seule une campagne au preset prospection EXPLICITE touche au pipeline.
+function campagneEstProspection(mission) {
+  return !!(mission && mission.kind === 'campagne' && mission.config && mission.config.preset === 'prospection');
+}
+
+// { action: 'rien'|'historique'|'etape'|'go', etape, motif_perte, reveil6m } : miroir exact de effetSortie.
+function campagneEffetSortie(motif, contact) {
+  function r(action, etape, motifPerte, reveil) {
+    return { action: action, etape: etape || null, motif_perte: motifPerte || null, reveil6m: !!reveil };
+  }
+  if (!contact) return r('rien');
+  if (contact.etape_prospect === 'Ne pas recontacter') return r('rien');
+  if (motif === 'doublon') return r('rien');
+  if (motif === 'npc') return r('go', 'Ne pas recontacter');
+  if (contact.statut !== 'Prospect') return motif === 'profil' ? r('rien') : r('historique');
+  var etape = prospectEtapeOuDefaut(contact);
+  if (etape === 'Perdu') return r('historique');
+  var rang = PROSPECT_ETAPES_ACTIVES.indexOf(etape);
+  if (motif === 'profil') return rang >= 0 ? r('go', 'Perdu', CAMPAGNE_MOTIF_PERTE_PROFIL) : r('historique');
+  if (motif === 'refus' || motif === 'silence') return r('etape', 'En veille', null, true);
+  if (motif === 'converti') {
+    return (etape === 'En veille' || (rang >= 0 && rang < PROSPECT_ETAPES_ACTIVES.indexOf('RDV planifié')))
+      ? r('etape', 'RDV planifié') : r('historique');
+  }
+  return r('historique');
+}
+
+// Jour ouvre suivant une date YYYY-MM-DD : ni samedi, ni dimanche, ni ferie francais (fixes, lundi de
+// Paques, Ascension, lundi de Pentecote). Meme calcul que jourOuvreSuivant du MCP.
+function campagneJourOuvreSuivant(aujourdhui) {
+  var p = String(aujourdhui).slice(0, 10).split('-');
+  var d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2], 12));
+  function paques(y) {
+    var a=y%19,b=Math.floor(y/100),c=y%100,dd=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),
+      h=(19*a+b-dd-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),
+      mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;
+    return Date.UTC(y, mo - 1, da, 12);
+  }
+  function ferie(x) {
+    var md = x.toISOString().slice(5, 10);
+    if (['01-01','05-01','05-08','07-14','08-15','11-01','11-11','12-25'].indexOf(md) >= 0) return true;
+    var p0 = paques(x.getUTCFullYear()), t = x.getTime(), j = 86400000;
+    return t === p0 + j || t === p0 + 39 * j || t === p0 + 50 * j;
+  }
+  do { d = new Date(d.getTime() + 86400000); } while (d.getUTCDay() === 0 || d.getUTCDay() === 6 || ferie(d));
+  return d.toISOString().slice(0, 10);
+}
+
+// Plan d'une sortie manuelle depuis le cockpit (Nicolas decide : les sorties qui passent par son GO
+// cote Jules s'appliquent ici directement). ctx = { campagne, aujourdhui (YYYY-MM-DD), responsable,
+// precision }. Rend { effet, patch, tache, fermeTaches, detail } ; detail null = rien a ecrire.
+// Le detail commence exactement comme la ligne d'historique du MCP (« Campagne <titre> : <libelle> (le JJ/MM/AAAA) »,
+// jour Paris) : le temoin d'idempotence du MCP, par prefixe, la retrouve et ne double pas la ligne.
+function campagneSortiePlan(motif, contact, ctx) {
+  ctx = ctx || {};
+  var e = campagneEffetSortie(motif, contact);
+  var plan = { effet: e, patch: null, tache: null, fermeTaches: false, detail: null };
+  if (e.action === 'rien') return plan;
+  var jf = String(ctx.aujourdhui || '').slice(0, 10).split('-');   // YYYY-MM-DD (jour Paris) -> JJ/MM/AAAA, comme fmtJour du MCP
+  var base = 'Campagne ' + (ctx.campagne || '') + ' : ' + (CAMPAGNE_LIBELLES_SORTIE[motif] || CAMPAGNE_LIBELLES_SORTIE.autre)
+    + ' (le ' + jf[2] + '/' + jf[1] + '/' + jf[0] + '), sortie par ' + (ctx.responsable || 'Nicolas');
+  if (e.action === 'historique') { plan.detail = base; return plan; }
+  var precision = ctx.precision || null;
+  if (e.etape === 'En veille') {
+    plan.patch = prospectPatchEtape('En veille', { prochaine_action_date: prospectReveilPreset(ctx.aujourdhui, '6m'),
+      motif_perte_precision: precision });
+  } else if (e.etape === 'RDV planifié') {
+    var jour = campagneJourOuvreSuivant(ctx.aujourdhui);
+    var form = { creer_tache: true, prochaine_action_date: jour, prochaine_action_libelle: 'Confirmer la date du RDV' };
+    plan.patch = prospectPatchEtape('RDV planifié', form);
+    plan.tache = prospectTachePayload(contact, 'RDV planifié', form, contact.responsable || ctx.responsable);
+  } else if (e.etape === 'Perdu') {
+    plan.patch = prospectPatchEtape('Perdu', { motif_perte: e.motif_perte, motif_perte_precision: precision });
+    plan.fermeTaches = true;
+  } else if (e.etape === 'Ne pas recontacter') {
+    plan.patch = prospectPatchEtape('Ne pas recontacter', { motif_perte_precision: precision || ('Demande en campagne ' + (ctx.campagne || '')) });
+    plan.fermeTaches = true;
+  }
+  var bouge = plan.patch && plan.patch.etape_prospect !== prospectEtapeOuDefaut(contact);
+  plan.detail = base + (bouge ? ' · étape → ' + plan.patch.etape_prospect : '');
+  return plan;
+}
+
+// Sortie manuelle d'une personne depuis le cockpit Jules, campagne de prospection : applique a la
+// fiche LIEE (s.contact_id) le plan de campagneSortiePlan. Aucune recherche ni creation de fiche ici :
+// c'est le MCP qui lie et cree. Rend le plan applique, ou null si rien n'etait a faire. Leve une
+// erreur si une ecriture echoue (l'appelant la signale, la sequence reste sortie).
+async function julesSortieCampagneCrm(s, motif, mission, responsable, precision) {
+  if (!campagneEstProspection(mission) || !s || !s.contact_id) return null;
+  var lu = await sb.from('contacts').select('id,prenom,nom,statut,responsable,etape_prospect')
+    .eq('id', parseInt(s.contact_id)).maybeSingle();
+  if (lu.error) throw new Error(lu.error.message);
+  if (!lu.data) return null;
+  var c = lu.data;
+  var etapeAvantSortie = c.etape_prospect || null;
+  var qui = responsable || c.responsable;
+  // Meme precision par defaut que le MCP quand la sortie donne En veille, pour que les deux cotes
+  // ecrivent le meme libelle.
+  var defaut = null;
+  if (campagneEffetSortie(motif, c).etape === 'En veille') {
+    defaut = motif === 'silence' ? 'Sans réponse à la campagne ' + mission.titre : 'Refus en campagne ' + mission.titre;
+  }
+  var plan = campagneSortiePlan(motif, c, { campagne: mission.titre, aujourdhui: getToday(), responsable: qui, precision: precision || defaut });
+  if (!plan.detail) return null;
+  if (plan.patch) {
+    var maj = await sb.from('contacts').update(plan.patch).eq('id', c.id);
+    if (maj.error) throw new Error(maj.error.message);
+  }
+  if (plan.fermeTaches) {
+    var fermees = await prospectAnnulerTachesOuvertes(c.id);
+    if (fermees.error) throw new Error(fermees.error.message);
+  }
+  if (plan.patch && prospectEntreeNpc(etapeAvantSortie, plan.patch.etape_prospect)) {
+    var arret = await prospectStopperSequencesLiees(c.id);
+    if (arret.error) plan.avertissement = 'séquences liées non arrêtées (' + arret.error.message + ')';
+  }
+  // Historique AVANT la tache : si la creation de la tache echoue, la fiche ne bouge pas sans trace.
+  var h = await sb.from('historique_actions').insert({ id_prospect: c.id, date: getToday(), type_action: 'LinkedIn',
+    details: plan.detail, responsable: qui });
+  if (h.error) throw new Error(h.error.message);
+  if (plan.tache) {
+    var lues = await sb.from('taches').select('id,statut').eq('contact_id', c.id).like('id', 'tw_prospect_%');
+    if (lues.error) throw new Error(lues.error.message);
+    var ouvertes = (lues.data || []).filter(function(t){ return t.statut !== 'fait' && t.statut !== 'annule'; });
+    if (ouvertes.length === 0) {
+      var cree = await sb.from('taches').insert(plan.tache);
+      if (cree.error) throw new Error(cree.error.message);
+    }
+  }
+  return plan;
+}
+
 const TYPES_ACTION     = ['Tel','Mail envoyé','Mail reçu','RDV','LinkedIn','Note interne','Autre'];
 const STATUTS_ENTRETIEN = ['candidat','freelance','prestataire'];
 const isEntretienStatut = s => s && STATUTS_ENTRETIEN.includes(s.toLowerCase());
@@ -2587,6 +2756,10 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
       if(prospectEtapeFermeTaches(etape)){
         const rAnn=await prospectAnnulerTachesOuvertes(contact.id);
         if(rAnn.error) toast('Étape enregistrée, tâches de prospection ouvertes non annulées','error');
+      }
+      if(prospectEntreeNpc(prospectEtapeOuDefaut(contact),etape)){
+        const rSeq=await prospectStopperSequencesLiees(contact.id);
+        if(rSeq.error) toast('Étape enregistrée, séquences de campagne liées non arrêtées','error');
       }
       const tache=prospectTachePayload(contact,etape,form,profile.nom);
       if(tache){
@@ -9376,7 +9549,7 @@ const julesActions = {
   // pareil dans un bilan, et sans elle on ne sait jamais pourquoi un vivier s'est vidé.
   // Converti a son propre statut en base ; tout le reste est un arrêt, distingué par sa
   // raison écrite dans les notes et dans l'événement.
-  async arreterSuivi(s, raison) {
+  async arreterSuivi(s, raison, mission, responsable) {
     const motif = (raison && raison.cle) || 'autre';
     const cible = motif === 'converti' ? 'converted' : 'stopped';
     const texte = (raison && raison.texte) || '';
@@ -9397,6 +9570,18 @@ const julesActions = {
       kind: cible === 'converted' ? 'sequence.converted' : 'sequence.stopped',
       sequence_id:s.id, mission_id:s.mission_id,
       message: s.target_label + ' — ' + libelle + (texte ? ' : ' + texte : '')});
+    // Campagne de prospection (SPEC_campagnes_prospection_etapes.md) : la sortie applique a la fiche
+    // liee la meme correspondance que le MCP. La sequence est deja sortie : un echec CRM ne l'annule
+    // pas, il est signale.
+    try {
+      const plan = await julesSortieCampagneCrm(s, motif, mission, responsable, texte);
+      if (plan && plan.detail) toast('Fiche CRM mise à jour : ' + plan.detail);
+      if (plan && plan.avertissement) toast('Fiche CRM mise à jour, mais ' + plan.avertissement + '. À faire à la main.', 'error');
+      const sansFiche = campagneAvertissementSansFiche(motif, mission, s);
+      if (sansFiche) toast(sansFiche, 'error');
+    } catch (e) {
+      toast('Sortie enregistrée, mais la fiche CRM n\'a pas été mise à jour : ' + e.message, 'error');
+    }
   },
   // -- barre de transport d'un suivi (Nicolas 23/09) ------------------------------------
   // Trois gestes de plus que « Sortir », qui existaient dans la tête de Nicolas mais pas
@@ -9510,7 +9695,7 @@ const JULES_SEQ_STATUT_MOT = {
 // agent_tasks n'est pas chargée globalement : une mission peut en porter beaucoup et elles ne
 // servent qu'ici (« le seul endroit où les tâches sont listées », spec §3.4). Lecture à l'ouverture,
 // ce qui borne le trafic du sondage des 30 s.
-function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
+function JulesDetail({ missionId, data, onClose, actions, occupe, discuter, onNavToContact }) {
   const mission = useMemo(()=>(data.missions||[]).find(m=>m.id===missionId),[data.missions,missionId]);
   const [taches,setTaches] = useState(null);
   const [seqOuvert,setSeqOuvert] = useState(null);         // id de la séquence dépliée (Personnes suivies)
@@ -9751,6 +9936,17 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
                             textTransform:'uppercase', letterSpacing:'0.05em', minHeight:32}}>
                     {deplie?'▾ masquer le détail':'▸ voir le détail'}
                   </button>
+                  {/* Fiche CRM liee (SPEC_campagnes_prospection_etapes.md §6.4) : posee par le MCP au
+                      premier vrai contact d'une campagne de prospection. Un clic ouvre la fiche. */}
+                  {s.contact_id&&onNavToContact&&(
+                    <button type="button" onClick={()=>{ onClose(); onNavToContact(s.contact_id); }}
+                      title="Ouvrir la fiche CRM liée à cette personne"
+                      style={{background:'none', border:'2px solid '+JULES_NOIR, borderRadius:0, padding:'4px 8px', cursor:'pointer',
+                              fontFamily:'Outfit, sans-serif', fontSize:11, fontWeight:700, color:JULES_NOIR,
+                              textTransform:'uppercase', letterSpacing:'0.03em', minHeight:32}}>
+                      Fiche CRM
+                    </button>
+                  )}
                   {discuter&&<JulesSlackBtn small label="Discuter"
                     onClick={()=>discuter({kind:'free', ref_id:s.id, mission_id:s.mission_id||mission.id, titre:s.target_label+' — '+mission.titre})}/>}
                   {/* « Sortir » vit sur la ligne d'actions, pas dans l'en-tête (Nicolas 22/09) :
@@ -9831,7 +10027,7 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
       </Field>
       {geste&&geste.geste==='stop'&&<JulesSortirSequence seq={geste.seq} onClose={()=>setGeste(null)}
         saving={occupe===geste.seq.id}
-        onSave={raison=>{ const sq=geste.seq; setGeste(null); actions.arreterSuivi(sq, raison); }}/>}
+        onSave={raison=>{ const sq=geste.seq; setGeste(null); actions.arreterSuivi(sq, raison, mission); }}/>}
       {geste&&geste.geste!=='stop'&&<JulesSeqGeste seq={geste.seq} geste={geste.geste}
         parcours={julesSeqParcours(geste.seq, cfg)} config={cfg}
         onClose={()=>setGeste(null)} saving={occupe===geste.seq.id}
@@ -9862,6 +10058,7 @@ function JulesDetail({ missionId, data, onClose, actions, occupe, discuter }) {
 const JULES_RAISONS_SORTIE = [
   {cle:'converti', label:'Converti — RDV pris ou placement', variant:'success'},
   {cle:'refus',    label:'Refus de la personne',             variant:'danger'},
+  {cle:'npc',      label:'Ne plus contacter, à sa demande',  variant:'danger'},
   {cle:'profil',   label:'Pas le bon profil finalement',     variant:'edit'},
   {cle:'silence',  label:'Bout des relances, sans réponse',  variant:'close'},
   {cle:'doublon',  label:'Doublon, déjà suivi ailleurs',     variant:'edit'},
@@ -10458,7 +10655,7 @@ function JulesModifierMission({ mission, onClose, onSave, saving }) {
   );
 }
 
-function TabJules({ profile, prefs, deepLink }) {
+function TabJules({ profile, prefs, deepLink, onNavToContact }) {
   const J = useJulesData();
   const [detailId,setDetailId] = useState(null);
   const [occupe,setOccupe] = useState(null);      // id de l'objet en cours d'écriture
@@ -10558,10 +10755,10 @@ function TabJules({ profile, prefs, deepLink }) {
       {apercu&&<JulesApercuAppro entree={apercu} occupe={occupe} onClose={()=>setApercu(null)}
         onAccorder={approOnAccorder} onAjuster={approOnAjuster}
         onRefuser={approOnRefuser} onRepondre={approOnRepondre} onDiscuter={discuter} events={J.data.events}/>}
-      {detailId&&<JulesDetail missionId={detailId} data={J.data} onClose={()=>setDetailId(null)}
+      {detailId&&<JulesDetail missionId={detailId} data={J.data} onClose={()=>setDetailId(null)} onNavToContact={onNavToContact}
         occupe={occupe} discuter={discuter}
         actions={{basculerPause:m=>agir(m.id,()=>julesActions.basculerPause(m)),
-                  arreterSuivi:s=>agir(s.id,()=>julesActions.arreterSuivi(s)),
+                  arreterSuivi:(s,raison,mission)=>agir(s.id,()=>julesActions.arreterSuivi(s,raison,mission,profile&&profile.nom)),
                   relancerTache:t=>agir(t.id,()=>julesActions.relancerTache(t)),
                   modifier:m=>setAModifier(m),
                   fermer:m=>setAFermer(m)}}/>}
@@ -11827,6 +12024,10 @@ function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDo
           var annT = await prospectAnnulerTachesOuvertes(sc.id);
           if (annT.error) toast('⚠️ Tâches de prospection non annulées pour ' + (sc.prenom||'') + ' ' + sc.nom, 'error');
         }
+        if (!updRes.error && patchAppel && prospectEntreeNpc(prospectEtapeOuDefaut(sc), patchAppel.etape_prospect)) {
+          var stopS = await prospectStopperSequencesLiees(sc.id);
+          if (stopS.error) toast('⚠️ Séquences de campagne non arrêtées pour ' + (sc.prenom||'') + ' ' + sc.nom, 'error');
+        }
       }
     }
 
@@ -11913,6 +12114,10 @@ function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDo
         else if (prospectEtapeFermeTaches(patchNpc.etape_prospect)) {
           var annT2 = await prospectAnnulerTachesOuvertes(pic2.id);
           if (annT2.error) toast('⚠️ Tâches de prospection non annulées pour ' + (pic2.prenom||'') + ' ' + pic2.nom, 'error');
+        }
+        if (!npcRes.error && prospectEntreeNpc(prospectEtapeOuDefaut(pic2), patchNpc.etape_prospect)) {
+          var stopS2 = await prospectStopperSequencesLiees(pic2.id);
+          if (stopS2.error) toast('⚠️ Séquences de campagne non arrêtées pour ' + (pic2.prenom||'') + ' ' + pic2.nom, 'error');
         }
       }
     }
@@ -12677,7 +12882,7 @@ function App() {
         {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} comptes={vComptes} compteMap={compteMap} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToCompte={navToCompte} prefs={prefs}/>}
         {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} contactMap={contactMap} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache}/>}
         {tab==='tdb'      &&<TabTDB      missions={vMissions} histMissions={vHistMiss} missionPeriods={missionPeriods} contacts={vContacts} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navMissionId={navMissionId} navMissionKey={navMissionKey} comptes={vComptes} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache} onNavToCompte={navToCompte} prefs={prefs}/>}
-        {tab==='jules'    &&julesOn&&<TabJules profile={profile} prefs={prefs} deepLink={julesDeepLink}/>}
+        {tab==='jules'    &&julesOn&&<TabJules profile={profile} prefs={prefs} deepLink={julesDeepLink} onNavToContact={navToContact}/>}
         {tab==='settings' &&<TabSettings user={user} profile={activeProfile} taches={vTaches} subTab={settingsSubTab} onSubTabChange={setSettingsSubTab} prefs={prefs} onSavePrefs={viewAs?null:savePrefs} achievements={activeAchievements} viewAs={!!viewAs}/>}
       </div>
       {/* Shortcuts modal */}
