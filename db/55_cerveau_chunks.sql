@@ -14,11 +14,15 @@ create table if not exists public.cerveau_chunks (
   unique (note_path, chunk_idx)
 );
 
-create index if not exists cerveau_chunks_embedding_idx
-  on public.cerveau_chunks using ivfflat (embedding vector_cosine_ops) with (lists = 100);
+drop index if exists public.cerveau_chunks_embedding_idx;
+create index if not exists cerveau_chunks_embedding_hnsw
+  on public.cerveau_chunks using hnsw (embedding vector_cosine_ops);
 create index if not exists cerveau_chunks_entite_idx on public.cerveau_chunks (entite);
 
 alter table public.cerveau_chunks enable row level security;
+alter table public.cerveau_chunks force row level security;
+revoke all on public.cerveau_chunks from anon, authenticated;
+revoke all on sequence public.cerveau_chunks_id_seq from anon, authenticated;
 
 -- Pre-filtre strate : une session ne voit ni n'ecrit que les chunks <= son niveau_max.
 -- niveau_max est pose par l'app a chaque transaction via set_config('cerveau.niveau_max', ...).
