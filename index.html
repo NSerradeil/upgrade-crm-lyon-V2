@@ -145,8 +145,26 @@ tailwind.config = {
 <script type="text/babel">
 const { useState, useEffect, useMemo, useCallback, useRef } = React;
 
-const SUPABASE_URL = "https://ehfseahxoivfhmpiyoqa.supabase.co";
-const SUPABASE_KEY = "sb_publishable_BaNIdlZ09xavRRhG0G-ScQ_mW4hVueJ";
+// Adresse et cle publique du backend : lues dans config.json (meme dossier que l'appli),
+// pour changer de serveur sans toucher au code. Repli : derniere config reussie (localStorage),
+// puis valeurs d'origine ci-dessous. Lecture synchrone : la config doit etre connue avant createClient.
+const BACKEND_DEFAUT = { supabase_url: "https://ehfseahxoivfhmpiyoqa.supabase.co", supabase_key: "sb_publishable_BaNIdlZ09xavRRhG0G-ScQ_mW4hVueJ" };
+const BACKEND = (function() {
+  const ok = c => c && typeof c.supabase_url === 'string' && /^https:\/\//.test(c.supabase_url) && typeof c.supabase_key === 'string' && c.supabase_key.length >= 20;
+  try {
+    const x = new XMLHttpRequest();
+    x.open('GET', 'config.json?t=' + Date.now(), false);
+    x.send(null);
+    if (x.status === 200) {
+      const c = JSON.parse(x.responseText);
+      if (ok(c)) { try { localStorage.setItem('crm_backend_config', JSON.stringify(c)); } catch(e) {} return { url: c.supabase_url.replace(/\/+$/, ''), key: c.supabase_key, source: 'config' }; }
+    }
+  } catch(e) {}
+  try { const c = JSON.parse(localStorage.getItem('crm_backend_config')); if (ok(c)) return { url: c.supabase_url.replace(/\/+$/, ''), key: c.supabase_key, source: 'cache' }; } catch(e) {}
+  return { url: BACKEND_DEFAUT.supabase_url, key: BACKEND_DEFAUT.supabase_key, source: 'defaut' };
+})();
+const SUPABASE_URL = BACKEND.url;
+const SUPABASE_KEY = BACKEND.key;
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const TZ='Europe/Paris';
 function getToday() { return new Date().toLocaleDateString('sv-SE',{timeZone:TZ}); }

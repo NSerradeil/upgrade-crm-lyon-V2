@@ -83,3 +83,7 @@ automatisé à ce jour, et GitHub Pages ne déploie que `main`.
 
 ## Règle projet
 Pas de commit/push sans demande explicite de Nicolas.
+
+## Changer de backend (config.json)
+
+L'appli et le connecteur MCP (8.30.0+) lisent l'adresse et la clé publique du backend dans `config.json`, publié à côté de `index.html` (GitHub Pages). Pour basculer : modifier `supabase_url` et `supabase_key` dans ce fichier, commit, push. Les valeurs d'origine (cloud) restent en repli dans `index.html` et `server/backend-config.mjs`. Les variables d'environnement `SUPABASE_URL` / `SUPABASE_ANON_KEY` priment pour le MCP.

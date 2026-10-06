@@ -1,5 +1,5 @@
 // Service Worker — Upgrade CRM Lyon
-const CACHE_NAME = 'upgrade-crm-v4';
+const CACHE_NAME = 'upgrade-crm-v5';
 const SHELL_ASSETS = ['/upgrade-crm-lyon-V2/'];
 
 // Installation : mise en cache du shell
@@ -29,6 +29,8 @@ self.addEventListener('fetch', event => {
   // Requêtes API/CDN : réseau uniquement (pas de cache pour les données live)
   if (
     url.hostname.includes('supabase.co') ||
+    url.hostname.endsWith('.ts.net') ||
+    url.pathname.endsWith('/config.json') ||
     url.hostname.includes('unpkg.com') ||
     url.hostname.includes('cdn.tailwindcss.com') ||
     url.hostname.includes('cdn.jsdelivr.net')
