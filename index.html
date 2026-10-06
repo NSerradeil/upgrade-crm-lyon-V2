@@ -4439,11 +4439,12 @@ function ProspectsKanban({ contacts, onCardClick, onDrop }) {
   const [sortiesOuvertes,setSortiesOuvertes]=useState(false);
   const [overCol,setOverCol]=useState(null);
   const [dragId,setDragId]=useState(null);
-  const colonnes=sortiesOuvertes?PROSPECT_ETAPES:PROSPECT_ETAPES_ACTIVES;
+  // « À relancer » est une colonne de travail : toujours visible. Seul « Ne pas recontacter » se replie.
+  const colonnes=sortiesOuvertes?PROSPECT_ETAPES:PROSPECT_ETAPES_ACTIVES.concat(['À relancer']);
   const repartition=useMemo(()=>prospectRepartitionBoard(contacts),[contacts]);
   const parEtape=repartition.parEtape;
   const reveil=repartition.reveil;
-  const nbSorties=PROSPECT_ETAPES_SORTIE.reduce((n,e)=>n+parEtape[e].length,0);
+  const nbSorties=PROSPECT_ETAPES_SORTIE.filter(e=>e!=='À relancer').reduce((n,e)=>n+parEtape[e].length,0);
   return (<>
     <div style={{display:'flex',justifyContent:'flex-end',marginBottom:6}}>
       <button onClick={()=>setSortiesOuvertes(v=>!v)} style={{fontSize:10,fontWeight:700,fontFamily:'Outfit,sans-serif',
