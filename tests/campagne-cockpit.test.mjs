@@ -58,14 +58,14 @@ const PROSPECTION = { id: 'M1', titre: 'Prospection DSI Lyon', kind: 'campagne',
 const JEAN = (etape, statut = 'Prospect') => ({ id: 7, prenom: 'Jean', nom: 'DUPONT', statut, responsable: 'Nicolas Serradeil', etape_prospect: etape });
 const SEQ = { id: 'S1', mission_id: 'M1', target_label: 'Jean Dupont', contact_id: 7 };
 
-test('refus : la fiche liee passe En veille a 6 mois et une ligne d historique est ecrite', async () => {
+test('refus : la fiche liee passe À relancer a 6 mois et une ligne d historique est ecrite', async () => {
   const f = fauxSb({ contacts: [JEAN('Contacté')] });
   const plan = await charge(f.sb).julesSortieCampagneCrm(SEQ, 'refus', PROSPECTION, 'Nicolas Serradeil', '');
-  assert.equal(plan.effet.etape, 'En veille');
-  assert.equal(f.tables.contacts[0].etape_prospect, 'En veille');
+  assert.equal(plan.effet.etape, 'À relancer');
+  assert.equal(f.tables.contacts[0].etape_prospect, 'À relancer');
   assert.equal(f.tables.contacts[0].prochaine_action_date, '2027-03-29T09:00:00+02:00');
   assert.deepEqual(f.tables.historique_actions, [{ id_prospect: 7, date: '2026-09-29', type_action: 'LinkedIn',
-    details: 'Campagne Prospection DSI Lyon : refus (le 29/09/2026), sortie par Nicolas Serradeil · étape → En veille', responsable: 'Nicolas Serradeil' }]);
+    details: 'Campagne Prospection DSI Lyon : refus (le 29/09/2026), sortie par Nicolas Serradeil · étape → À relancer', responsable: 'Nicolas Serradeil' }]);
 });
 
 test('ne plus contacter : Ne pas recontacter pose directement (Nicolas decide) et taches de prospection annulees', async () => {

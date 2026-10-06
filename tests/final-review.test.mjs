@@ -47,7 +47,7 @@ test('I3 : seule l entree en Ne pas recontacter arrete les sequences', () => {
   assert.equal(prospectEntreeNpc('À contacter', 'Ne pas recontacter'), true);
   assert.equal(prospectEntreeNpc('Ne pas recontacter', 'Ne pas recontacter'), false);
   assert.equal(prospectEntreeNpc('Ne pas recontacter', 'Contacté'), false, 'sortir de NPC n arrete rien');
-  assert.equal(prospectEntreeNpc('Contacté', 'Perdu'), false);
+  assert.equal(prospectEntreeNpc('Contacté', 'À relancer'), false);
 });
 
 test('I3 : stoppe active, replied et paused du contact, note datee, laisse les autres', async () => {

@@ -214,18 +214,19 @@ const DEFAULT_MISSION_END_TIME='18:00';
 
 const STATUTS_CONTACT  = ['Prospect','Candidat','Client','Consultant CDI','Freelance','Prestataire','À définir'];
 // ═══ Pipeline prospect — cf. SPECS_CRM/SPEC_prospects_pipeline_etapes.md ═══
-const PROSPECT_ETAPES_ACTIVES = ['À contacter','Contacté','En discussion','RDV planifié','Qualifié'];
-const PROSPECT_ETAPES_SORTIE = ['En veille','Perdu','Ne pas recontacter'];
-const PROSPECT_ETAPES = ['À contacter','Contacté','En discussion','RDV planifié','Qualifié','En veille','Perdu','Ne pas recontacter'];
+const PROSPECT_ETAPES_ACTIVES = ['À contacter','Contacté','En discussion','RDV planifié','RDV effectué'];
+const PROSPECT_ETAPES_SORTIE = ['À relancer','Ne pas recontacter'];
+const PROSPECT_ETAPES = ['À contacter','Contacté','En discussion','RDV planifié','RDV effectué','À relancer','Ne pas recontacter'];
+// Depuis le 06/10/2026 : Qualifié devient RDV effectué, En veille devient À relancer, Perdu est fusionné dans
+// Ne pas recontacter (son motif, facultatif, devient celui de Ne pas recontacter).
 const PROSPECT_MOTIFS_PERTE = ['Budget insuffisant','Pas le bon interlocuteur','Pas de besoin','Choix concurrent','Perdu de vue','Autre'];
 const PROSPECT_BADGE_COLORS = {
   'À contacter':       { bg:'#E4E4E6', color:'#1C1F35' },
   'Contacté':          { bg:'#FFE500', color:'#1C1F35' },
   'En discussion':     { bg:'#5090FE', color:'#FFFFFF' },
   'RDV planifié':      { bg:'#8B5CF6', color:'#FFFFFF' },
-  'Qualifié':          { bg:'#00C218', color:'#1C1F35' },
-  'En veille':         { bg:'#A4A6AB', color:'#FFFFFF' },
-  'Perdu':             { bg:'#FF6B6B', color:'#FFFFFF' },
+  'RDV effectué':      { bg:'#00C218', color:'#1C1F35' },
+  'À relancer':        { bg:'#A4A6AB', color:'#FFFFFF' },
   'Ne pas recontacter':{ bg:'#1C1F35', color:'#FFFFFF' }
 };
 
@@ -245,8 +246,8 @@ function prospectSurLeBoard(contact, besoins) {
 
 function prospectEtapeRequiert(etape) {
   return {
-    date: etape === 'En veille' || (PROSPECT_ETAPES_ACTIVES.indexOf(etape) > 0),
-    motif: etape === 'Perdu',
+    date: etape === 'À relancer' || (PROSPECT_ETAPES_ACTIVES.indexOf(etape) > 0),
+    motif: false,   // le motif de Ne pas recontacter est facultatif
     commentaire: etape === 'Ne pas recontacter'
   };
 }
@@ -267,7 +268,7 @@ function prospectEnRetard(contact, now) {
   return t <= (now ? new Date(now).getTime() : Date.now());
 }
 
-// Repartition du board par colonne (spec R4). Un « En veille » dont la date de reveil est passee
+// Repartition du board par colonne (spec R4). Un « À relancer » dont la date de reveil est passee
 // remonte en tete de « À contacter » avec le badge Reveil, SANS changer son etape en base.
 // Retourne { parEtape: {etape: [contacts]}, reveil: {contactId: true} }.
 function prospectRepartitionBoard(contacts, now) {
@@ -275,7 +276,7 @@ function prospectRepartitionBoard(contacts, now) {
   var reveil = {};
   (contacts || []).forEach(function(c) {
     var e = prospectEtapeOuDefaut(c);
-    if (e === 'En veille' && prospectEnRetard(c, now)) { reveil[c.id] = true; e = 'À contacter'; }
+    if (e === 'À relancer' && prospectEnRetard(c, now)) { reveil[c.id] = true; e = 'À contacter'; }
     parEtape[e].push(c);
   });
   PROSPECT_ETAPES.forEach(function(e) {
@@ -289,7 +290,7 @@ function prospectRepartitionBoard(contacts, now) {
 }
 
 // Vue liste en cartes. Filtre etape : PROSPECT_FILTRE_ACTIFS (defaut), '' (tous) ou un nom d'etape.
-// Meme regle de Reveil que le kanban (via prospectRepartitionBoard) : un « En veille » echu compte dans
+// Meme regle de Reveil que le kanban (via prospectRepartitionBoard) : un « À relancer » echu compte dans
 // « À contacter » (en tete, badge Reveil), donc il est inclus dans ACTIFS et dans le filtre « À contacter ».
 // Retourne [{ etape, contacts, reveil }] dans l'ordre PROSPECT_ETAPES, sections vides omises.
 const PROSPECT_FILTRE_ACTIFS = '__actifs__';
@@ -343,8 +344,8 @@ function prospectDerniereActionTexte(h) {
 
 function prospectTacheLibelle(etape) {
   var L = { 'Contacté':'Rappeler', 'En discussion':'Relancer', 'RDV planifié':'RDV prospect',
-            'Qualifié':'Qualifier le besoin', 'En veille':'Réveil prospect',
-            'À contacter':'Premier contact', 'Perdu':'Suivi prospect',
+            'RDV effectué':'Qualifier le besoin', 'À relancer':'Réveil prospect',
+            'À contacter':'Premier contact',
             'Ne pas recontacter':'Suivi prospect' };
   return L[etape] || 'Suivi prospect';
 }
@@ -382,8 +383,8 @@ function prospectPatchEtape(etape, form) {
     prochaine_action_libelle: garde
       ? (form.prochaine_action_libelle || prospectTacheLibelle(etape))
       : null,
-    motif_perte: etape === 'Perdu' ? (form.motif_perte || null) : null,
-    motif_perte_precision: (etape === 'Perdu' || etape === 'Ne pas recontacter' || etape === 'En veille')
+    motif_perte: etape === 'Ne pas recontacter' ? (form.motif_perte || null) : null,
+    motif_perte_precision: (etape === 'Ne pas recontacter' || etape === 'À relancer')
       ? (form.motif_perte_precision || null) : null,
     updated_at: new Date().toISOString()
   };
@@ -391,16 +392,15 @@ function prospectPatchEtape(etape, form) {
 
 // Etape deduite du resultat d'un appel en session. Un appel ne fait jamais reculer une etape
 // deja avancee, mais une sortie reste toujours possible.
-// « Pas interesse » laisse une porte ouverte : sans la case « Ne plus appeler » c'est « En veille »
-// (reveil dans 6 mois), avec la case c'est « Ne pas recontacter ». Un contact deja « Perdu » reste
-// Perdu, un contact deja « En veille » y reste (sa date est repoussee par prospectPatchDepuisAppel).
+// « Pas interesse » laisse une porte ouverte : sans la case « Ne plus appeler » c'est « À relancer »
+// (reveil dans 6 mois), avec la case c'est « Ne pas recontacter ». Un contact deja « À relancer » y reste (sa date est repoussee par prospectPatchDepuisAppel).
 // RGPD : « Ne pas recontacter » est terminal pour un appel, seule la levee protegee du stepper
 // (responsable ou admin) peut en sortir.
 function etapeDepuisResultatAppel(statutAppel, nePlusAppeler, etapeActuelle) {
   if (etapeActuelle === 'Ne pas recontacter') return etapeActuelle;
   if (statutAppel === 'not_interested') {
     if (nePlusAppeler) return 'Ne pas recontacter';
-    return etapeActuelle === 'Perdu' ? 'Perdu' : 'En veille';
+    return 'À relancer';
   }
   var cible = { interested:'En discussion', unreachable:'Contacté', called:'Contacté' }[statutAppel];
   if (!cible) return etapeActuelle;
@@ -415,9 +415,9 @@ function etapeDepuisResultatAppel(statutAppel, nePlusAppeler, etapeActuelle) {
 // contact + status / nePlusAppeler / wantRelance / relanceDate / relanceNote). Retourne null si rien a ecrire.
 // - « Pas interesse » + case « Ne plus appeler » pose « Ne pas recontacter » quel que soit le statut du
 //   contact (protection RGPD, y compris pour un Client).
-// - « Pas interesse » sans la case : un PROSPECT passe « En veille », reveil a aujourd'hui + 6 mois a 09:00
+// - « Pas interesse » sans la case : un PROSPECT passe « À relancer », reveil a aujourd'hui + 6 mois a 09:00
 //   (decalage explicite, jamais de datetime naive), libelle « Relance apres refus » sauf note de relance
-//   de la ligne. Un non-Prospect n'est pas touche. Un Prospect « Perdu » reste Perdu (null).
+//   de la ligne. Un non-Prospect n'est pas touche.
 //   Aucune tache CRM pour ce reveil : le badge « Reveil » du board fait le rappel.
 // - Les autres resultats font avancer l'etape des seuls PROSPECTS (jamais un Client ou un Candidat),
 //   et la relance saisie alimente la prochaine action. La tache de relance, elle, reste celle que
@@ -425,7 +425,7 @@ function etapeDepuisResultatAppel(statutAppel, nePlusAppeler, etapeActuelle) {
 // aujourdhui : date YYYY-MM-DD (defaut : getToday()), injectable pour les tests.
 // correction : true en correction d'une session passee. On ne touche alors l'etape QUE si le resultat de
 // la ligne a change dans cette edition (sc.statutInitial = statut stocke avant l'edition), sinon un
-// contact qui a avance depuis l'appel serait ramene en veille, ou sa date de reveil repoussee a chaque save.
+// contact qui a avance depuis l'appel serait ramene à relancer, ou sa date de reveil repoussee a chaque save.
 function prospectPatchDepuisAppel(sc, avancer, aujourdhui, correction) {
   if (correction && sc.status === sc.statutInitial) return null;
   var actuelle = prospectEtapeOuDefaut(sc);
@@ -440,8 +440,8 @@ function prospectPatchDepuisAppel(sc, avancer, aujourdhui, correction) {
       };
     }
     if (sc.statut !== 'Prospect') return null;
-    if (etapeDepuisResultatAppel('not_interested', false, actuelle) !== 'En veille') return null;   // Perdu reste Perdu
-    return prospectPatchEtape('En veille', {
+    if (etapeDepuisResultatAppel('not_interested', false, actuelle) !== 'À relancer') return null;
+    return prospectPatchEtape('À relancer', {
       prochaine_action_date: prospectReveilPreset(aujourdhui || getToday(), '6m'),
       prochaine_action_libelle: (sc.wantRelance && sc.relanceNote) || 'Relance après refus'
     });
@@ -466,13 +466,13 @@ function prospectTacheEstProspection(t) {
     && t.contact_id !== null && t.contact_id !== undefined && t.contact_id !== '');
 }
 
-// Perdu et Ne pas recontacter ferment le pipeline : plus aucune tache de prospection ne doit rester ouverte.
+// Ne pas recontacter ferme le pipeline : plus aucune tache de prospection ne doit rester ouverte.
 function prospectEtapeFermeTaches(etape) {
-  return etape === 'Perdu' || etape === 'Ne pas recontacter';
+  return etape === 'Ne pas recontacter';
 }
 
 // La cloture d'une tache de prospection redemande l'etape, sauf si le contact est deja sorti du
-// pipeline (Perdu / NPC) : la tache se clot alors normalement, sans boucle (sinon un non-responsable
+// pipeline (NPC) : la tache se clot alors normalement, sans boucle (sinon un non-responsable
 // serait renvoye vers un formulaire NPC qu'il ne peut pas soumettre).
 function prospectTacheBoucleEtape(t, contact) {
   if (!prospectTacheEstProspection(t)) return false;
@@ -564,12 +564,11 @@ function campagneEffetSortie(motif, contact) {
   if (motif === 'npc') return r('go', 'Ne pas recontacter');
   if (contact.statut !== 'Prospect') return motif === 'profil' ? r('rien') : r('historique');
   var etape = prospectEtapeOuDefaut(contact);
-  if (etape === 'Perdu') return r('historique');
   var rang = PROSPECT_ETAPES_ACTIVES.indexOf(etape);
-  if (motif === 'profil') return rang >= 0 ? r('go', 'Perdu', CAMPAGNE_MOTIF_PERTE_PROFIL) : r('historique');
-  if (motif === 'refus' || motif === 'silence') return r('etape', 'En veille', null, true);
+  if (motif === 'profil') return rang >= 0 ? r('go', 'Ne pas recontacter', CAMPAGNE_MOTIF_PERTE_PROFIL) : r('historique');
+  if (motif === 'refus' || motif === 'silence') return r('etape', 'À relancer', null, true);
   if (motif === 'converti') {
-    return (etape === 'En veille' || (rang >= 0 && rang < PROSPECT_ETAPES_ACTIVES.indexOf('RDV planifié')))
+    return (etape === 'À relancer' || (rang >= 0 && rang < PROSPECT_ETAPES_ACTIVES.indexOf('RDV planifié')))
       ? r('etape', 'RDV planifié') : r('historique');
   }
   return r('historique');
@@ -611,19 +610,17 @@ function campagneSortiePlan(motif, contact, ctx) {
     + ' (le ' + jf[2] + '/' + jf[1] + '/' + jf[0] + '), sortie par ' + (ctx.responsable || 'Nicolas');
   if (e.action === 'historique') { plan.detail = base; return plan; }
   var precision = ctx.precision || null;
-  if (e.etape === 'En veille') {
-    plan.patch = prospectPatchEtape('En veille', { prochaine_action_date: prospectReveilPreset(ctx.aujourdhui, '6m'),
+  if (e.etape === 'À relancer') {
+    plan.patch = prospectPatchEtape('À relancer', { prochaine_action_date: prospectReveilPreset(ctx.aujourdhui, '6m'),
       motif_perte_precision: precision });
   } else if (e.etape === 'RDV planifié') {
     var jour = campagneJourOuvreSuivant(ctx.aujourdhui);
     var form = { creer_tache: true, prochaine_action_date: jour, prochaine_action_libelle: 'Confirmer la date du RDV' };
     plan.patch = prospectPatchEtape('RDV planifié', form);
     plan.tache = prospectTachePayload(contact, 'RDV planifié', form, contact.responsable || ctx.responsable);
-  } else if (e.etape === 'Perdu') {
-    plan.patch = prospectPatchEtape('Perdu', { motif_perte: e.motif_perte, motif_perte_precision: precision });
-    plan.fermeTaches = true;
   } else if (e.etape === 'Ne pas recontacter') {
-    plan.patch = prospectPatchEtape('Ne pas recontacter', { motif_perte_precision: precision || ('Demande en campagne ' + (ctx.campagne || '')) });
+    plan.patch = prospectPatchEtape('Ne pas recontacter', { motif_perte: e.motif_perte,
+      motif_perte_precision: precision || (e.motif_perte ? 'Sortie de la campagne ' + (ctx.campagne || '') + ' : pas le bon profil' : 'Demande en campagne ' + (ctx.campagne || '')) });
     plan.fermeTaches = true;
   }
   var bouge = plan.patch && plan.patch.etape_prospect !== prospectEtapeOuDefaut(contact);
@@ -644,10 +641,10 @@ async function julesSortieCampagneCrm(s, motif, mission, responsable, precision)
   var c = lu.data;
   var etapeAvantSortie = c.etape_prospect || null;
   var qui = responsable || c.responsable;
-  // Meme precision par defaut que le MCP quand la sortie donne En veille, pour que les deux cotes
+  // Meme precision par defaut que le MCP quand la sortie donne À relancer, pour que les deux cotes
   // ecrivent le meme libelle.
   var defaut = null;
-  if (campagneEffetSortie(motif, c).etape === 'En veille') {
+  if (campagneEffetSortie(motif, c).etape === 'À relancer') {
     defaut = motif === 'silence' ? 'Sans réponse à la campagne ' + mission.titre : 'Refus en campagne ' + mission.titre;
   }
   var plan = campagneSortiePlan(motif, c, { campagne: mission.titre, aujourdhui: getToday(), responsable: qui, precision: precision || defaut });
@@ -2613,7 +2610,7 @@ function ProspectMicroForm({ targetEtape, contact, onConfirm, onCancel, saving }
     <div style={{border:'2px solid #1C1F35',boxShadow:'4px 4px 0 '+bc.bg,background:'#FAFAFA',padding:16,margin:'8px 0',borderRadius:0}}>
       <div style={{fontSize:12,fontWeight:800,color:'#1C1F35',textTransform:'uppercase',marginBottom:12}}>Passage à : {targetEtape}</div>
 
-      {targetEtape==='En veille'&&<>
+      {targetEtape==='À relancer'&&<>
         <Field label="Date de réveil *">
           <div style={{display:'flex',gap:6,marginBottom:6}}>
             {[['3m','3 mois'],['6m','6 mois'],['1a','1 an']].map(function(p){
@@ -2626,7 +2623,7 @@ function ProspectMicroForm({ targetEtape, contact, onConfirm, onCancel, saving }
         <Field label="Commentaire"><textarea value={formData.motif_perte_precision||''} onChange={function(e){upd('motif_perte_precision',e.target.value);}} rows={2} className={inputCls+' resize-none'}/></Field>
       </>}
 
-      {r.date&&targetEtape!=='En veille'&&<>
+      {r.date&&targetEtape!=='À relancer'&&<>
         <Field label={targetEtape==='RDV planifié'?'Date du RDV *':'Prochaine action, date *'}>
           <input type="datetime-local" value={formData.prochaine_action_date||''} onChange={function(e){upd('prochaine_action_date',e.target.value);}} className={inputCls}/>
         </Field>
@@ -2635,15 +2632,11 @@ function ProspectMicroForm({ targetEtape, contact, onConfirm, onCancel, saving }
         </Field>
       </>}
 
-      {targetEtape==='Perdu'&&<>
-        <Field label="Motif *"><select value={formData.motif_perte||''} onChange={function(e){upd('motif_perte',e.target.value);}} className={inputCls}>
-          <option value="">Choisir un motif</option>
+      {targetEtape==='Ne pas recontacter'&&<>
+        <Field label="Motif (facultatif)"><select value={formData.motif_perte||''} onChange={function(e){upd('motif_perte',e.target.value);}} className={inputCls}>
+          <option value="">Aucun motif</option>
           {PROSPECT_MOTIFS_PERTE.map(function(m){return <option key={m}>{m}</option>;})}
         </select></Field>
-        <Field label="Commentaire"><textarea value={formData.motif_perte_precision||''} onChange={function(e){upd('motif_perte_precision',e.target.value);}} rows={2} className={inputCls+' resize-none'}/></Field>
-      </>}
-
-      {targetEtape==='Ne pas recontacter'&&<>
         <Field label="Détail *"><textarea value={formData.motif_perte_precision||''} onChange={function(e){upd('motif_perte_precision',e.target.value);}} placeholder="Ce que la personne a demandé, et quand." rows={2} className={inputCls+' resize-none'}/></Field>
       </>}
 
@@ -2701,7 +2694,7 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
   // ContactDetail) : sans ça, un micro-formulaire ouvert resterait ouvert sur le suivant.
   useEffect(()=>{ setEtapeCible(null); setEtapeSaving(false); setTacheAClore(null); },[contact.id]);
   // Un drop sur le kanban est une INTENTION : il ouvre le micro-formulaire et n'ecrit
-  // qu'a la confirmation (glisser vers « Perdu » ecrirait sinon sans motif).
+  // qu'a la confirmation (glisser vers « Ne pas recontacter » ecrirait sinon sans detail).
   // ORDRE : cet effet DOIT rester APRES celui du reset ci-dessus. React execute les effets
   // d'un meme rendu dans l'ordre de declaration ; au drop, contact.id et dropIntent changent
   // ensemble, le reset passe d'abord et l'intention gagne. dropIntent est un objet neuf a
@@ -2723,7 +2716,7 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
     if(!canDelete){ toast('Seul le responsable du contact ou un administrateur peut le remettre en jeu','error'); return; }
     setEtapeSaving(true);
     try{
-      const {error}=await sb.from('contacts').update({etape_prospect:null,motif_perte_precision:null,updated_at:new Date().toISOString()}).eq('id',contact.id);
+      const {error}=await sb.from('contacts').update({etape_prospect:null,motif_perte:null,motif_perte_precision:null,updated_at:new Date().toISOString()}).eq('id',contact.id);
       if(error){toast('Erreur: '+error.message,'error');return;}
       const {error:errHist}=await sb.from('historique_actions').insert({id_prospect:contact.id,date:getToday(),
         type_action:'Changement d\'étape',details:'Refus de recontact levé par '+profile.nom,responsable:profile.nom});
@@ -2777,8 +2770,8 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
         }
       }
       let proposeBesoin=false;
-      if(etape==='Qualifié'){
-        // Jonction Qualifie -> Besoin (modele : proposeMission). Rien si un besoin actif existe deja.
+      if(etape==='RDV effectué'){
+        // Jonction RDV effectue -> Besoin (modele : proposeMission). Rien si un besoin actif existe deja.
         const {data:dejaBesoin,error:errBesoin}=await sb.from('besoins').select('id')
           .eq('contact_id',contact.id).neq('statut','Besoin Perdu').limit(1);
         if(errBesoin){toast('Étape enregistrée, création de besoin non proposée (vérification impossible)','error');}
@@ -2821,6 +2814,7 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
           <Icon d={ICONS.warning} size={16}/>
           <div style={{flex:1}}>
             <div>NE PAS RECONTACTER</div>
+            {contact.motif_perte&&<div style={{fontWeight:700,fontSize:11,marginTop:2}}>Motif : {contact.motif_perte}</div>}
             {contact.motif_perte_precision&&<div style={{fontWeight:400,fontSize:11,marginTop:2}}>{contact.motif_perte_precision}</div>}
             {contact.statut==='Prospect'&&<div style={{fontWeight:400,fontSize:10,opacity:0.8}}>Seul le responsable du contact ou un administrateur peut le remettre en jeu (étapes ci-dessous).</div>}
           </div>
@@ -2917,9 +2911,9 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
       </div>
       {modal==='edit'  && <ContactEditModal   contact={contact} contacts={contacts||[]} profile={profile} allProfiles={allProfiles} comptes={comptes} onClose={()=>setModal(null)} onSaved={saved} />}
       {modal==='proposeBesoin'&&(
-        <Modal title="Prospect qualifié" onClose={fermerProposition}>
+        <Modal title="RDV effectué" onClose={fermerProposition}>
           <div className="text-center py-4 space-y-4">
-            <p className="text-carbon">{contact.prenom} {contact.nom} est qualifié. Veux-tu créer le besoin associé ?</p>
+            <p className="text-carbon">{contact.prenom} {contact.nom} a eu son RDV. Veux-tu créer le besoin associé ?</p>
             <div className="flex gap-3 justify-center">
               <button onClick={fermerProposition} className="px-4 py-2 text-sm text-slate border rounded-lg hover:bg-neutral-50">Plus tard</button>
               <button onClick={()=>setModal('createBesoin')} className="px-4 py-2 bg-midnight text-white text-sm font-medium hover:bg-carbon btn-brutal">Créer le besoin</button>
@@ -11400,7 +11394,7 @@ function ProspectionContactCard({ sc, idx, updateItem, defaultExpanded }) {
                 Ne plus appeler
               </label>
               <div style={{marginTop:4,fontSize:10,color:'#666',fontFamily:'Outfit,sans-serif'}}>
-                {sc.nePlusAppeler?'Étape « Ne pas recontacter » : plus jamais dans une session.':'Sans la case : prospect en veille, réveil dans 6 mois.'}
+                {sc.nePlusAppeler?'Étape « Ne pas recontacter » : plus jamais dans une session.':'Sans la case : prospect à relancer, réveil dans 6 mois.'}
               </div>
             </div>
           )}
@@ -11838,7 +11832,7 @@ function ProspectionNew({ contacts, profile, onStart, onBack }) {
     if (agence && c.agence !== agence) return false;
     if (filterResp && c.responsable !== filterResp) return false;
     if (c.statut === 'Consultant CDI' || c.statut === 'Freelance') return false;
-    // Etapes de sortie (En veille / Perdu / Ne pas recontacter) : jamais dans une session d'appels.
+    // Etapes de sortie (À relancer / Ne pas recontacter) : jamais dans une session d'appels.
     // « Ne pas recontacter » est la protection RGPD (ex-flag ne_pas_recontacter).
     if (PROSPECT_ETAPES_SORTIE.indexOf(prospectEtapeOuDefaut(c)) >= 0) return false;
     if (delai > 0) {
@@ -12010,7 +12004,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDo
       if (sc.editVille && sc.editVille !== sc.ville) upd.ville = sc.editVille;
       if (sc.editRole && sc.editRole !== sc.role) upd.role = sc.editRole;
       if (sc.editAts && sc.editAts !== (sc.ats||sc.recruitee||'')) upd.ats = sc.editAts;
-      // Etape du pipeline : « Pas interesse » = En veille 6 mois (Prospect) ou Ne pas recontacter si la case
+      // Etape du pipeline : « Pas interesse » = À relancer 6 mois (Prospect) ou Ne pas recontacter si la case
       // « Ne plus appeler » est cochee ; les autres resultats font avancer un prospect, la relance saisie
       // alimente sa prochaine action.
       var patchAppel = prospectPatchDepuisAppel(sc, true);
@@ -12101,7 +12095,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDo
       }
     }
 
-    // « Pas intéressé » corrigé en session : En veille (Prospect). La case « Ne plus appeler » n'est pas
+    // « Pas intéressé » corrigé en session : À relancer (Prospect). La case « Ne plus appeler » n'est pas
     // persistée (aucune colonne) : en correction elle vaut « décochée », un contact déjà NPC le reste (garde).
     // En correction on n'avance PAS les autres étapes (avancer = false), et l'étape n'est touchée que si le
     // résultat de la ligne a changé dans cette édition (statutInitial).

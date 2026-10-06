@@ -37,11 +37,11 @@ const { PROSPECT_ETAPES, PROSPECT_ETAPES_ACTIVES, PROSPECT_ETAPES_SORTIE,
         prospectTacheBoucleEtape, PROSPECT_FILTRE_ACTIFS, prospectSectionsListe,
         prospectDerniereActionMap, prospectDerniereActionTexte, prospectSectionsVisibles } = API;
 
-test('les 8 etapes, dans l ordre, avec les accents exacts', () => {
+test('les 7 etapes, dans l ordre, avec les accents exacts', () => {
   assert.deepEqual(PROSPECT_ETAPES, ['À contacter', 'Contacté', 'En discussion',
-    'RDV planifié', 'Qualifié', 'En veille', 'Perdu', 'Ne pas recontacter']);
+    'RDV planifié', 'RDV effectué', 'À relancer', 'Ne pas recontacter']);
   assert.equal(PROSPECT_ETAPES_ACTIVES.length, 5);
-  assert.equal(PROSPECT_ETAPES_SORTIE.length, 3);
+  assert.equal(PROSPECT_ETAPES_SORTIE.length, 2);
   // actives + sorties recouvrent exactement l'ensemble, sans doublon
   assert.deepEqual([...PROSPECT_ETAPES_ACTIVES, ...PROSPECT_ETAPES_SORTIE].sort(),
                    [...PROSPECT_ETAPES].sort());
@@ -51,25 +51,25 @@ test('REVIEW FOCUS 1 — un prospect sans etape est traite comme « A contacter 
   assert.equal(prospectEtapeOuDefaut({ statut: 'Prospect' }), 'À contacter');
   assert.equal(prospectEtapeOuDefaut({ statut: 'Prospect', etape_prospect: null }), 'À contacter');
   assert.equal(prospectEtapeOuDefaut({ statut: 'Prospect', etape_prospect: '' }), 'À contacter');
-  assert.equal(prospectEtapeOuDefaut({ statut: 'Prospect', etape_prospect: 'Perdu' }), 'Perdu');
+  assert.equal(prospectEtapeOuDefaut({ statut: 'Prospect', etape_prospect: 'Perdu' }), 'À contacter');   // etape disparue : retombe sur À contacter
 });
 
 test('les etapes actives exigent une date, « A contacter » non', () => {
   assert.equal(prospectEtapeRequiert('À contacter').date, false);
-  for (const e of ['Contacté', 'En discussion', 'RDV planifié', 'Qualifié']) {
+  for (const e of ['Contacté', 'En discussion', 'RDV planifié', 'RDV effectué']) {
     assert.equal(prospectEtapeRequiert(e).date, true, e);
   }
-  assert.equal(prospectEtapeRequiert('En veille').date, true);   // date de reveil
-  assert.equal(prospectEtapeRequiert('Perdu').motif, true);
-  assert.equal(prospectEtapeRequiert('Perdu').date, false);
+  assert.equal(prospectEtapeRequiert('À relancer').date, true);   // date de reveil
+  assert.equal(prospectEtapeRequiert('Ne pas recontacter').motif, false);   // motif facultatif
+  assert.equal(prospectEtapeRequiert('Ne pas recontacter').date, false);
   assert.equal(prospectEtapeRequiert('Ne pas recontacter').commentaire, true);
 });
 
 test('canSubmit bloque tant que l obligatoire manque', () => {
   assert.equal(prospectCanSubmit('Contacté', {}), false);
   assert.equal(prospectCanSubmit('Contacté', { prochaine_action_date: '2026-10-05' }), true);
-  assert.equal(prospectCanSubmit('Perdu', {}), false);
-  assert.equal(prospectCanSubmit('Perdu', { motif_perte: 'Pas de besoin' }), true);
+  assert.equal(prospectCanSubmit('Ne pas recontacter', { motif_perte: 'Pas de besoin' }), false);   // la precision reste exigee
+  assert.equal(prospectCanSubmit('Ne pas recontacter', { motif_perte_precision: 'a demande', motif_perte: 'Pas de besoin' }), true);
   assert.equal(prospectCanSubmit('À contacter', {}), true);
   assert.equal(prospectCanSubmit('Ne pas recontacter', {}), false);
   assert.equal(prospectCanSubmit('Ne pas recontacter', { motif_perte_precision: 'a demande' }), true);
@@ -119,10 +119,10 @@ test('C1 relecture : 09:00 stocke revient a 09:00 heure de Paris (instant identi
 });
 
 test('le libelle de tache est pre-rempli depuis l etape visee', () => {
-  assert.equal(prospectTacheLibelle('En veille'), 'Réveil prospect');
+  assert.equal(prospectTacheLibelle('À relancer'), 'Réveil prospect');
   assert.equal(prospectTacheLibelle('Contacté'), 'Rappeler');
   assert.equal(prospectTacheLibelle('RDV planifié'), 'RDV prospect');
-  assert.ok(prospectTacheLibelle('Qualifié').length > 0);
+  assert.ok(prospectTacheLibelle('RDV effectué').length > 0);
   // Aucun libelle ne contient de tiret cadratin (marqueur IA, regle maison).
   for (const e of PROSPECT_ETAPES) assert.ok(!/[—–]/.test(prospectTacheLibelle(e)), e);
 });
@@ -144,9 +144,9 @@ test('le patch porte la date et le libelle pour une etape active', () => {
   assert.equal(p.motif_perte, null);
 });
 
-test('le patch d une perte porte le motif et efface la prochaine action', () => {
-  const p = prospectPatchEtape('Perdu', { motif_perte: 'Choix concurrent', motif_perte_precision: 'Devoteam' });
-  assert.equal(p.etape_prospect, 'Perdu');
+test('le patch de Ne pas recontacter porte le motif facultatif et efface la prochaine action', () => {
+  const p = prospectPatchEtape('Ne pas recontacter', { motif_perte: 'Choix concurrent', motif_perte_precision: 'Devoteam' });
+  assert.equal(p.etape_prospect, 'Ne pas recontacter');
   assert.equal(p.motif_perte, 'Choix concurrent');
   assert.equal(p.motif_perte_precision, 'Devoteam');
   assert.equal(p.prochaine_action_date, null);
@@ -171,25 +171,25 @@ test('« A contacter » avec un formulaire vide reste propre', () => {
   assert.equal(p.prochaine_action_date, null);
 });
 
-test('« Ne pas recontacter » garde la precision, pas de motif, efface la prochaine action', () => {
+test('« Ne pas recontacter » garde la precision et le motif, efface la prochaine action', () => {
   const p = prospectPatchEtape('Ne pas recontacter', { motif_perte_precision: 'a demandé le 12/09',
     motif_perte: 'Choix concurrent', prochaine_action_date: '2026-10-05', prochaine_action_libelle: 'Rappeler' });
   assert.equal(p.etape_prospect, 'Ne pas recontacter');
   assert.equal(p.motif_perte_precision, 'a demandé le 12/09');
-  assert.equal(p.motif_perte, null);
+  assert.equal(p.motif_perte, 'Choix concurrent');
   assert.equal(p.prochaine_action_date, null);
   assert.equal(p.prochaine_action_libelle, null);
 });
 
 test('le patch de mise en veille porte la date de reveil comme prochaine action', () => {
-  const p = prospectPatchEtape('En veille', { prochaine_action_date: '2027-03-29' });
+  const p = prospectPatchEtape('À relancer', { prochaine_action_date: '2027-03-29' });
   assert.match(p.prochaine_action_date, /^2027-03-29T09:00/);
   assert.equal(p.prochaine_action_libelle, 'Réveil prospect');
   assert.equal(p.motif_perte, null);
 });
 
 test('le patch de mise en veille conserve le commentaire', () => {
-  const p = prospectPatchEtape('En veille', { prochaine_action_date: '2027-03-29',
+  const p = prospectPatchEtape('À relancer', { prochaine_action_date: '2027-03-29',
     motif_perte_precision: 'Budget gelé jusqu\'à la rentrée' });
   assert.equal(p.motif_perte_precision, 'Budget gelé jusqu\'à la rentrée');
   assert.equal(p.motif_perte, null);
@@ -220,19 +220,19 @@ test('la tache porte le contact, l echeance a 09h00 et le responsable', () => {
 });
 
 test('pas de tache pour une etape sans date', () => {
-  assert.equal(prospectTachePayload({id:42}, 'Perdu', {motif_perte:'Autre', creer_tache:true},
+  assert.equal(prospectTachePayload({id:42}, 'Ne pas recontacter', {motif_perte:'Autre', creer_tache:true},
     'Nicolas Serradeil'), null);
 });
 
 test('un prospect avec un besoin actif quitte le board', () => {
-  const c = { id: 7, statut: 'Prospect', etape_prospect: 'Qualifié' };
+  const c = { id: 7, statut: 'Prospect', etape_prospect: 'RDV effectué' };
   assert.equal(prospectSurLeBoard(c, []), true);
   assert.equal(prospectSurLeBoard(c, [{ contact_id: 7, statut: 'Opportunité' }]), false);
   assert.equal(prospectSurLeBoard(c, [{ contact_id: 7, statut: 'Besoin Gagné' }]), false);
 });
 
 test('un besoin perdu rend le prospect au board', () => {
-  const c = { id: 7, statut: 'Prospect', etape_prospect: 'Qualifié' };
+  const c = { id: 7, statut: 'Prospect', etape_prospect: 'RDV effectué' };
   assert.equal(prospectSurLeBoard(c, [{ contact_id: 7, statut: 'Besoin Perdu' }]), true);
 });
 
@@ -253,7 +253,7 @@ test('prospectTacheEstProspection : prefixe tw_prospect_ ET contact lie', () => 
 test('le resultat d appel fait avancer l etape', () => {
   assert.equal(etapeDepuisResultatAppel('interested', false, 'À contacter'), 'En discussion');
   assert.equal(etapeDepuisResultatAppel('unreachable', false, 'À contacter'), 'Contacté');
-  assert.equal(etapeDepuisResultatAppel('not_interested', false, 'En discussion'), 'En veille');
+  assert.equal(etapeDepuisResultatAppel('not_interested', false, 'En discussion'), 'À relancer');
   assert.equal(etapeDepuisResultatAppel('not_interested', true, 'En discussion'), 'Ne pas recontacter');
   assert.equal(etapeDepuisResultatAppel('called', false, 'À contacter'), 'Contacté');
 });
@@ -262,7 +262,7 @@ test('un appel ne fait jamais RECULER une etape deja avancee', () => {
   assert.equal(etapeDepuisResultatAppel('called', false, 'RDV planifié'), 'RDV planifié');
   assert.equal(etapeDepuisResultatAppel('unreachable', false, 'En discussion'), 'En discussion');
   // mais une sortie est toujours possible
-  assert.equal(etapeDepuisResultatAppel('not_interested', false, 'RDV planifié'), 'En veille');
+  assert.equal(etapeDepuisResultatAppel('not_interested', false, 'RDV planifié'), 'À relancer');
   assert.equal(etapeDepuisResultatAppel('not_interested', true, 'RDV planifié'), 'Ne pas recontacter');
 });
 
@@ -280,9 +280,9 @@ test('RGPD : un appel ne LEVE jamais « Ne pas recontacter »', () => {
 // ---- prospectPatchDepuisAppel : ce qui s'ecrit sur le contact en fin de session d'appels ----
 const AUJ = '2026-09-29';   // date fournie a la fonction pure (evite getToday dans le test)
 
-test('appel : « pas interesse » sans case sur un Prospect => En veille a +6 mois 09:00 avec decalage explicite', () => {
+test('appel : « pas interesse » sans case sur un Prospect => À relancer a +6 mois 09:00 avec decalage explicite', () => {
   const p = prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'En discussion', status: 'not_interested' }, true, AUJ);
-  assert.equal(p.etape_prospect, 'En veille');
+  assert.equal(p.etape_prospect, 'À relancer');
   assert.equal(p.prochaine_action_date, '2027-03-29T09:00:00+02:00');   // 29 mars 2027 = heure d'ete
   assert.match(p.prochaine_action_date, /T09:00:00[+-]\d{2}:\d{2}$/);
   assert.equal(p.prochaine_action_libelle, 'Relance après refus');
@@ -324,15 +324,15 @@ test('appel : la case n a d effet que sur « pas interesse »', () => {
   assert.equal(prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'À contacter', status: 'called', nePlusAppeler: true }, true, AUJ).etape_prospect, 'Contacté');
 });
 
-test('appel : deja En veille + pas interesse => date de reveil repoussee a +6 mois ; Perdu reste Perdu', () => {
-  const v = prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'En veille', status: 'not_interested' }, true, AUJ);
-  assert.equal(v.etape_prospect, 'En veille');
+test('appel : deja À relancer + pas interesse => date de reveil repoussee a +6 mois', () => {
+  const v = prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'À relancer', status: 'not_interested' }, true, AUJ);
+  assert.equal(v.etape_prospect, 'À relancer');
   assert.equal(v.prochaine_action_date, '2027-03-29T09:00:00+02:00');
-  assert.equal(prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'Perdu', status: 'not_interested' }, true, AUJ), null);
-  // Perdu + case cochee : la protection RGPD prime
-  assert.equal(prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'Perdu', status: 'not_interested', nePlusAppeler: true }, true, AUJ).etape_prospect, 'Ne pas recontacter');
-  assert.equal(etapeDepuisResultatAppel('not_interested', false, 'Perdu'), 'Perdu');
-  assert.equal(etapeDepuisResultatAppel('not_interested', false, 'En veille'), 'En veille');
+  // À relancer + case cochee : la protection RGPD prime
+  assert.equal(prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'À relancer', status: 'not_interested', nePlusAppeler: true }, true, AUJ).etape_prospect, 'Ne pas recontacter');
+  // Ne pas recontacter est terminal
+  assert.equal(prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'Ne pas recontacter', status: 'not_interested' }, true, AUJ), null);
+  assert.equal(etapeDepuisResultatAppel('not_interested', false, 'À relancer'), 'À relancer');
 });
 
 test('appel : la note de relance ne devient le libelle de reveil que si wantRelance', () => {
@@ -344,16 +344,16 @@ test('appel : la note de relance ne devient le libelle de reveil que si wantRela
 test('correction de session : etape touchee seulement si le resultat a change dans l edition', () => {
   const base = { statut: 'Prospect', status: 'not_interested', statutInitial: 'not_interested' };
   assert.equal(prospectPatchDepuisAppel({ ...base, etape_prospect: 'RDV planifié' }, false, AUJ, true), null);
-  assert.equal(prospectPatchDepuisAppel({ ...base, etape_prospect: 'En veille', prochaine_action_date: '2026-12-01T09:00:00+01:00' }, false, AUJ, true), null);
+  assert.equal(prospectPatchDepuisAppel({ ...base, etape_prospect: 'À relancer', prochaine_action_date: '2026-12-01T09:00:00+01:00' }, false, AUJ, true), null);
   assert.equal(prospectPatchDepuisAppel({ ...base, etape_prospect: 'En discussion', nePlusAppeler: true }, false, AUJ, true), null);
   // resultat change vers not_interested
   const ch = { statut: 'Prospect', etape_prospect: 'Contacté', status: 'not_interested', statutInitial: 'called' };
   const v = prospectPatchDepuisAppel(ch, false, AUJ, true);
-  assert.equal(v.etape_prospect, 'En veille');
+  assert.equal(v.etape_prospect, 'À relancer');
   assert.equal(v.prochaine_action_date, '2027-03-29T09:00:00+02:00');
   assert.equal(prospectPatchDepuisAppel({ ...ch, nePlusAppeler: true }, false, AUJ, true).etape_prospect, 'Ne pas recontacter');
   // hors correction (fin de session), statutInitial est ignore
-  assert.equal(prospectPatchDepuisAppel(base, true, AUJ).etape_prospect, 'En veille');
+  assert.equal(prospectPatchDepuisAppel(base, true, AUJ).etape_prospect, 'À relancer');
 });
 
 test('relance de session : une date seule devient 09:00 avec decalage explicite (jamais naive)', () => {
@@ -401,26 +401,24 @@ test('appel : un appel ne fait pas reculer, et sans changement ni relance rien n
   assert.ok(p.prochaine_action_date);
 });
 
-test('appel : une etape de sortie (Perdu) ne recoit pas de prochaine action', () => {
-  const p = prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'Perdu', status: 'interested',
+test('appel : une etape de sortie (Ne pas recontacter) ne recoit pas de prochaine action', () => {
+  const p = prospectPatchDepuisAppel({ statut: 'Prospect', etape_prospect: 'Ne pas recontacter', status: 'interested',
     wantRelance: true, relanceDate: '2026-10-15' }, true);
   assert.equal(p, null);
 });
 
 // I4 : la cloture d'une tache de prospection ne reboucle sur l'etape que si le contact est encore dans le pipeline.
-test('I4 prospectEtapeFermeTaches : Perdu et Ne pas recontacter seulement', () => {
-  assert.equal(prospectEtapeFermeTaches('Perdu'), true);
+test('I4 prospectEtapeFermeTaches : Ne pas recontacter seulement', () => {
   assert.equal(prospectEtapeFermeTaches('Ne pas recontacter'), true);
-  for (const e of ['À contacter', 'Contacté', 'En discussion', 'RDV planifié', 'Qualifié', 'En veille']) {
+  for (const e of ['À contacter', 'Contacté', 'En discussion', 'RDV planifié', 'RDV effectué', 'À relancer']) {
     assert.equal(prospectEtapeFermeTaches(e), false, e);
   }
 });
 
-test('I4 la boucle d etape ne s applique pas a un contact Perdu ou NPC', () => {
+test('I4 la boucle d etape ne s applique pas a un contact NPC', () => {
   const t = { id: 'tw_prospect_12_1700000000000', contact_id: 12 };
   assert.equal(prospectTacheBoucleEtape(t, { statut: 'Prospect', etape_prospect: 'Contacté' }), true);
-  assert.equal(prospectTacheBoucleEtape(t, { statut: 'Prospect', etape_prospect: 'En veille' }), true);
-  assert.equal(prospectTacheBoucleEtape(t, { statut: 'Prospect', etape_prospect: 'Perdu' }), false);
+  assert.equal(prospectTacheBoucleEtape(t, { statut: 'Prospect', etape_prospect: 'À relancer' }), true);
   assert.equal(prospectTacheBoucleEtape(t, { statut: 'Prospect', etape_prospect: 'Ne pas recontacter' }), false);
   assert.equal(prospectTacheBoucleEtape(t, { statut: 'Client', etape_prospect: null }), false);
   assert.equal(prospectTacheBoucleEtape(t, null), false);
@@ -430,27 +428,27 @@ test('I4 la boucle d etape ne s applique pas a un contact Perdu ou NPC', () => {
 });
 
 // I5 : spec R4, le reveil remonte en tete de « À contacter » avec un badge, sans changer l'etape.
-test('I5 un En veille echu remonte en tete de « À contacter », badge Reveil, etape inchangee', () => {
+test('I5 un À relancer echu remonte en tete de « À contacter », badge Reveil, etape inchangee', () => {
   const now = '2026-10-10T08:00:00Z';
-  const echu = { id: 1, statut: 'Prospect', etape_prospect: 'En veille', prochaine_action_date: '2026-10-01T09:00:00+02:00' };
-  const futur = { id: 2, statut: 'Prospect', etape_prospect: 'En veille', prochaine_action_date: '2027-01-01T09:00:00+01:00' };
+  const echu = { id: 1, statut: 'Prospect', etape_prospect: 'À relancer', prochaine_action_date: '2026-10-01T09:00:00+02:00' };
+  const futur = { id: 2, statut: 'Prospect', etape_prospect: 'À relancer', prochaine_action_date: '2027-01-01T09:00:00+01:00' };
   const ac1 = { id: 3, statut: 'Prospect', etape_prospect: 'À contacter', prochaine_action_date: '2026-09-01T09:00:00+02:00' };
   const ac2 = { id: 4, statut: 'Prospect', etape_prospect: null };
   const r = prospectRepartitionBoard([ac1, ac2, echu, futur], now);
   assert.deepEqual(r.parEtape['À contacter'].map(c => c.id), [1, 3, 4]);
-  assert.deepEqual(r.parEtape['En veille'].map(c => c.id), [2]);
+  assert.deepEqual(r.parEtape['À relancer'].map(c => c.id), [2]);
   assert.deepEqual(Object.keys(r.reveil), ['1']);
-  assert.equal(echu.etape_prospect, 'En veille');           // rien n'est reecrit
+  assert.equal(echu.etape_prospect, 'À relancer');           // rien n'est reecrit
   for (const e of PROSPECT_ETAPES) assert.ok(Array.isArray(r.parEtape[e]), e);
 });
 
-test('I5 un En veille sans date ou a date future reste en veille', () => {
+test('I5 un À relancer sans date ou a date future reste en veille', () => {
   const now = '2026-10-10T08:00:00Z';
   const r = prospectRepartitionBoard([
-    { id: 1, statut: 'Prospect', etape_prospect: 'En veille' },
-    { id: 2, statut: 'Prospect', etape_prospect: 'Perdu', prochaine_action_date: '2020-01-01T09:00:00Z' }], now);
-  assert.deepEqual(r.parEtape['En veille'].map(c => c.id), [1]);
-  assert.deepEqual(r.parEtape['Perdu'].map(c => c.id), [2]);
+    { id: 1, statut: 'Prospect', etape_prospect: 'À relancer' },
+    { id: 2, statut: 'Prospect', etape_prospect: 'Ne pas recontacter', prochaine_action_date: '2020-01-01T09:00:00Z' }], now);
+  assert.deepEqual(r.parEtape['À relancer'].map(c => c.id), [1]);
+  assert.deepEqual(r.parEtape['Ne pas recontacter'].map(c => c.id), [2]);
   assert.deepEqual(r.reveil, {});
 });
 
@@ -471,17 +469,17 @@ const NOW_L = '2026-09-29T10:00:00+02:00';
 const cl = (id, etape, date) => ({ id, etape_prospect: etape, prochaine_action_date: date || null });
 const etapesDe = r => r.map(s => s.etape);
 
-test('liste: ACTIFS exclut Perdu, NPC et En veille pas echu, inclut En veille echu', () => {
-  const cs = [cl(1,'Perdu'), cl(2,'Ne pas recontacter'), cl(3,'En veille','2026-12-01'),
-              cl(4,'En veille','2026-09-01'), cl(5,'Contacté','2026-10-01'), cl(6,'En discussion')];
+test('liste: ACTIFS exclut NPC et À relancer pas echu, inclut À relancer echu', () => {
+  const cs = [cl(2,'Ne pas recontacter'), cl(3,'À relancer','2026-12-01'),
+              cl(4,'À relancer','2026-09-01'), cl(5,'Contacté','2026-10-01'), cl(6,'En discussion')];
   const r = prospectSectionsListe(cs, PROSPECT_FILTRE_ACTIFS, NOW_L);
   const ids = r.flatMap(s => s.contacts.map(c => c.id)).sort();
   assert.deepEqual(ids, [4,5,6]);
-  assert.ok(!etapesDe(r).some(e => ['Perdu','Ne pas recontacter','En veille'].includes(e)));
+  assert.ok(!etapesDe(r).some(e => ['Ne pas recontacter','À relancer'].includes(e)));
 });
 
-test('liste: l En veille echu rejoint la section A contacter, en tete, avec reveil', () => {
-  const cs = [cl(1,'À contacter','2026-09-20'), cl(2,'En veille','2026-09-25')];
+test('liste: l À relancer echu rejoint la section A contacter, en tete, avec reveil', () => {
+  const cs = [cl(1,'À contacter','2026-09-20'), cl(2,'À relancer','2026-09-25')];
   const r = prospectSectionsListe(cs, PROSPECT_FILTRE_ACTIFS, NOW_L);
   assert.equal(r.length, 1);
   assert.deepEqual(r[0].contacts.map(c => c.id), [2,1]);
@@ -490,9 +488,9 @@ test('liste: l En veille echu rejoint la section A contacter, en tete, avec reve
 });
 
 test('liste: TOUS garde toutes les etapes, dans l ordre PROSPECT_ETAPES, sections vides masquees', () => {
-  const cs = [cl(1,'Perdu'), cl(2,'Qualifié','2026-10-02'), cl(3,'À contacter'), cl(4,'Ne pas recontacter'), cl(5,'En veille','2026-12-01')];
+  const cs = [cl(2,'RDV effectué','2026-10-02'), cl(3,'À contacter'), cl(4,'Ne pas recontacter'), cl(5,'À relancer','2026-12-01')];
   const r = prospectSectionsListe(cs, '', NOW_L);
-  assert.deepEqual(etapesDe(r), ['À contacter','Qualifié','En veille','Perdu','Ne pas recontacter']);
+  assert.deepEqual(etapesDe(r), ['À contacter','RDV effectué','À relancer','Ne pas recontacter']);
 });
 
 test('liste: dans une section, date croissante, sans date en dernier', () => {
@@ -502,9 +500,9 @@ test('liste: dans une section, date croissante, sans date en dernier', () => {
 });
 
 test('liste: filtre sur une etape ne montre que celle-la', () => {
-  const cs = [cl(1,'Contacté'), cl(2,'Qualifié'), cl(3,'En veille','2026-12-01')];
-  assert.deepEqual(etapesDe(prospectSectionsListe(cs, 'Qualifié', NOW_L)), ['Qualifié']);
-  assert.deepEqual(etapesDe(prospectSectionsListe(cs, 'En veille', NOW_L)), ['En veille']);
+  const cs = [cl(1,'Contacté'), cl(2,'RDV effectué'), cl(3,'À relancer','2026-12-01')];
+  assert.deepEqual(etapesDe(prospectSectionsListe(cs, 'RDV effectué', NOW_L)), ['RDV effectué']);
+  assert.deepEqual(etapesDe(prospectSectionsListe(cs, 'À relancer', NOW_L)), ['À relancer']);
   assert.deepEqual(prospectSectionsListe([], PROSPECT_FILTRE_ACTIFS, NOW_L), []);
 });
 

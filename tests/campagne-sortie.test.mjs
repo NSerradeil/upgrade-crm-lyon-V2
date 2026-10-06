@@ -47,12 +47,12 @@ test('jour ouvre suivant : week-end et feries sautes, meme calcul que le MCP', (
   assert.equal(campagneJourOuvreSuivant('2027-03-26'), '2027-03-30');
 });
 
-test('refus : En veille, reveil a 6 mois 09h00 avec decalage, detail avec l etape', () => {
+test('refus : À relancer, reveil a 6 mois 09h00 avec decalage, detail avec l etape', () => {
   const p = campagneSortiePlan('refus', P('Contacté'), CTX);
-  assert.equal(p.patch.etape_prospect, 'En veille');
+  assert.equal(p.patch.etape_prospect, 'À relancer');
   assert.equal(p.patch.prochaine_action_date, '2027-03-29T09:00:00+02:00');
   assert.equal(p.patch.prochaine_action_libelle, 'Réveil prospect');
-  assert.equal(p.detail, 'Campagne Prospection DSI Lyon : refus (le 29/09/2026), sortie par Nicolas Serradeil · étape → En veille');
+  assert.equal(p.detail, 'Campagne Prospection DSI Lyon : refus (le 29/09/2026), sortie par Nicolas Serradeil · étape → À relancer');
   assert.equal(p.tache, null); assert.equal(p.fermeTaches, false);
 });
 
@@ -74,9 +74,9 @@ test('ne plus contacter sur un Client : Ne pas recontacter pose, taches fermees,
   assert.equal(p.fermeTaches, true);
 });
 
-test('pas le bon profil : Perdu, motif Pas le bon interlocuteur, taches fermees', () => {
+test('pas le bon profil : Ne pas recontacter, motif Pas le bon interlocuteur, taches fermees', () => {
   const p = campagneSortiePlan('profil', P('En discussion'), { ...CTX, precision: 'cherche un DSI, pas un RSSI' });
-  assert.equal(p.patch.etape_prospect, 'Perdu');
+  assert.equal(p.patch.etape_prospect, 'Ne pas recontacter');
   assert.equal(p.patch.motif_perte, 'Pas le bon interlocuteur');
   assert.equal(p.patch.motif_perte_precision, 'cherche un DSI, pas un RSSI');
   assert.equal(p.fermeTaches, true);
@@ -120,5 +120,5 @@ test('la ligne de sortie manuelle commence exactement comme celle du MCP (temoin
     assert.ok(!/[\u2013\u2014]/.test(p.detail), motif);
   }
   const refus = campagneSortiePlan('refus', P('Contacté'), { ...CTX, aujourdhui });
-  assert.equal(refus.detail, 'Campagne Prospection DSI Lyon : refus (le 30/09/2026), sortie par Nicolas Serradeil · étape → En veille');
+  assert.equal(refus.detail, 'Campagne Prospection DSI Lyon : refus (le 30/09/2026), sortie par Nicolas Serradeil · étape → À relancer');
 });
