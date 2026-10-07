@@ -75,12 +75,11 @@ test('I3 : colonne contact_id absente (avant migration 54) : l erreur revient, r
   assert.match(r.error.message, /contact_id/); assert.equal(r.arretees, 0);
 });
 
-test('I3 : le cablage couvre les quatre chemins NPC, pas la levee de NPC', () => {
-  assert.equal((html.match(/prospectStopperSequencesLiees\(/g) || []).length, 5, 'definition + 4 appels');
+test('I3 : le cablage couvre les trois chemins NPC, pas la levee de NPC', () => {
+  assert.equal((html.match(/prospectStopperSequencesLiees\(/g) || []).length, 4, 'definition + 3 appels (le 4e, la sortie du cockpit Jules, a ete retire du CRM)');
   assert.match(html, /prospectEntreeNpc\(prospectEtapeOuDefaut\(contact\),etape\)/);
   assert.match(html, /prospectEntreeNpc\(prospectEtapeOuDefaut\(sc\), patchAppel\.etape_prospect\)/);
   assert.match(html, /prospectEntreeNpc\(prospectEtapeOuDefaut\(pic2\), patchNpc\.etape_prospect\)/);
-  assert.match(html, /prospectEntreeNpc\(etapeAvantSortie, plan\.patch\.etape_prospect\)/);
   const levee = html.slice(html.indexOf('const handleLeverNpc'), html.indexOf('const handleEtapeConfirm'));
   assert.doesNotMatch(levee, /prospectStopperSequencesLiees/);
 });
@@ -94,5 +93,4 @@ test('M5 : Ne plus contacter sans fiche liee avertit ; avec fiche, ou autre moti
   assert.equal(campagneAvertissementSansFiche('refus', PROS, { contact_id: null }), null);
   assert.equal(campagneAvertissementSansFiche('npc', { kind: 'campagne', config: {} }, { contact_id: null }), null);
   assert.doesNotMatch(campagneAvertissementSansFiche('npc', PROS, {}), /[–—]/);
-  assert.match(html, /const sansFiche = campagneAvertissementSansFiche\(motif, mission, s\);\s+if \(sansFiche\) toast\(sansFiche, 'error'\);/);
 });
