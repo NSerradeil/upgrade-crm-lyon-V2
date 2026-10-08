@@ -5242,6 +5242,10 @@ function CompteSidebar({ compte, contactComptes, contacts, missions, historique,
   );
 }
 
+// Colonnes lues par le front (fetchAll + mises à jour locales de l'onglet Tâches).
+const TACHES_COLS='id,titre,statut,due_date,contact_id,mission_id,besoin_id,notes,responsable,date_completion,session_prospection_id,updated_at';
+const HISTORIQUE_COLS='id,id_prospect,date,type_action,details,responsable,tache_id,besoin_id';
+
 // ── Modal : Compléter une tâche ───────────────────────────────────────────────
 function CompleteTaskModal({ task, contact, profile, onClose, onSaved }) {
   const [note,setNote]=useState('');
@@ -5265,17 +5269,14 @@ function CompleteTaskModal({ task, contact, profile, onClose, onSaved }) {
   const save=async()=>{
     if(createRelance&&!relanceDate) return;
     setSaving(true);
-    await sb.from('taches').update({statut:'fait',date_completion:getToday(),notes:note?((task.notes||'')+`\n✅ ${note}`).trim():task.notes,updated_at:new Date().toISOString()}).eq('id',task.id);
-    if(task.contact_id){
-      const details=note?`✅ ${task.titre} — ${note}`:`✅ ${task.titre}`;
-      await sb.from('historique_actions').insert({id_prospect:task.contact_id,date:getToday(),type_action:'Tâche accomplie',details,responsable:profile.nom,tache_id:task.id,besoin_id:task.besoin_id||null});
-    }
-    if(task.mission_id){
-      const details=note?`✅ ${task.titre} — ${note}`:`✅ ${task.titre}`;
-      await sb.from('historique_missions').insert({mission_id:task.mission_id,date:getToday(),type_action:'Tâche accomplie',details,responsable:profile.nom});
-    }
-    if(createRelance&&relanceDate){
-      await sb.from('taches').insert({
+    // Écritures lancées en parallèle (chacune coûte un aller-retour vers le Mac mini), lignes
+    // renvoyées au parent pour qu'il mette l'écran à jour sans tout recharger (perf 08/10).
+    const details=note?`✅ ${task.titre} — ${note}`:`✅ ${task.titre}`;
+    const ecritures=[
+      sb.from('taches').update({statut:'fait',date_completion:getToday(),notes:note?((task.notes||'')+`\n✅ ${note}`).trim():task.notes,updated_at:new Date().toISOString()}).eq('id',task.id).select(TACHES_COLS).single(),
+      task.contact_id?sb.from('historique_actions').insert({id_prospect:task.contact_id,date:getToday(),type_action:'Tâche accomplie',details,responsable:profile.nom,tache_id:task.id,besoin_id:task.besoin_id||null}).select(HISTORIQUE_COLS).single():null,
+      task.mission_id?sb.from('historique_missions').insert({mission_id:task.mission_id,date:getToday(),type_action:'Tâche accomplie',details,responsable:profile.nom}):null,
+      (createRelance&&relanceDate)?sb.from('taches').insert({
         id:`tw_${Date.now()}`,
         titre:`Relance — ${task.titre}`,
         statut:'a_faire',
@@ -5285,9 +5286,12 @@ function CompleteTaskModal({ task, contact, profile, onClose, onSaved }) {
         besoin_id:task.besoin_id||null,
         notes:relanceNote||null,
         responsable:task.responsable||profile.nom,
-      });
-    }
-    toast('Tâche terminée');onSaved();
+      }).select(TACHES_COLS).single():null,
+    ];
+    const [rTache,rHist,,rRelance]=await Promise.all(ecritures.map(e=>e||Promise.resolve({})));
+    if(rTache.error){ setSaving(false); toast('Erreur : '+rTache.error.message,'error'); return; }
+    toast('Tâche terminée');
+    onSaved({tache:rTache.data,relance:rRelance.data||null,histo:rHist.data||null});
   };
 
   return (
@@ -5352,10 +5356,10 @@ function EditTacheModal({ task, contacts, besoins, missions, profile, allProfile
     if(!f.titre.trim())return;
     setSaving(true);
     const upd={ titre:f.titre.trim(), due_date:combineDT(f.due_date,f.due_time)||null, statut:f.due_date?'en_cours':'a_faire', notes:f.notes||null, responsable:f.responsable, contact_id:f.contact_id?parseInt(f.contact_id):null, mission_id:f.mission_id||null, besoin_id:f.besoin_id||null, updated_at:new Date().toISOString() };
-    const{error}=await sb.from('taches').update(upd).eq('id',task.id);
+    const{data:row,error}=await sb.from('taches').update(upd).eq('id',task.id).select(TACHES_COLS).single();
     if(!error){
       await logEdits('tache', task, task, upd, profile, upd.contact_id||task.contact_id);
-      onSaved();
+      onSaved(row);
     } else setSaving(false);
   };
   return (
@@ -5555,8 +5559,9 @@ function DeleteTacheModal({ task, onClose, onDeleted }) {
   const [loading,setLoading]=useState(false);
   const del=async()=>{
     setLoading(true);
-    await sb.from('taches').delete().eq('id',task.id);
-    toast('Tâche supprimée');onDeleted();
+    const {error}=await sb.from('taches').delete().eq('id',task.id);
+    if(error){ setLoading(false); toast('Erreur : '+error.message,'error'); return; }
+    toast('Tâche supprimée');onDeleted(task.id);
   };
   return (
     <Modal title="Supprimer la tâche" onClose={onClose}>
@@ -5804,7 +5809,7 @@ function BadgeMiniDisplay({ achievements, prefs, onClick }) {
 // TABS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function TabTaches({ taches, contacts, contactMap, besoins, missions, historique, profile, allProfiles, onRefresh, navKey, navEcheance, navTacheId, navTacheKey, onNavToEtapeTache, onNavToContact, onNavToBesoin, onNavToMission, prefs }) {
+function TabTaches({ taches, contacts, contactMap, besoins, missions, historique, profile, allProfiles, onRefresh, onPatch, onRefreshTaches, navKey, navEcheance, navTacheId, navTacheKey, onNavToEtapeTache, onNavToContact, onNavToBesoin, onNavToMission, prefs }) {
   const tPrefResp=profile.role==='partner'?'':(prefs?.filter_responsable==='moi'?profile.nom:(prefs?.filter_responsable||profile.nom));
   const [search,setSearch]=useState(''); const [showAdd,setShowAdd]=useState(false);
   const [filterResp,setFilterResp]=useState(tPrefResp);
@@ -5817,6 +5822,25 @@ function TabTaches({ taches, contacts, contactMap, besoins, missions, historique
   const [editingTask,setEditingTask]=useState(null);
   const [deletingTask,setDeletingTask]=useState(null);
   const reorder = useListReorder('taches_list_order');
+  // Mise à jour locale après valider / modifier / supprimer : l'écran bouge tout de suite, puis
+  // seule la table des tâches est relue en tâche de fond (plus de rechargement complet, perf 08/10).
+  const majTaches=()=>{ if(onRefreshTaches) onRefreshTaches(); else onRefresh(); };
+  const tacheTerminee=r=>{
+    if(!onPatch||!r||!r.tache) return onRefresh();
+    onPatch('taches',l=>[...l.map(x=>x.id===r.tache.id?r.tache:x),...(r.relance?[r.relance]:[])]);
+    if(r.histo) onPatch('historique',l=>[r.histo,...l]);
+    setDetailTask(null); majTaches();
+  };
+  const tacheModifiee=row=>{
+    if(!onPatch||!row) return onRefresh();
+    onPatch('taches',l=>l.map(x=>x.id===row.id?row:x));
+    setDetailTask(d=>d&&d.id===row.id?null:d); majTaches();
+  };
+  const tacheSupprimee=id=>{
+    if(!onPatch||id==null) return onRefresh();
+    onPatch('taches',l=>l.filter(x=>x.id!==id));
+    setDetailTask(d=>d&&d.id===id?null:d); majTaches();
+  };
   const besoinMap=useMemo(()=>{
     const m={};
     (besoins||[]).forEach(b=>{ if(b.titre) m[b.id]=b.titre; });
@@ -5923,11 +5947,11 @@ function TabTaches({ taches, contacts, contactMap, besoins, missions, historique
       ):(
         <CalendarTaches taches={actives} contactMap={contactMap} profile={profile} isAdmin={isAdmin} onComplete={handleComplete}/>
       )}
-      {showAdd&&<AddTacheModal contacts={contacts} besoins={besoins} missions={missions} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
+      {showAdd&&<AddTacheModal contacts={contacts} besoins={besoins} missions={missions} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);majTaches();}}/>}
       {detailTask&&(()=>{const t=detailTask;const contact=t.contact_id?contactMap[t.contact_id]:null;const besoinLabel=t.besoin_id?besoinMap[t.besoin_id]:null;const mission=t.mission_id?missionMap[t.mission_id]:null;const besoin=t.besoin_id?besoinObjMap[t.besoin_id]:null;const canEdit=isAdmin||t.responsable===profile.nom||profile.role==='partner';return<TacheDetailPanel task={t} contact={contact} besoinLabel={besoinLabel} mission={mission} besoin={besoin} historique={historique} profile={profile} canEdit={canEdit} onClose={()=>setDetailTask(null)} onEdit={()=>handleEdit(t)} onComplete={()=>handleComplete(t)} onDelete={()=>handleDelete(t)} onAddAction={()=>{setDetailTask(null);onRefresh();}} onViewContact={c=>{setDetailTask(null);onNavToContact&&onNavToContact(c.id);}} onViewMission={m=>{setDetailTask(null);onNavToMission&&onNavToMission(m.id);}} onViewBesoin={b=>{setDetailTask(null);onNavToBesoin&&onNavToBesoin(b.id);}}/>;})()}
-      {completingModal&&<CompleteTaskModal task={completingModal} contact={contactMap[completingModal.contact_id]||null} profile={profile} onClose={()=>setCompletingModal(null)} onSaved={()=>{setCompletingModal(null);onRefresh();}}/>}
-      {editingTask&&<EditTacheModal task={editingTask} contacts={contacts} besoins={besoins} missions={missions} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingTask(null)} onSaved={()=>{setEditingTask(null);onRefresh();}}/>}
-      {deletingTask&&<DeleteTacheModal task={deletingTask} onClose={()=>setDeletingTask(null)} onDeleted={()=>{setDeletingTask(null);onRefresh();}}/>}
+      {completingModal&&<CompleteTaskModal task={completingModal} contact={contactMap[completingModal.contact_id]||null} profile={profile} onClose={()=>setCompletingModal(null)} onSaved={r=>{setCompletingModal(null);tacheTerminee(r);}}/>}
+      {editingTask&&<EditTacheModal task={editingTask} contacts={contacts} besoins={besoins} missions={missions} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingTask(null)} onSaved={row=>{setEditingTask(null);tacheModifiee(row);}}/>}
+      {deletingTask&&<DeleteTacheModal task={deletingTask} onClose={()=>setDeletingTask(null)} onDeleted={id=>{setDeletingTask(null);tacheSupprimee(id);}}/>}
     </div>
   );
 }
@@ -9870,8 +9894,8 @@ function App() {
         {data:intercos,error:e12},
       ] = await Promise.all([
         sb.from('contacts').select('id,statut,prenom,nom,ville,role,telephone,email,linkedin,besoins,responsable,date_dernier,commentaires,ats,updated_at,agence,created_at,date_dernier_suivi_client,cjm,employeur,date_entree,date_sortie,salaire_annuel,cjm_manuel,statut_rh,statut_rh_depuis,type_presta,manager_trigramme,responsabilite,trigramme,ancien_statut,etape_prospect,prochaine_action_date,prochaine_action_libelle,motif_perte,motif_perte_precision').order('id').limit(L),
-        sb.from('historique_actions').select('id,id_prospect,date,type_action,details,responsable,tache_id,besoin_id').order('date',{ascending:false}).limit(histLimit),
-        sb.from('taches').select('id,titre,statut,due_date,contact_id,mission_id,besoin_id,notes,responsable,date_completion,session_prospection_id,updated_at').order('due_date',{ascending:true,nullsFirst:false}).limit(L),
+        sb.from('historique_actions').select(HISTORIQUE_COLS).order('date',{ascending:false}).limit(histLimit),
+        sb.from('taches').select(TACHES_COLS).order('due_date',{ascending:true,nullsFirst:false}).limit(L),
         sb.from('besoins').select('id,titre,statut,lien,compte_id,contact_id,description,budget,budget_tjm,budget_jours,budget_date_debut,budget_date_fin,candidat_id,consultant_id,date_entretien,compte_rendu,date_demarrage,date_fin,tjm_vente,cjm_achat,motif_perte,motif_perte_precision,responsable,agence,created_at,updated_at').order('created_at',{ascending:false}).limit(L),
         sb.from('missions').select(MISSIONS_COLS).order('consultant').limit(isMobile?500:3000),
         sb.from('historique_missions').select('id,mission_id,date,type_action,details,responsable').order('date',{ascending:false}).limit(histLimit),
@@ -9925,6 +9949,13 @@ function App() {
       setData({contacts,historique,taches,besoins,missions:mList,histMissions:histMiss||[],besoinCandidats:besoinCandidats||[],missionPeriods:missionPeriods||[],comptes:comptes||[],contactComptes:contactComptes||[],partnerConsultants:partnerConsultants||[],intercos:intercos||[]});
       setLastRefresh(new Date().toLocaleTimeString('fr-FR'));
     } catch(err){ setError(err.message); } finally{ setLoading(false); }
+  },[]);
+  // Mise à jour ciblée d'une collection sans tout recharger (onglet Tâches, perf 08/10).
+  const patchData = useCallback((key,fn)=>setData(d=>d?{...d,[key]:fn(d[key]||[])}:d),[]);
+  // Relecture de la seule table taches, sans écran de chargement.
+  const refreshTaches = useCallback(async ()=>{
+    const {data:t,error:e}=await sb.from('taches').select(TACHES_COLS).order('due_date',{ascending:true,nullsFirst:false}).limit(isMobile?1000:5000);
+    if(!e&&t){ setData(d=>d?{...d,taches:t}:d); setLastRefresh(new Date().toLocaleTimeString('fr-FR')); }
   },[]);
 
   useEffect(()=>{
@@ -10218,7 +10249,7 @@ function App() {
         {tab==='agence'   &&<TabAgence contacts={vContacts} missions={isPartner?vMissions:missions} missionPeriods={missionPeriods} intercos={intercos} taches={vTaches} comptes={vComptes} histMissions={vHistMiss} besoins={vBesoins} partnerConsultants={partnerConsultants} allProfiles={allProfiles} profile={activeProfile} isPartner={isPartner} onRefresh={fetchAll} onNavToMission={navToMission} onNavToContact={navToContact} prefs={prefs}/>}
         {tab==='prospects'&&<TabProspects contacts={vContacts} contactMap={contactMap} historique={vHistorique} taches={vTaches} histMissions={vHistMiss} missions={vMissions} allMissions={missions} besoins={vBesoins} comptes={vComptes} contactComptes={vContactComptes} compteMap={compteMap} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navContactId={navContactId} navContactKey={navContactKey} navEtape={navEtape} onNavEtapeConsumed={()=>setNavEtape(null)} navCompteId={navCompteId} navCompteKey={navCompteKey} onNavToBesoin={navToBesoin} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
         {tab==='prospection'&&<TabProspection profile={activeProfile} contacts={vContacts} contactMap={contactMap} onRefresh={fetchAll} isAdmin={activeIsAdmin} onNavToContact={navToContact} allProfiles={allProfiles} prefs={prefs}/>}
-        {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} contactMap={contactMap} besoins={vBesoins} missions={vMissions} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} navKey={tachesNavKey} navEcheance={tachesNavEcheance} navTacheId={navTacheId} navTacheKey={navTacheKey} onNavToEtapeTache={navToEtapeTache} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToMission={navToMission} prefs={prefs}/>}
+        {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} contactMap={contactMap} besoins={vBesoins} missions={vMissions} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onPatch={patchData} onRefreshTaches={refreshTaches} navKey={tachesNavKey} navEcheance={tachesNavEcheance} navTacheId={navTacheId} navTacheKey={navTacheKey} onNavToEtapeTache={navToEtapeTache} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToMission={navToMission} prefs={prefs}/>}
         {tab==='besoins'  &&<TabBesoins  contacts={vContacts} contactMap={contactMap} comptes={vComptes} compteMap={compteMap} besoins={vBesoins} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navBesoinId={navBesoinId} navBesoinKey={navBesoinKey} onNavToContact={navToContact} onNavToMission={navToMission} onNavToTache={navToTache} onNavToCompte={navToCompte} prefs={prefs}/>}
         {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} comptes={vComptes} compteMap={compteMap} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToCompte={navToCompte} prefs={prefs}/>}
         {tab==='historique'&&<TabHistorique historique={vHistorique} contacts={vContacts} contactMap={contactMap} taches={vTaches} besoins={vBesoins} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToTache={navToTache}/>}
