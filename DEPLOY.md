@@ -8,7 +8,7 @@ constaté qu'aucune doc n'existait).
 | Couche | Où ça vit | Comment ça devient « live » |
 |---|---|---|
 | **Données** | Supabase (PostgreSQL + PostgREST + RLS) | **Immédiat.** Toute écriture (app, MCP, SQL Editor) est live tout de suite. Aucun commit/déploiement. |
-| **Schéma DB** (tables, RLS, migrations) | Supabase, géré **à la main** | Coller le SQL de `db/*.sql` dans **Supabase → SQL Editor → Run**. Les fichiers `db/` sont versionnés pour la traçabilité, mais ne s'appliquent PAS tout seuls. |
+| **Schéma DB** (tables, RLS, migrations) | Supabase, géré **à la main** | Depuis le 08/10 (base sur le Mac mini) : `zsh ~/Pro/Jules/bin/macmini/crm-sql.sh db/XX.sql` (Studio en repli). Les fichiers `db/` sont versionnés pour la traçabilité, mais ne s'appliquent PAS tout seuls. |
 | **App web** (`index.html`, PWA mono-fichier) | GitHub Pages | **Push sur `main`** → workflow `pages-build-deployment` rebuild auto. URL : https://nserradeil.github.io/upgrade-crm-lyon-V2/ |
 | **Serveur MCP** (`../upgrade-crm-mcp-src/server/index.mjs`) | Local, **PAS un dépôt git** | Sauver le fichier ; le process MCP le charge au (re)démarrage de la session Claude. Rien à pousser. |
 
