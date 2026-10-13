@@ -7785,8 +7785,9 @@ function TabTDB({ missions, histMissions, missionPeriods, contacts, taches, beso
       </div>
       <div style={{marginTop:8,fontSize:11,color:'#bbb',textAlign:'right',fontFamily:'Outfit,sans-serif'}}>Cliquer sur une dalle pour changer la vue</div>
 
-      {/* Table missions — cliquer sur une ligne ouvre le détail */}
-      <div className="bg-white border border-neutral-200 rounded-lg overflow-hidden shadow-sm">
+      {/* Table missions — cliquer sur une ligne ouvre le détail. Pleine largeur de la fenêtre (marges de 24 px), hors du
+          conteneur de 1280 px : les 12 mois tiennent sans défilement horizontal sur un écran large (demande Nicolas 13/10). */}
+      <div className="bg-white border border-neutral-200 rounded-lg overflow-hidden shadow-sm" style={{width:'calc(100vw - 48px)',marginLeft:'calc(50% - 50vw + 24px)'}}>
         <div className="px-4 py-3 border-b border-neutral-50 flex items-center gap-3 flex-wrap">
           <span className="text-sm font-semibold text-carbon mr-auto flex items-center gap-2"><span className="inline-block w-2.5 h-2.5 rounded-sm" style={{background:'#823DE8'}}/>Missions — {missionsTri.length}/{missions.length} consultant{missions.length>1?'s':''}</span>
           <input type="text" placeholder="Consultant, client..." value={search} onChange={e=>setSearch(e.target.value)} className="px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:border-midnight w-44"/>
