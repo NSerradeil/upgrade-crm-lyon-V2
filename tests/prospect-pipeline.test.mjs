@@ -19,7 +19,7 @@ function extrait(nom) {
   throw new Error(`${nom} introuvable dans index.html`);
 }
 const NOMS = ['DEFAULT_TASK_TIME', 'combineDT', 'PROSPECT_ETAPES', 'PROSPECT_ETAPES_ACTIVES', 'PROSPECT_ETAPES_SORTIE',
-              'PROSPECT_MOTIFS_PERTE', 'prospectEtapeOuDefaut', 'prospectEtapeRequiert',
+              'PROSPECT_MOTIFS_PERTE', 'prospectEtapeOuDefaut', 'prospectEtapeAccepteDate', 'prospectEtapeRequiert',
               'prospectCanSubmit', 'prospectEnRetard', 'prospectTacheLibelle',
               'prospectTacheEcheance', 'prospectReveilPreset', 'prospectPatchEtape', 'prospectTachePayload',
               'prospectSurLeBoard', 'prospectTacheEstProspection', 'etapeDepuisResultatAppel',
@@ -29,7 +29,7 @@ const NOMS = ['DEFAULT_TASK_TIME', 'combineDT', 'PROSPECT_ETAPES', 'PROSPECT_ETA
 const src = NOMS.map(extrait).join('\n');
 const API = new Function(`${src}\nreturn {${NOMS.join(',')}};`)();
 const { PROSPECT_ETAPES, PROSPECT_ETAPES_ACTIVES, PROSPECT_ETAPES_SORTIE,
-        prospectEtapeOuDefaut, prospectEtapeRequiert, prospectCanSubmit,
+        prospectEtapeOuDefaut, prospectEtapeAccepteDate, prospectEtapeRequiert, prospectCanSubmit,
         prospectEnRetard, prospectTacheLibelle, prospectTacheEcheance,
         prospectReveilPreset, prospectPatchEtape, prospectTachePayload,
         prospectSurLeBoard, prospectTacheEstProspection, etapeDepuisResultatAppel,
@@ -54,25 +54,51 @@ test('REVIEW FOCUS 1 — un prospect sans etape est traite comme « A contacter 
   assert.equal(prospectEtapeOuDefaut({ statut: 'Prospect', etape_prospect: 'Perdu' }), 'À contacter');   // etape disparue : retombe sur À contacter
 });
 
-test('les etapes actives exigent une date, « A contacter » non', () => {
-  assert.equal(prospectEtapeRequiert('À contacter').date, false);
-  for (const e of ['Contacté', 'En discussion', 'RDV planifié', 'RDV effectué']) {
-    assert.equal(prospectEtapeRequiert(e).date, true, e);
+test('la date de relance est facultative : plus aucune etape ne l exige, mais les etapes actives et « A relancer » l acceptent', () => {
+  // 14/10 (Nicolas, demande d'Anne-Claire) : on change le statut sans devoir donner de date.
+  for (const e of PROSPECT_ETAPES) assert.equal(prospectEtapeRequiert(e).date, false, e);
+  assert.equal(prospectEtapeAccepteDate('À contacter'), false);
+  for (const e of ['Contacté', 'En discussion', 'RDV planifié', 'RDV effectué', 'À relancer']) {
+    assert.equal(prospectEtapeAccepteDate(e), true, e);
   }
-  assert.equal(prospectEtapeRequiert('À relancer').date, true);   // date de reveil
+  assert.equal(prospectEtapeAccepteDate('Ne pas recontacter'), false);
   assert.equal(prospectEtapeRequiert('Ne pas recontacter').motif, false);   // motif facultatif
-  assert.equal(prospectEtapeRequiert('Ne pas recontacter').date, false);
   assert.equal(prospectEtapeRequiert('Ne pas recontacter').commentaire, true);
 });
 
-test('canSubmit bloque tant que l obligatoire manque', () => {
-  assert.equal(prospectCanSubmit('Contacté', {}), false);
+test('canSubmit : sans date on peut changer d etape ; seul le detail de « Ne pas recontacter » reste exige', () => {
+  for (const e of ['Contacté', 'En discussion', 'RDV planifié', 'RDV effectué', 'À relancer', 'À contacter']) {
+    assert.equal(prospectCanSubmit(e, {}), true, e);
+  }
   assert.equal(prospectCanSubmit('Contacté', { prochaine_action_date: '2026-10-05' }), true);
   assert.equal(prospectCanSubmit('Ne pas recontacter', { motif_perte: 'Pas de besoin' }), false);   // la precision reste exigee
   assert.equal(prospectCanSubmit('Ne pas recontacter', { motif_perte_precision: 'a demande', motif_perte: 'Pas de besoin' }), true);
-  assert.equal(prospectCanSubmit('À contacter', {}), true);
   assert.equal(prospectCanSubmit('Ne pas recontacter', {}), false);
   assert.equal(prospectCanSubmit('Ne pas recontacter', { motif_perte_precision: 'a demande' }), true);
+});
+
+test('patch d etape sans date : ni echeance ni libelle ; une date effacee efface aussi son libelle', () => {
+  for (const e of ['Contacté', 'En discussion', 'RDV planifié', 'RDV effectué', 'À relancer']) {
+    const p = prospectPatchEtape(e, {});
+    assert.equal(p.prochaine_action_date, null, e); assert.equal(p.prochaine_action_libelle, null, e);
+    const q = prospectPatchEtape(e, { prochaine_action_date: '', prochaine_action_libelle: 'Rappeler Paul' });
+    assert.equal(q.prochaine_action_date, null, e); assert.equal(q.prochaine_action_libelle, null, e);
+  }
+});
+
+test('patch d etape avec date : echeance et libelle (explicite ou par defaut) conserves', () => {
+  const p = prospectPatchEtape('RDV effectué', { prochaine_action_date: '2026-10-20T10:00' });
+  assert.match(p.prochaine_action_date, /^2026-10-20T10:00/);
+  assert.equal(p.prochaine_action_libelle, prospectTacheLibelle('RDV effectué'));
+  assert.equal(prospectPatchEtape('Contacté', { prochaine_action_date: '2026-10-20T10:00', prochaine_action_libelle: 'Rappeler Paul' }).prochaine_action_libelle, 'Rappeler Paul');
+  assert.equal(prospectPatchEtape('À contacter', { prochaine_action_date: '2026-10-20T10:00' }).prochaine_action_date, null);   // « A contacter » n'en porte pas
+});
+
+test('le micro-formulaire ne marque plus la date comme obligatoire et ne propose la tache que si une date est saisie', () => {
+  const m = html.slice(html.indexOf('function ProspectMicroForm'), html.indexOf('function ProspectMicroForm') + 4500);
+  assert.ok(!/Date de réveil \*/.test(m) && !/Date du RDV \*/.test(m) && !/Prochaine action, date \*/.test(m));
+  assert.ok(/Date de réveil \(facultatif\)/.test(m) && /Date du RDV \(facultatif\)/.test(m));
+  assert.ok(/accepteDate&&!!formData\.prochaine_action_date&&<label/.test(m));
 });
 
 test('REVIEW FOCUS 2 — une date de reveil dans le passe compte comme retard', () => {

@@ -16,7 +16,7 @@ function extrait(nom) {
   throw new Error(`${nom} introuvable dans index.html`);
 }
 const NOMS = ['DEFAULT_TASK_TIME', 'combineDT', 'PROSPECT_ETAPES', 'PROSPECT_ETAPES_ACTIVES', 'PROSPECT_ETAPES_SORTIE',
-              'prospectEtapeOuDefaut', 'prospectEtapeRequiert', 'prospectTacheLibelle', 'prospectTacheEcheance',
+              'prospectEtapeOuDefaut', 'prospectEtapeAccepteDate', 'prospectEtapeRequiert', 'prospectTacheLibelle', 'prospectTacheEcheance',
               'prospectReveilPreset', 'prospectPatchEtape', 'prospectTachePayload',
               'CAMPAGNE_MOTIF_PERTE_PROFIL', 'CAMPAGNE_LIBELLES_SORTIE', 'campagneEstProspection', 'campagneEffetSortie',
               'campagneJourOuvreSuivant', 'campagneSortiePlan'];
