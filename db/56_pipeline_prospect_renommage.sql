@@ -54,3 +54,5 @@ begin
 end $$;
 
 commit;
+
+-- Trigger de transition (trg_contacts_etape_legacy / contacts_etape_legacy) retiré le 21/10/2026 (confirmation Nicolas, MCP 8.29.0 sorti le 06/10 : J+15). Définitions sauvegardées sur le Mac mini : ~/Pro/Jules/.sauvegardes/trigger-etape-2026-10-21/ (fonction.sql puis trigger.sql pour le rétablir).
