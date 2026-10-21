@@ -3717,9 +3717,10 @@ function RepartitionPartners({ contacts, allProfiles, missions, profile, onClose
     setBusy(c.id);
     const {error}=await sb.from('contacts').update({manager_trigramme:tri||null,updated_at:new Date().toISOString()}).eq('id',c.id);
     if(error){toast('Erreur : '+error.message,'error');setBusy(null);return;}
-    await sb.from('partner_consultants').delete().eq('contact_consultant_id',c.id);
     const prof=(allProfiles||[]).find(p=>p.role==='partner'&&p.trigramme===tri);
-    if(prof) await sb.from('partner_consultants').insert({partner_id:prof.id,contact_consultant_id:c.id});
+    const {error:errDel}=await sb.from('partner_consultants').delete().eq('contact_consultant_id',c.id);
+    const {error:errIns}=prof?await sb.from('partner_consultants').insert({partner_id:prof.id,contact_consultant_id:c.id}):{};
+    if(errDel||errIns){toast('Partner enregistré mais périmètre non mis à jour : '+(errDel||errIns).message,'error');setBusy(null);return;}
     await sb.from('historique_actions').insert({id_prospect:c.id,date:getToday(),type_action:'Note interne',details:`Partner responsable → ${tri?nomDe(tri):'aucun'}`,responsable:profile.nom});
     setLocal(l=>Object.assign({},l,{[c.id]:tri||''})); setBusy(null);
   };
@@ -4115,9 +4116,11 @@ function CollabDetail({ collab: k, missions, missionPeriods, histMissions, conta
     const {error}=await sb.from('contacts').update({manager_trigramme:tri||null,updated_at:new Date().toISOString()}).eq('id',k.id);
     if(error){toast('Erreur : '+error.message,'error');setSavingPartner(false);return;}
     // Si ce partner a un compte CRM, on aligne aussi son périmètre (table partner_consultants).
-    await sb.from('partner_consultants').delete().eq('contact_consultant_id',k.id);
-    const prof=(allProfiles||[]).find(p=>p.role==='partner'&&p.nom===nom);
-    if(prof) await sb.from('partner_consultants').insert({partner_id:prof.id,contact_consultant_id:k.id});
+    // Par TRIGRAMME, pas par nom : MANAGER_TRIGRAMMES dit « Majo Paquelier », le profil « Maria-Jose Paquelier » (cas Manon/Cécile 21/10 : lien jamais créé, sans erreur).
+    const prof=(allProfiles||[]).find(p=>p.role==='partner'&&p.trigramme===tri);
+    const {error:errDel}=await sb.from('partner_consultants').delete().eq('contact_consultant_id',k.id);
+    const {error:errIns}=prof?await sb.from('partner_consultants').insert({partner_id:prof.id,contact_consultant_id:k.id}):{};
+    if(errDel||errIns){toast('Partner enregistré mais périmètre non mis à jour : '+(errDel||errIns).message,'error');setSavingPartner(false);onRefresh();return;}
     await sb.from('historique_actions').insert({id_prospect:k.id,date:getToday(),type_action:'Note interne',details:`Partner responsable → ${nom||'aucun'}`,responsable:profile.nom});
     toast(`Partner → ${nom||'aucun'}`); setSavingPartner(false); onRefresh();
   };
