@@ -2413,6 +2413,53 @@ function AddContactModal({ profile, allProfiles, comptes, contacts, onClose, onS
 }
 
 // ── Modal : Créer / Modifier compte (Phase 1.C) ──────────────────────────────
+// ── Transfert de responsabilité (db/59, 02/11/2026) ──
+// Le responsable actuel d'un contact ou d'un compte (ou l'admin) le confie à un autre commercial.
+// Passe par la fonction SQL transferer_responsabilite : elle ne change QUE `responsable`, vérifie les droits
+// (pas de reprise de main) et journalise. Les contacts, tâches, besoins et missions liés ne bougent pas.
+function peutTransferer(profile, objet) {
+  if (!profile || !objet) return false;
+  return profile.role === 'admin' || (profile.role === 'commercial' && objet.responsable === profile.nom);
+}
+function TransfertResponsableModal({ type, objet, profile, allProfiles, onClose, onDone }) {
+  const options = useMemo(() => (allProfiles || [])
+    .filter(p => (p.role === 'admin' || p.role === 'commercial') && p.nom && p.nom !== objet.responsable)
+    .sort((a, b) => (a.nom || '').localeCompare(b.nom || '')), [allProfiles, objet.responsable]);
+  const [cible, setCible] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const libelle = type === 'compte' ? `le compte ${objet.nom}` : `${objet.prenom || ''} ${objet.nom || ''}`.trim();
+  const save = async () => {
+    if (!cible) { setErr('Choisis le commercial qui reprend la fiche.'); return; }
+    setSaving(true); setErr('');
+    const { error } = await sb.rpc('transferer_responsabilite', { p_type: type, p_id: objet.id, p_nouveau: cible });
+    if (error) { setErr(error.message || 'Transfert impossible.'); setSaving(false); return; }
+    toast(`Responsabilité confiée à ${cible}`);
+    onDone();
+  };
+  return (
+    <Modal title={<><Icon d={ICONS.person} size={14}/> Changer de responsable</>} onClose={onClose}
+      footer={<ModalFooter onClose={onClose} onSave={save} saving={saving} disabled={!cible} label="Confier"/>}>
+      <p className="text-sm text-carbon mb-3">
+        Tu confies {libelle} à un autre commercial. Il en devient responsable ; toi, tu ne pourras plus la réattribuer.
+      </p>
+      <Field label="Responsable actuel"><div className={inputCls} style={{background:'#f5f5f5',color:'#999',borderRadius:0}}>{objet.responsable || '—'}</div></Field>
+      <Field label="Nouveau responsable">
+        <select value={cible} onChange={e => setCible(e.target.value)} className={inputCls} autoFocus>
+          <option value="">Choisir…</option>
+          {options.map(p => <option key={p.nom} value={p.nom}>{p.nom}{p.agence ? ` · ${p.agence}` : ''}</option>)}
+        </select>
+      </Field>
+      <p className="text-xs text-slate">
+        {type === 'compte'
+          ? 'Seul le compte change de main : ses contacts, besoins et missions gardent leur responsable.'
+          : 'Seul le contact change de main : ses tâches, actions et besoins gardent leur responsable.'}
+      </p>
+      {err && <div className="text-sm mt-2" style={{color:'#FF3D2E'}}>{err}</div>}
+    </Modal>
+  );
+}
+
 function CompteFormModal({ compte, profile, allProfiles, onClose, onSaved }) {
   const isEdit = !!compte;
   const isAdmin = profile.role==='admin';   // seul l'admin réattribue un compte (aligné modal contact + trigger db/10)
@@ -2776,6 +2823,7 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
       <BtnAction variant="task" icon={ICONS.check} label="Tâche" onClick={()=>setModal('tache')}/>
       {isOwner && <>
         <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setModal('edit')}/>
+        {peutTransferer(profile, contact)&&<BtnAction variant="mission" icon={ICONS.person} label="Changer de responsable" onClick={()=>setModal('transfert')}/>}
         {canDelete&&profile.role!=='partner'&&(modal!=='confirmDel'
           ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
           : <ConfirmDelete onConfirm={handleDelete} onCancel={()=>setModal(null)} loading={deleting}/>)}
@@ -2893,6 +2941,7 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
         }
       </div>
       {modal==='edit'  && <ContactEditModal   contact={contact} contacts={contacts||[]} profile={profile} allProfiles={allProfiles} comptes={comptes} onClose={()=>setModal(null)} onSaved={saved} />}
+      {modal==='transfert' && <TransfertResponsableModal type="contact" objet={contact} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onDone={()=>{setModal(null);softRefresh();}} />}
       {modal==='proposeBesoin'&&(
         <Modal title="RDV effectué" onClose={fermerProposition}>
           <div className="text-center py-4 space-y-4">
@@ -4519,6 +4568,7 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
   const [fromContact,setFromContact]=useState(null); // contact origine pour breadcrumb sur CompteSidebar
   const [showAddCompte,setShowAddCompte]=useState(false);
   const [editingCompte,setEditingCompte]=useState(null);
+  const [transfertCompte,setTransfertCompte]=useState(null);   // db/59 : changer de responsable
   const [deletingCompte,setDeletingCompte]=useState(null);
   const [compteDeleting,setCompteDeleting]=useState(false);
   useEffect(()=>{ if(navContactId){ const c=contacts.find(x=>x.id===navContactId||String(x.id)===String(navContactId)); if(c){ setSelected(c);
@@ -4770,18 +4820,19 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
       )}
         </>}
       </>}
-      {viewMode==='comptes'&&<ComptesView comptes={comptes||[]} contactComptes={contactComptes||[]} contacts={contacts} missions={allMissions||missions} historique={historique} taches={taches} histMissions={histMissions||[]} profile={profile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} selected={selectedCompte?((comptes||[]).find(c=>c.id===selectedCompte.id)||selectedCompte):null} onSelect={c=>{setSelectedCompte(c);setFromContact(null);}} onNavToContact={cid=>{const c=contacts.find(x=>x.id===cid);if(c)setSelected(c);}} fromContact={fromContact} onBackToContact={()=>{setSelected(fromContact);setSelectedCompte(null);setFromContact(null);setViewMode('contacts');}} onEditCompte={setEditingCompte} onDeleteCompte={setDeletingCompte}/>}
+      {viewMode==='comptes'&&<ComptesView comptes={comptes||[]} contactComptes={contactComptes||[]} contacts={contacts} missions={allMissions||missions} historique={historique} taches={taches} histMissions={histMissions||[]} profile={profile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} selected={selectedCompte?((comptes||[]).find(c=>c.id===selectedCompte.id)||selectedCompte):null} onSelect={c=>{setSelectedCompte(c);setFromContact(null);}} onNavToContact={cid=>{const c=contacts.find(x=>x.id===cid);if(c)setSelected(c);}} fromContact={fromContact} onBackToContact={()=>{setSelected(fromContact);setSelectedCompte(null);setFromContact(null);setViewMode('contacts');}} onEditCompte={setEditingCompte} onDeleteCompte={setDeletingCompte} onTransferCompte={setTransfertCompte}/>}
       {selected&&<ContactDetail contact={selected} contacts={contacts||[]} historique={historique} taches={taches} missions={missions} besoins={besoins} comptes={comptes||[]} contactComptes={contactComptes||[]} profile={profile} allProfiles={allProfiles} fromCompte={viewMode==='comptes'?selectedCompte:null} dropIntent={dropIntent} onIntentConsumed={()=>setDropIntent(null)} onSoftRefresh={onRefresh} onRefresh={()=>{onRefresh();setSelected(null);setDropIntent(null);}} onClose={()=>{setSelected(null);setDropIntent(null);}} onNavToBesoin={onNavToBesoin} onNavToMission={onNavToMission} onNavToTache={onNavToTache} onNavToCompte={cid=>{const cmpt=(comptes||[]).find(x=>x.id===cid);if(cmpt){setFromContact(selected);setSelected(null);setSelectedCompte(cmpt);setViewMode('comptes');}}}/>}
       {showAdd&&<AddContactModal contacts={contacts||[]} profile={profile} allProfiles={allProfiles} comptes={comptes||[]} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);onRefresh();}}/>}
       {showAddCompte&&<CompteFormModal compte={null} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAddCompte(false)} onSaved={()=>{setShowAddCompte(false);onRefresh();}}/>}
       {editingCompte&&<CompteFormModal compte={editingCompte} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingCompte(null)} onSaved={()=>{setEditingCompte(null);onRefresh();}}/>}
+      {transfertCompte&&<TransfertResponsableModal type="compte" objet={transfertCompte} profile={profile} allProfiles={allProfiles} onClose={()=>setTransfertCompte(null)} onDone={()=>{setTransfertCompte(null);onRefresh();}}/>}
       {deletingCompte&&<ConfirmDeleteCompteModal compte={deletingCompte} contactComptes={contactComptes||[]} deleting={compteDeleting} onClose={()=>{if(!compteDeleting)setDeletingCompte(null);}} onConfirm={async()=>{setCompteDeleting(true);const {error}=await sb.from('comptes').delete().eq('id',deletingCompte.id);if(error){toast('Erreur : '+error.message);setCompteDeleting(false);return;}toast('Compte supprimé');setSelectedCompte(null);setDeletingCompte(null);setCompteDeleting(false);onRefresh();}}/>}
     </div>
   );
 }
 
 // ── Vue Comptes (Phase 1.B.2) ─────────────────────────────────────────────────
-function ComptesView({ comptes, contactComptes, contacts, missions, historique, taches, histMissions, profile, allProfiles, commerciauxParAgence, selected, onSelect, onNavToContact, fromContact, onBackToContact, onEditCompte, onDeleteCompte }) {
+function ComptesView({ comptes, contactComptes, contacts, missions, historique, taches, histMissions, profile, allProfiles, commerciauxParAgence, selected, onSelect, onNavToContact, fromContact, onBackToContact, onEditCompte, onDeleteCompte, onTransferCompte }) {
   const [search,setSearch]=useState('');
   const [filterStatut,setFilterStatut]=useState('');
   const [filterResp,setFilterResp]=useState('');
@@ -4940,7 +4991,7 @@ function ComptesView({ comptes, contactComptes, contacts, missions, historique, 
           ))}</tbody>
         </table>
       </div>
-      {selected&&<CompteSidebar compte={selected} contactComptes={contactComptes} contacts={contacts} missions={missions} historique={historique} taches={taches} histMissions={histMissions} profile={profile} onClose={()=>onSelect(null)} onNavToContact={onNavToContact} fromContact={fromContact} onBackToContact={onBackToContact} onEdit={()=>onEditCompte(selected)} onDelete={()=>onDeleteCompte(selected)}/>}
+      {selected&&<CompteSidebar compte={selected} contactComptes={contactComptes} contacts={contacts} missions={missions} historique={historique} taches={taches} histMissions={histMissions} profile={profile} onClose={()=>onSelect(null)} onNavToContact={onNavToContact} fromContact={fromContact} onBackToContact={onBackToContact} onEdit={()=>onEditCompte(selected)} onDelete={()=>onDeleteCompte(selected)} onTransfer={onTransferCompte?()=>onTransferCompte(selected):null}/>}
     </>
   );
 }
@@ -4957,7 +5008,7 @@ const ACTIVITY_TYPE_COLORS = {
 };
 
 // ── Sidebar Compte (Phase 1.B.2 + breadcrumb 1.B.4 + édition 1.C + KPIs 2 + consultants + feed 3) ──
-function CompteSidebar({ compte, contactComptes, contacts, missions, historique, taches, histMissions, profile, onClose, onNavToContact, fromContact, onBackToContact, onEdit, onDelete }) {
+function CompteSidebar({ compte, contactComptes, contacts, missions, historique, taches, histMissions, profile, onClose, onNavToContact, fromContact, onBackToContact, onEdit, onDelete, onTransfer }) {
   const isAdmin = profile?.role === 'admin';
   // comptes : l'UPDATE etait deja ouvert en base (comptes_update_all=true), seule
   // l'UI le restreignait. Supprimer reste admin (comptes_delete_admin).
@@ -5069,6 +5120,7 @@ function CompteSidebar({ compte, contactComptes, contacts, missions, historique,
         </div>
         {(isOwner||isAdmin)&&<div className="px-4 pb-2 flex gap-2 flex-wrap">
           {isOwner&&<BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={onEdit}/>}
+          {onTransfer&&peutTransferer(profile, compte)&&<BtnAction variant="mission" icon={ICONS.person} label="Changer de responsable" onClick={onTransfer}/>}
           {isAdmin&&<BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={onDelete}/>}
         </div>}
         {/* KPIs Activité 2026 — toujours visibles */}
