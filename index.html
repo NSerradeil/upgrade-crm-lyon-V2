@@ -2566,24 +2566,59 @@ function CompteFormModal({ compte, profile, allProfiles, onClose, onSaved }) {
   );
 }
 
-// ── Modal : Confirmer suppression compte (admin only) ────────────────────────
-function ConfirmDeleteCompteModal({ compte, contactComptes, onClose, onConfirm, deleting }) {
-  const nbContacts = (contactComptes||[]).filter(cc => cc.compte_id === compte.id).length;
+// ── Suppression avec corbeille (db/60, 05/11/2026) ───────────────────────────
+// Un commercial supprime SES fiches (compte, contact), un admin toutes. Tout passe par la fonction SQL
+// supprimer_fiche : contrôles (fiche vide, pas de consultant, quota), copie complète dans la corbeille,
+// suppression en une seule transaction. Le DELETE direct est fermé en base pour les non-admins.
+// Le message d'erreur de la base est affiché tel quel : il dit quoi faire.
+function peutSupprimer(profile, objet) {
+  if (!profile || !objet) return false;
+  return profile.role === 'admin' || (profile.role === 'commercial' && !!objet.responsable && objet.responsable === profile.nom);
+}
+function ConfirmSuppressionModal({ type, objet, profile, avertissements, onClose, onDone }) {
+  const [motif, setMotif] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const isAdmin = profile?.role === 'admin';
+  const libelle = type === 'compte' ? (objet.nom || 'ce compte') : (`${objet.prenom || ''} ${objet.nom || ''}`.trim() || 'ce contact');
+  const confirmer = async () => {
+    setSaving(true); setErr('');
+    const { data, error } = await sb.rpc('supprimer_fiche', { p_type: type, p_id: String(objet.id), p_motif: motif.trim() || null, p_origine: 'app', p_forcer: false });
+    if (error) { setErr(error.message || 'Suppression impossible.'); setSaving(false); return; }
+    // On n'annonce « supprimé » que si la base confirme (plus de faux succès).
+    if (!data || String(data.id) !== String(objet.id)) { setErr('La suppression n\'a pas été confirmée par la base. Recharge la page et vérifie.'); setSaving(false); return; }
+    toast(type === 'compte' ? `Compte « ${libelle} » supprimé` : `Contact « ${libelle} » supprimé`);
+    onDone(data);
+  };
   return (
-    <Modal title={<><Icon d={ICONS.delete} size={14}/> Supprimer le compte ?</>} onClose={onClose}
+    <Modal title={<><Icon d={ICONS.delete} size={14}/> {type === 'compte' ? 'Supprimer le compte ?' : 'Supprimer le contact ?'}</>} onClose={() => { if (!saving) onClose(); }}
       footer={<>
-        <button onClick={onClose} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button>
-        <button onClick={onConfirm} disabled={deleting} className="px-4 py-2 bg-coral-100 text-white text-sm font-medium hover:opacity-80 disabled:opacity-50 btn-brutal">{deleting ? 'Suppression...' : 'Supprimer'}</button>
+        <button onClick={onClose} disabled={saving} className="px-4 py-2 text-sm text-slate hover:text-carbon">Annuler</button>
+        <button onClick={confirmer} disabled={saving} className="px-4 py-2 bg-coral-100 text-white text-sm font-medium hover:opacity-80 disabled:opacity-50 btn-brutal">{saving ? 'Suppression...' : 'Supprimer'}</button>
       </>}>
       <div className="text-sm space-y-3">
-        <div>Tu vas supprimer définitivement le compte <strong>{compte.nom}</strong>.</div>
-        {nbContacts > 0 && <div className="text-xs bg-lemon-20 p-3 border-2 border-lemon-100">
-          ⚠️ {nbContacts} contact{nbContacts>1?'s':''} rattaché{nbContacts>1?'s':''} va{nbContacts>1?'nt':''} être délié{nbContacts>1?'s':''} du compte. Les contacts eux-mêmes ne sont PAS supprimés, juste leur lien.
-        </div>}
-        <div className="text-xs text-slate">Action irréversible.</div>
+        <div>Tu vas retirer {type === 'compte' ? 'le compte' : 'le contact'} <strong>{libelle}</strong> du CRM.</div>
+        {type === 'contact' && <div className="text-xs text-slate">Son historique d'échanges, ses tâches et ses liens aux comptes partent avec lui.</div>}
+        {(avertissements || []).map((a, i) => <div key={i} className="text-xs bg-lemon-20 p-3 border-2 border-lemon-100">⚠️ {a}</div>)}
+        <div className="text-xs text-slate">
+          Une copie complète est gardée en archive{isAdmin ? '' : ' : un admin pourra la remettre en place si besoin'}. Elle est effacée au bout de 12 mois.
+        </div>
+        <Field label="Motif (facultatif)">
+          <input type="text" value={motif} onChange={e => setMotif(e.target.value)} className={inputCls} placeholder={type === 'compte' ? 'ex. doublon de FDJ' : 'ex. doublon, fiche créée par erreur'} maxLength={300}/>
+        </Field>
+        {err && <div className="text-sm" style={{color:'#FF3D2E'}}>{err}</div>}
       </div>
     </Modal>
   );
+}
+// Ce que la base refusera pour un compte : on le dit avant de cliquer (la base reste juge).
+function avertissementsCompte(compte, contactComptes, missions) {
+  const out = [];
+  const nbContacts = (contactComptes || []).filter(cc => cc.compte_id === compte.id && !cc.date_fin).length;
+  const nbMissions = (missions || []).filter(m => m.compte_id === compte.id).length;
+  if (nbContacts > 0) out.push(`${nbContacts} contact${nbContacts > 1 ? 's sont encore rattachés' : ' est encore rattaché'} à ce compte : déplace${nbContacts > 1 ? '-les' : '-le'} d'abord vers le bon compte, sinon la suppression sera refusée.`);
+  if (nbMissions > 0) out.push(`${nbMissions} mission${nbMissions > 1 ? 's sont rattachées' : ' est rattachée'} à ce compte : la suppression sera refusée tant qu'${nbMissions > 1 ? 'elles' : 'elle'} y ${nbMissions > 1 ? 'sont' : 'est'}.`);
+  return out;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2689,7 +2724,6 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
   // Cable aux 3 montages (TabProspects, TabHistorique, MissionDetail, ce dernier via sa propre prop onSoftRefresh, fournie par ses 2 appelants).
   const softRefresh = onSoftRefresh||onRefresh;
   const fermerProposition = () => { setModal(null); onRefresh(); };
-  const [deleting,setDeleting] = useState(false);
   const [etapeCible,setEtapeCible]=useState(null);
   // Tache de prospection a clore a la confirmation d'etape (posee par l'intention venue de l'onglet Taches).
   const [tacheAClore,setTacheAClore]=useState(null);
@@ -2710,16 +2744,8 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
   // Phase 1.B.4 : comptes liés via contact_compte
   const linkedComptes = ((contactComptes||[]).filter(cc=>cc.contact_id===contact.id).map(cc=>{const cmpt=(comptes||[]).find(x=>x.id===cc.compte_id);return cmpt?{...cmpt,role_compte:cc.role,is_primary:cc.is_primary}:null;}).filter(Boolean));
   const saved = () => { setModal(null); onRefresh(); };
-  const handleDelete = async () => {
-    setDeleting(true);
-    // Supprimer d'abord les references FK (historique, taches, besoin_candidats) puis le contact
-    await sb.from('historique_actions').delete().eq('id_prospect',contact.id);
-    await sb.from('besoin_candidats').delete().eq('contact_id',contact.id);
-    await sb.from('taches').delete().eq('contact_id',contact.id);
-    var res = await sb.from('contacts').delete().eq('id',contact.id);
-    if(res.error){toast('Erreur : '+res.error.message);setDeleting(false);return;}
-    toast('Contact supprimé');onRefresh(); onClose();
-  };
+  // Suppression : un seul appel à supprimer_fiche (db/60), via ConfirmSuppressionModal (modal==='confirmDel').
+  const apresSuppression = () => { setModal(null); onRefresh(); onClose(); };
   // Le panneau n'est pas remonté quand on passe d'un contact à l'autre (pas de key sur
   // ContactDetail) : sans ça, un micro-formulaire ouvert resterait ouvert sur le suivant.
   useEffect(()=>{ setEtapeCible(null); setEtapeSaving(false); setTacheAClore(null); },[contact.id]);
@@ -2824,9 +2850,7 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
       {isOwner && <>
         <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setModal('edit')}/>
         {peutTransferer(profile, contact)&&<BtnAction variant="mission" icon={ICONS.person} label="Changer de responsable" onClick={()=>setModal('transfert')}/>}
-        {canDelete&&profile.role!=='partner'&&(modal!=='confirmDel'
-          ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>
-          : <ConfirmDelete onConfirm={handleDelete} onCancel={()=>setModal(null)} loading={deleting}/>)}
+        {peutSupprimer(profile, contact)&&<BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>}
       </>}
     </div>
   );
@@ -2942,6 +2966,12 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
       </div>
       {modal==='edit'  && <ContactEditModal   contact={contact} contacts={contacts||[]} profile={profile} allProfiles={allProfiles} comptes={comptes} onClose={()=>setModal(null)} onSaved={saved} />}
       {modal==='transfert' && <TransfertResponsableModal type="contact" objet={contact} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onDone={()=>{setModal(null);softRefresh();}} />}
+      {modal==='confirmDel' && peutSupprimer(profile, contact) && <ConfirmSuppressionModal type="contact" objet={contact} profile={profile}
+        avertissements={[
+          ...(['Consultant CDI','Freelance','Prestataire'].includes(contact.statut) ? [`${contact.statut} : un membre de l'effectif ne se supprime pas, passe par la sortie d'effectif.`] : []),
+          ...(besoinsContact.length>0 ? [`Ce contact est cité dans ${besoinsContact.length} besoin${besoinsContact.length>1?'s':''} : détache-le d'abord, sinon la suppression sera refusée.`] : []),
+        ]}
+        onClose={()=>setModal(null)} onDone={apresSuppression}/>}
       {modal==='proposeBesoin'&&(
         <Modal title="RDV effectué" onClose={fermerProposition}>
           <div className="text-center py-4 space-y-4">
@@ -4570,7 +4600,6 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
   const [editingCompte,setEditingCompte]=useState(null);
   const [transfertCompte,setTransfertCompte]=useState(null);   // db/59 : changer de responsable
   const [deletingCompte,setDeletingCompte]=useState(null);
-  const [compteDeleting,setCompteDeleting]=useState(false);
   useEffect(()=>{ if(navContactId){ const c=contacts.find(x=>x.id===navContactId||String(x.id)===String(navContactId)); if(c){ setSelected(c);
     // Intention venue de l'onglet Taches (clore une tache de prospection) : meme canal que le drop kanban.
     if(navEtape&&String(navEtape.contactId)===String(c.id)) setDropIntent({contactId:c.id,etape:navEtape.etape,tacheId:navEtape.tacheId}); }
@@ -4826,7 +4855,7 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
       {showAddCompte&&<CompteFormModal compte={null} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAddCompte(false)} onSaved={()=>{setShowAddCompte(false);onRefresh();}}/>}
       {editingCompte&&<CompteFormModal compte={editingCompte} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingCompte(null)} onSaved={()=>{setEditingCompte(null);onRefresh();}}/>}
       {transfertCompte&&<TransfertResponsableModal type="compte" objet={transfertCompte} profile={profile} allProfiles={allProfiles} onClose={()=>setTransfertCompte(null)} onDone={()=>{setTransfertCompte(null);onRefresh();}}/>}
-      {deletingCompte&&<ConfirmDeleteCompteModal compte={deletingCompte} contactComptes={contactComptes||[]} deleting={compteDeleting} onClose={()=>{if(!compteDeleting)setDeletingCompte(null);}} onConfirm={async()=>{setCompteDeleting(true);const {error}=await sb.from('comptes').delete().eq('id',deletingCompte.id);if(error){toast('Erreur : '+error.message);setCompteDeleting(false);return;}toast('Compte supprimé');setSelectedCompte(null);setDeletingCompte(null);setCompteDeleting(false);onRefresh();}}/>}
+      {deletingCompte&&peutSupprimer(profile, deletingCompte)&&<ConfirmSuppressionModal type="compte" objet={deletingCompte} profile={profile} avertissements={avertissementsCompte(deletingCompte, contactComptes, allMissions||missions)} onClose={()=>setDeletingCompte(null)} onDone={()=>{setSelectedCompte(null);setDeletingCompte(null);onRefresh();}}/>}
     </div>
   );
 }
@@ -5121,7 +5150,7 @@ function CompteSidebar({ compte, contactComptes, contacts, missions, historique,
         {(isOwner||isAdmin)&&<div className="px-4 pb-2 flex gap-2 flex-wrap">
           {isOwner&&<BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={onEdit}/>}
           {onTransfer&&peutTransferer(profile, compte)&&<BtnAction variant="mission" icon={ICONS.person} label="Changer de responsable" onClick={onTransfer}/>}
-          {isAdmin&&<BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={onDelete}/>}
+          {peutSupprimer(profile, compte)&&<BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={onDelete}/>}
         </div>}
         {/* KPIs Activité 2026 — toujours visibles */}
         <div className="px-4 pb-3">
@@ -9997,7 +10026,7 @@ function App() {
         sb.from('besoin_candidats').select('id,besoin_id,contact_id,statut,tjm_propose,created_by,date_entretien').order('created_at',{ascending:true}).limit(3000),
         sb.from('mission_periods').select('id,mission_id,label,debut,fin,numero_commande,tjm_vente,cjm_consultant,commentaire,created_by').order('debut',{ascending:true}).limit(3000),
         sb.from('comptes').select('id,nom,secteur,ville,statut,responsable,site_web,notes,adresse,description,siren,effectifs,effectifs_annee,ca,ca_annee,resultat_net,resultat_annee,updated_at,news,news_maj,osint_maj').order('nom').limit(3000),
-        sb.from('contact_compte').select('id,contact_id,compte_id,role,is_primary').limit(5000),
+        sb.from('contact_compte').select('id,contact_id,compte_id,role,is_primary,date_fin').limit(5000),
         sb.from('partner_consultants').select('partner_id,contact_consultant_id').limit(10000),
         sb.from('interco_imputations').select('contact_consultant_id,annee,mois,jours,cjm_snapshot').eq('annee',new Date().getFullYear()).limit(5000),
       ]);
