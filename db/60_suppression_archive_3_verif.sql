@@ -8,15 +8,16 @@
 
 begin transaction read only;
 
--- V1. Objets créés. Attendu : 2 tables, 7 fonctions, 2 triggers (contacts, comptes).
+-- V1. Objets créés. Attendu : 2 tables, 8 fonctions, 7 triggers (garde suppression : contacts, comptes ;
+--     garde détachement : besoin_candidats, besoins, historique_actions, missions, taches).
 select 'table' as quoi, relname as nom, relrowsecurity as rls from pg_class
  where relnamespace = 'public'::regnamespace and relname in ('corbeille','corbeille_journal')
 union all
 select 'fonction', proname || case when prosecdef then ' (security definer)' else '' end, null from pg_proc
  where pronamespace = 'public'::regnamespace
-   and proname in ('supprimer_fiche','restaurer_fiche','purger_corbeille','purger_corbeille_auto','_corbeille_appelant','_corbeille_reinserer','_garde_suppression_directe')
+   and proname in ('supprimer_fiche','restaurer_fiche','purger_corbeille','purger_corbeille_auto','_corbeille_appelant','_corbeille_reinserer','_garde_suppression_directe','_garde_detachement')
 union all
-select 'trigger', tgrelid::regclass::text || '.' || tgname, tgenabled = 'O' from pg_trigger where tgname = 'trg_garde_suppression_directe'
+select 'trigger', tgrelid::regclass::text || '.' || tgname, tgenabled = 'O' from pg_trigger where tgname in ('trg_garde_suppression_directe','trg_garde_detachement')
 order by 1, 2;
 
 -- V2. delete_contacts = admin seul. Attendu : qual = (get_my_role() = 'admin'::text), roles = {authenticated}.

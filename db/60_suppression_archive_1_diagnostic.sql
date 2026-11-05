@@ -17,9 +17,9 @@ select 'table' as quoi, relname as nom from pg_class
 union all
 select 'fonction', proname from pg_proc
  where pronamespace = 'public'::regnamespace
-   and proname in ('supprimer_fiche','restaurer_fiche','purger_corbeille','purger_corbeille_auto','_corbeille_appelant','_corbeille_reinserer','_garde_suppression_directe')
+   and proname in ('supprimer_fiche','restaurer_fiche','purger_corbeille','purger_corbeille_auto','_corbeille_appelant','_corbeille_reinserer','_garde_suppression_directe','_garde_detachement')
 union all
-select 'trigger', tgname from pg_trigger where tgname = 'trg_garde_suppression_directe';
+select 'trigger', tgname from pg_trigger where tgname in ('trg_garde_suppression_directe','trg_garde_detachement');
 
 -- D2. Politiques DELETE actuelles sur comptes / contacts / contact_compte.
 --     Attendu : comptes_delete_admin et contact_compte_delete_admin = admin seul ;
@@ -51,6 +51,13 @@ order by 1;
 -- D5. Aucun trigger DELETE existant sur comptes / contacts. Attendu : 0 ligne.
 select c.relname, t.tgname from pg_trigger t join pg_class c on c.oid = t.tgrelid
 where not t.tgisinternal and c.relname in ('comptes','contacts') and (t.tgtype & 8) <> 0;
+
+-- D5b. Triggers UPDATE existants sur les 5 tables de la garde anti-décrochage (pour mémoire ; aucun conflit attendu,
+--      la garde est un AFTER UPDATE de niveau instruction avec tables de transition).
+select c.relname, t.tgname from pg_trigger t join pg_class c on c.oid = t.tgrelid
+where not t.tgisinternal and c.relnamespace = 'public'::regnamespace
+  and c.relname in ('historique_actions','besoin_candidats','taches','besoins','missions') and (t.tgtype & 16) <> 0
+order by 1, 2;
 
 -- D6. Profils pour les tests intégrés du bloc 2. Attendu : admin ≥ 1, commercial ≥ 2.
 select role, count(*) from public.profiles group by role order by role;

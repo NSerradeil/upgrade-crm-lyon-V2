@@ -3,7 +3,8 @@
 --
 -- Remet EXACTEMENT l'état d'avant db/60 :
 --   - politique delete_contacts rouverte au responsable (admin OU responsable = get_my_nom()) ;
---   - garde trg_garde_suppression_directe retirée de contacts et comptes ;
+--   - gardes trg_garde_suppression_directe (contacts, comptes) et trg_garde_detachement (historique_actions,
+--     besoin_candidats, taches, besoins, missions) retirées ;
 --   - fonctions supprimées ;
 --   - corbeille et journal SAUVEGARDÉS dans _corbeille_bak_60 / _corbeille_journal_bak_60 (lecture superuser seule),
 --     puis supprimés. Les fiches archivées restent donc récupérables à la main.
@@ -38,6 +39,12 @@ end $$;
 drop trigger if exists trg_garde_suppression_directe on public.contacts;
 drop trigger if exists trg_garde_suppression_directe on public.comptes;
 drop function if exists public._garde_suppression_directe();
+drop trigger if exists trg_garde_detachement on public.historique_actions;
+drop trigger if exists trg_garde_detachement on public.besoin_candidats;
+drop trigger if exists trg_garde_detachement on public.taches;
+drop trigger if exists trg_garde_detachement on public.besoins;
+drop trigger if exists trg_garde_detachement on public.missions;
+drop function if exists public._garde_detachement();
 
 drop policy if exists delete_contacts on public.contacts;
 create policy delete_contacts on public.contacts
@@ -59,7 +66,7 @@ commit;
 
 -- Vérification : attendu 0 ligne pour la 1re requête, et delete_contacts = admin OU responsable.
 select proname as reste from pg_proc where pronamespace = 'public'::regnamespace
-  and proname in ('supprimer_fiche','restaurer_fiche','purger_corbeille','purger_corbeille_auto','_corbeille_appelant','_corbeille_reinserer','_garde_suppression_directe')
+  and proname in ('supprimer_fiche','restaurer_fiche','purger_corbeille','purger_corbeille_auto','_corbeille_appelant','_corbeille_reinserer','_garde_suppression_directe','_garde_detachement')
 union all select relname from pg_class where relnamespace = 'public'::regnamespace and relname in ('corbeille','corbeille_journal')
-union all select tgname from pg_trigger where tgname = 'trg_garde_suppression_directe';
+union all select tgname from pg_trigger where tgname in ('trg_garde_suppression_directe','trg_garde_detachement');
 select policyname, roles, qual from pg_policies where schemaname = 'public' and tablename = 'contacts' and cmd = 'DELETE';

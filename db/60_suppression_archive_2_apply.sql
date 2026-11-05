@@ -21,6 +21,10 @@
 --      « 0 ligne, pas d'erreur » de la RLS (fin des faux « supprimé » des vieux clients).
 --      EXEMPTÉS : postgres, supabase_admin, service_role (Jules, scripts de fusion de doublons, crm-sql.sh)
 --      et les fonctions SECURITY DEFINER (dont supprimer_fiche).
+--   9. Garde `trg_garde_detachement` (AFTER UPDATE, niveau instruction) sur historique_actions, besoin_candidats,
+--      taches, besoins, missions : un non-admin ne peut plus vider en masse (ni hors de l'appli) le lien qui rattache
+--      ces lignes à un contact ou à un compte. Neutralise crm_delete_contact / crm_delete_compte du connecteur 8.34.0
+--      (ils décrochent avant de supprimer) jusqu'au lot 3. Détail des règles au § 8c.
 --
 -- RÈGLES DE supprimer_fiche :
 --   - appelant connecté admin ou commercial (partner refusé) ; clé service acceptée seulement avec
@@ -37,6 +41,7 @@
 --
 -- Lancer sur le Mac mini (superuser, arrêt à la 1re erreur, relance PostgREST) :
 --   zsh ~/Pro/Jules/bin/macmini/crm-sql.sh db/60_suppression_archive_2_apply.sql
+-- Tests intégrés : 22 notices « OK T… » attendues.
 -- Toute incohérence pendant les tests intégrés → exception → ROLLBACK complet, rien n'est appliqué.
 -- Retour arrière : db/60_suppression_archive_rollback.sql
 -- ⚠️ À appliquer EN MÊME TEMPS que l'appli (lot 2) : voir l'ordre dans le rapport / la spec (§ 7).
@@ -613,6 +618,70 @@ drop trigger if exists trg_garde_suppression_directe on public.comptes;
 create trigger trg_garde_suppression_directe before delete on public.comptes
   for each statement execute function public._garde_suppression_directe();
 
+-- 8c. Garde anti-décrochage (GO Nicolas 05/11) : neutralise le connecteur MCP 8.34.0 jusqu'au lot 3.
+-- crm_delete_contact remet id_prospect / contact_id à NULL sur l'historique et les tâches, crm_delete_compte remet
+-- compte_id à NULL sur les besoins et missions, AVANT de tenter la suppression (qui échoue désormais) : la fiche
+-- restait, ses liens étaient perdus. Pour un utilisateur connecté NON admin, une mise à jour qui fait passer un de
+-- ces liens d'une valeur à NULL est refusée :
+--   - historique_actions.id_prospect, besoin_candidats.contact_id : TOUJOURS (l'appli ne le fait jamais) ;
+--   - taches.contact_id, besoins.compte_id, missions.compte_id : sauf UNE fiche à la fois, depuis l'appli web
+--     (en-tête X-Client-Info « supabase-js… », que le connecteur 8.34 n'envoie pas). C'est le cas légitime :
+--     modifier une tâche / un besoin / une mission et vider son contact ou son compte dans le formulaire.
+-- Non concernés : changer le lien vers une AUTRE fiche (déplacer), contact_compte (les liens se closent par date_fin),
+-- admin, postgres / supabase_admin / service_role (Jules, scripts), et les fonctions SECURITY DEFINER
+-- (supprimer_fiche, restaurer_fiche, transferer_responsabilite).
+create or replace function public._garde_detachement()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public, pg_temp
+as $$
+declare
+  v_col    text := tg_argv[0];
+  v_mode   text := tg_argv[1];   -- 'toujours' | 'appli_une'
+  v_n      int;
+  v_client text;
+begin
+  if current_user not in ('authenticated','anon') or coalesce(public.get_my_role(), '') = 'admin' then
+    return null;
+  end if;
+  execute format('select count(*) from _anciens o join _nouveaux n on n.id = o.id where o.%1$I is not null and n.%1$I is null', v_col)
+    into v_n;
+  if v_n = 0 then return null; end if;
+  begin
+    v_client := coalesce(nullif(current_setting('request.headers', true), '')::json ->> 'x-client-info', '');
+  exception when others then v_client := '';
+  end;
+  if v_mode = 'toujours' or v_n > 1 or v_client not like 'supabase-js%' then
+    raise exception 'Détachement refusé : vider le lien % de % (% ligne%) est réservé à un admin. Pour supprimer une fiche, utilise le bouton Supprimer de l''appli (le connecteur Claude sera bientôt mis à jour) ; pour corriger une seule fiche, fais-le depuis l''appli.',
+      v_col, tg_table_name, v_n, case when v_n > 1 then 's' else '' end using errcode = '42501';
+  end if;
+  return null;
+end;
+$$;
+revoke all on function public._garde_detachement() from public, anon, authenticated, service_role;
+
+drop trigger if exists trg_garde_detachement on public.historique_actions;
+create trigger trg_garde_detachement after update on public.historique_actions
+  referencing old table as _anciens new table as _nouveaux
+  for each statement execute function public._garde_detachement('id_prospect', 'toujours');
+drop trigger if exists trg_garde_detachement on public.besoin_candidats;
+create trigger trg_garde_detachement after update on public.besoin_candidats
+  referencing old table as _anciens new table as _nouveaux
+  for each statement execute function public._garde_detachement('contact_id', 'toujours');
+drop trigger if exists trg_garde_detachement on public.taches;
+create trigger trg_garde_detachement after update on public.taches
+  referencing old table as _anciens new table as _nouveaux
+  for each statement execute function public._garde_detachement('contact_id', 'appli_une');
+drop trigger if exists trg_garde_detachement on public.besoins;
+create trigger trg_garde_detachement after update on public.besoins
+  referencing old table as _anciens new table as _nouveaux
+  for each statement execute function public._garde_detachement('compte_id', 'appli_une');
+drop trigger if exists trg_garde_detachement on public.missions;
+create trigger trg_garde_detachement after update on public.missions
+  referencing old table as _anciens new table as _nouveaux
+  for each statement execute function public._garde_detachement('compte_id', 'appli_une');
+
 
 -- ─── 9. Tests intégrés (chaque cas est annulé ; un échec annule TOUTE la migration) ───
 -- Les fiches de test sont créées à la volée (préfixe ZZTEST60) puis annulées : rien ne reste en base.
@@ -1028,14 +1097,108 @@ begin
     raise notice 'OK T14 : corbeille lisible par l''admin seul, aucune écriture directe';
   end;
 
+  -- T15 : garde anti-décrochage, ce que fait le connecteur 8.34 (commercial, sans en-tête de l'appli) → tout refusé.
+  begin
+    insert into public.comptes (nom, responsable) values ('ZZTEST60 decroche', a_nom) returning id into k1;
+    insert into public.contacts (prenom, nom, responsable, statut) values ('Zz', 'TEST60 decroche', a_nom, 'Prospect') returning id into c1;
+    insert into public.historique_actions (id_prospect, date, type_action, details, responsable) values (c1, current_date - 1, 'Appel', 'ZZTEST60', a_nom);
+    insert into public.taches (id, titre, contact_id, responsable) values ('zztest60d-' || c1, 'ZZTEST60', c1, a_nom);
+    insert into public.besoins (agence, statut, titre, responsable, compte_id) values ('Lyon', 'Opportunité', 'ZZTEST60', a_nom, k1);
+    insert into public.missions (consultant, compte_id, responsable) values ('ZZTEST60', k1, a_nom);
+    perform set_config('request.jwt.claims', j_a, true);
+    perform set_config('request.headers', '{"content-type":"application/json"}', true);
+    set local role authenticated;
+    n := 0;
+    begin update public.historique_actions set id_prospect = null where id_prospect = c1; exception when others then
+      if sqlerrm like 'Détachement refusé : vider le lien id_prospect%' then n := n + 1; else raise exception 'KO T15 historique : %', sqlerrm; end if; end;
+    begin update public.taches set contact_id = null where contact_id = c1; exception when others then
+      if sqlerrm like 'Détachement refusé : vider le lien contact_id de taches%' then n := n + 1; else raise exception 'KO T15 taches : %', sqlerrm; end if; end;
+    begin update public.besoins set compte_id = null where compte_id = k1; exception when others then
+      if sqlerrm like 'Détachement refusé : vider le lien compte_id de besoins%' then n := n + 1; else raise exception 'KO T15 besoins : %', sqlerrm; end if; end;
+    begin update public.missions set compte_id = null where compte_id = k1; exception when others then
+      if sqlerrm like 'Détachement refusé : vider le lien compte_id de missions%' then n := n + 1; else raise exception 'KO T15 missions : %', sqlerrm; end if; end;
+    reset role;
+    if n <> 4 then raise exception 'KO T15 : % refus sur 4', n; end if;
+    if (select count(*) from public.historique_actions where id_prospect = c1) <> 1
+       or (select count(*) from public.taches where contact_id = c1) <> 1
+       or (select count(*) from public.besoins where compte_id = k1) <> 1
+       or (select count(*) from public.missions where compte_id = k1) <> 1 then raise exception 'KO T15 : un lien a été décroché'; end if;
+    raise exception 'TEST_ANNULE';
+  exception when others then
+    if sqlerrm <> 'TEST_ANNULE' then raise; end if;
+    raise notice 'OK T15 : décrochage façon connecteur 8.34 refusé (historique, tâches, besoins, missions), liens intacts';
+  end;
+
+  -- T16 : usages légitimes de l'appli par un commercial → passent : vider le contact d'UNE tâche / le compte d'UN besoin
+  -- ou d'UNE mission depuis l'appli, déplacer vers un autre compte (même sans en-tête). Refusés : 2 fiches d'un coup,
+  -- historique et candidature même depuis l'appli.
+  begin
+    insert into public.comptes (nom, responsable) values ('ZZTEST60 app1', a_nom) returning id into k1;
+    insert into public.comptes (nom, responsable) values ('ZZTEST60 app2', a_nom) returning id into m1;
+    insert into public.contacts (prenom, nom, responsable, statut) values ('Zz', 'TEST60 app', a_nom, 'Prospect') returning id into c1;
+    insert into public.historique_actions (id_prospect, date, type_action, details, responsable) values (c1, current_date - 1, 'Appel', 'ZZTEST60', a_nom);
+    insert into public.taches (id, titre, contact_id, responsable) values ('zztest60a-' || c1, 'ZZTEST60', c1, a_nom), ('zztest60b-' || c1, 'ZZTEST60', c1, a_nom);
+    insert into public.besoins (agence, statut, titre, responsable, compte_id) values ('Lyon', 'Opportunité', 'ZZTEST60 1', a_nom, k1), ('Lyon', 'Opportunité', 'ZZTEST60 2', a_nom, k1);
+    insert into public.missions (consultant, compte_id, responsable) values ('ZZTEST60', k1, a_nom);
+    perform set_config('request.jwt.claims', j_a, true);
+    set local role authenticated;
+    -- déplacer, sans en-tête (connecteur ou appli) : permis
+    perform set_config('request.headers', '', true);
+    update public.missions set compte_id = m1 where compte_id = k1;
+    update public.missions set compte_id = k1 where compte_id = m1;
+    -- depuis l'appli, une fiche à la fois : permis
+    perform set_config('request.headers', '{"x-client-info":"supabase-js/2.119.0; runtime=web"}', true);
+    update public.taches set contact_id = null where id = 'zztest60a-' || c1;
+    update public.besoins set compte_id = null where titre = 'ZZTEST60 1' and compte_id = k1;
+    update public.missions set compte_id = null where compte_id = k1;
+    -- depuis l'appli mais deux d'un coup, ou historique : refusé
+    n := 0;
+    update public.besoins set compte_id = k1 where titre = 'ZZTEST60 1';
+    begin update public.besoins set compte_id = null where compte_id = k1; exception when others then
+      if sqlerrm like 'Détachement refusé : vider le lien compte_id de besoins (2 lignes)%' then n := n + 1; else raise exception 'KO T16 besoins x2 : %', sqlerrm; end if; end;
+    begin update public.historique_actions set id_prospect = null where id_prospect = c1; exception when others then
+      if sqlerrm like 'Détachement refusé : vider le lien id_prospect%' then n := n + 1; else raise exception 'KO T16 historique : %', sqlerrm; end if; end;
+    reset role;
+    if n <> 2 then raise exception 'KO T16 : % refus sur 2', n; end if;
+    if (select contact_id from public.taches where id = 'zztest60a-' || c1) is not null then raise exception 'KO T16 : tâche non modifiée'; end if;
+    raise exception 'TEST_ANNULE';
+  exception when others then
+    if sqlerrm <> 'TEST_ANNULE' then raise; end if;
+    raise notice 'OK T16 : formulaires de l''appli (une fiche) et déplacements permis ; décrochage en masse et historique refusés';
+  end;
+
+  -- T17 : admin (sans en-tête, en masse) et clé service → permis.
+  begin
+    insert into public.comptes (nom, responsable) values ('ZZTEST60 adm', a_nom) returning id into k1;
+    insert into public.besoins (agence, statut, titre, responsable, compte_id) values ('Lyon', 'Opportunité', 'ZZTEST60 1', a_nom, k1), ('Lyon', 'Opportunité', 'ZZTEST60 2', a_nom, k1);
+    perform set_config('request.headers', '', true);
+    perform set_config('request.jwt.claims', j_adm, true);
+    set local role authenticated;
+    update public.besoins set compte_id = null where compte_id = k1;
+    reset role;
+    if exists (select 1 from public.besoins where compte_id = k1) then raise exception 'KO T17 : admin bloqué'; end if;
+    update public.besoins set compte_id = k1 where titre like 'ZZTEST60 _';
+    perform set_config('request.jwt.claims', '{"role":"service_role"}', true);
+    set local role service_role;
+    update public.besoins set compte_id = null where compte_id = k1;
+    reset role;
+    if exists (select 1 from public.besoins where compte_id = k1) then raise exception 'KO T17 : clé service bloquée'; end if;
+    raise exception 'TEST_ANNULE';
+  exception when others then
+    if sqlerrm <> 'TEST_ANNULE' then raise; end if;
+    raise notice 'OK T17 : admin et clé service décrochent librement';
+  end;
+
   -- Rien ne doit rester des tests.
   if (select count(*) from public.corbeille) <> n_corb or (select count(*) from public.corbeille_journal) <> n_jour then
     raise exception 'KO : des lignes de test sont restées dans la corbeille ou le journal';
   end if;
-  if exists (select 1 from public.comptes where nom like 'ZZTEST60%') or exists (select 1 from public.contacts where nom like 'TEST60%') then
+  if exists (select 1 from public.comptes where nom like 'ZZTEST60%') or exists (select 1 from public.contacts where nom like 'TEST60%')
+     or exists (select 1 from public.besoins where titre like 'ZZTEST60%') then
     raise exception 'KO : des fiches de test sont restées';
   end if;
   perform set_config('request.jwt.claims', '', true);
+  perform set_config('request.headers', '', true);
 end $$;
 
 -- PostgREST doit voir les nouvelles fonctions (crm-sql.sh le relance aussi).
