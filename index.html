@@ -8770,7 +8770,13 @@ function PreferencesPanel({ prefs, onSave, profileNom, isPartner }) {
 // PROSPECTION
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function ProspectionContactCard({ sc, idx, updateItem, defaultExpanded }) {
+function ProspectionContactCard({ sc, idx, updateItem, defaultExpanded, historique }) {
+  // Échanges déjà eus avec ce contact (mails, appels, RDV...) : les 6 plus récents, pour savoir où on en est avant d'appeler.
+  var echanges = useMemo(function(){
+    return (historique||[]).filter(function(h){return String(h.id_prospect)===String(sc.id);}).sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
+  },[historique,sc.id]);
+  var [tousEchanges, setTousEchanges] = useState(false);
+  var lienLinkedin = (function(u){u=(u||'').trim();if(!u)return '';return /^https?:\/\//i.test(u)?u:'https://'+u.replace(/^\/+/,'');})(sc.editLinkedin);
   var [open, setOpen] = useState(defaultExpanded || sc.status!=='none');
   var cfg = PROSPECT_CALL_STATUTS[sc.status] || PROSPECT_CALL_STATUTS.none;
   var isOpen = open || sc.status!=='none';
@@ -8821,6 +8827,7 @@ function ProspectionContactCard({ sc, idx, updateItem, defaultExpanded }) {
           </div>
           <div>
             <label style={{fontSize:9,fontWeight:700,color:'#999',textTransform:'uppercase',letterSpacing:'0.05em'}}>LINKEDIN</label>
+            {lienLinkedin&&<a href={lienLinkedin} target="_blank" rel="noopener noreferrer" style={{fontSize:10,fontWeight:700,color:'#2C5FC4',marginLeft:8,textTransform:'none'}}>Ouvrir le profil ↗</a>}
             <input value={sc.editLinkedin} onChange={function(e){updateItem(idx,{editLinkedin:e.target.value});}} placeholder="LinkedIn URL"
               style={{width:'100%',fontSize:11,padding:'4px 6px',border:'2px solid #E4E4E6',borderRadius:0}}/>
           </div>
@@ -8841,6 +8848,20 @@ function ProspectionContactCard({ sc, idx, updateItem, defaultExpanded }) {
             {sc.date_dernier&&<span> · Dernier contact : {new Date(sc.date_dernier).toLocaleDateString('fr-FR')}</span>}
           </div>
           {sc.commentaires&&<div style={{fontSize:11,color:'#999',marginTop:4,fontStyle:'italic'}}>{sc.commentaires}</div>}
+          <div style={{fontSize:9,fontWeight:700,color:'#999',textTransform:'uppercase',letterSpacing:'0.05em',margin:'8px 0 4px'}}>ÉCHANGES DÉJÀ EUS ({echanges.length})</div>
+          {echanges.length===0
+            ? <div style={{fontSize:11,color:'#999',fontStyle:'italic'}}>Aucun échange enregistré avec ce contact.</div>
+            : <div>
+                {(tousEchanges?echanges:echanges.slice(0,6)).map(function(h,i){return (
+                  <div key={h.id||i} style={{fontSize:11,color:'#666',borderLeft:'2px solid #E4E4E6',paddingLeft:8,marginBottom:4}}>
+                    <span style={{color:'#999',marginRight:6}}>{fmtDateParis(h.date)}</span>
+                    <span style={{fontWeight:700,color:'#1C1F35'}}>{h.type_action}</span>
+                    {h.responsable&&<span style={{color:'#999'}}> ({h.responsable})</span>}
+                    {h.details&&<div style={{color:'#666',marginTop:1}}>{String(h.details).length>160?String(h.details).slice(0,160)+'…':h.details}</div>}
+                  </div>
+                );})}
+                {echanges.length>6&&<button type="button" onClick={function(){setTousEchanges(function(v){return !v;});}} style={{fontSize:10,fontWeight:700,color:'#2C5FC4',background:'none',border:'none',cursor:'pointer',padding:0}}>{tousEchanges?'Réduire':'Voir les '+echanges.length+' échanges'}</button>}
+              </div>}
         </div>
       )}
       {isOpen&&(
@@ -9382,7 +9403,7 @@ function ProspectionNew({ contacts, profile, onStart, onBack }) {
   );
 }
 
-function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDone, onBack, onEdit, onDelete }) {
+function ProspectionActive({ historique, session, contacts, contactMap, profile, prefs, onDone, onBack, onEdit, onDelete }) {
   var isEditMode = session.editMode === 'results';
   var spcMap = {};
   (session.spcRows||[]).forEach(function(r){ spcMap[r.contact_id]=r; });
@@ -9664,7 +9685,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDo
       </div>
       {view === 'list' ? (
         <div style={{border:'2px solid #E4E4E6'}}>
-          {items.map(function(sc,idx){return <ProspectionContactCard key={sc.id} sc={sc} idx={idx} updateItem={updateItem}/> ;})}
+          {items.map(function(sc,idx){return <ProspectionContactCard key={sc.id} sc={sc} idx={idx} updateItem={updateItem} historique={historique}/> ;})}
         </div>
       ) : current ? (
         <div>
@@ -9673,7 +9694,7 @@ function ProspectionActive({ session, contacts, contactMap, profile, prefs, onDo
             <span style={{fontSize:12,color:'#999',padding:'6px 0'}}>{focusIdx+1} / {items.length}</span>
             <button onClick={function(){setFocusIdx(Math.min(items.length-1,focusIdx+1));}} disabled={focusIdx===items.length-1} style={{padding:'4px 12px',border:'2px solid #E4E4E6',background:'#fff',cursor:'pointer',borderRadius:0,opacity:focusIdx===items.length-1?0.3:1}}>Suivant</button>
           </div>
-          <ProspectionContactCard sc={current} idx={focusIdx} updateItem={updateItem} defaultExpanded/>
+          <ProspectionContactCard sc={current} idx={focusIdx} updateItem={updateItem} historique={historique} defaultExpanded/>
           {view==='focus'&&<div style={{fontSize:9,color:'#ccc',marginTop:4}}>Raccourcis : A=Appelé · I=Intéressant · N=iNjoignable · P=Pas intéressé · ←→ Navigation</div>}
         </div>
       ) : null}
@@ -9836,7 +9857,7 @@ function ProspectionEditContacts({ session, contacts, profile, onSaved, onBack }
   );
 }
 
-function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onNavToContact, allProfiles, prefs }) {
+function TabProspection({ historique, profile, contacts, contactMap, onRefresh, isAdmin, onNavToContact, allProfiles, prefs }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState('list');
@@ -9889,7 +9910,7 @@ function TabProspection({ profile, contacts, contactMap, onRefresh, isAdmin, onN
     <div className="tab-content">
       {screen === 'list' && <ProspectionList sessions={sessions} loading={loading} onNew={function(){setScreen('new');}} onDetail={setDetailSession} onResume={handleResume} onEdit={handleEdit} onDelete={handleDeleteSession} contactMap={contactMap} onNavToContact={onNavToContact} isAdmin={isAdmin} allProfiles={allProfiles} profile={profile}/>}
       {screen === 'new' && <ProspectionNew contacts={contacts} profile={profile} onStart={function(s){setActiveSession(s);setScreen('active');}} onBack={function(){setScreen('list');}}/>}
-      {screen === 'active' && activeSession && <ProspectionActive session={activeSession} contacts={contacts} contactMap={contactMap} profile={profile} prefs={prefs} onDone={function(){setScreen('list');loadSessions();onRefresh();}} onBack={function(){setScreen('list');}} onEdit={function(s){handleEdit(s);}} onDelete={function(s){handleDeleteSession(s);}}/>}
+      {screen === 'active' && activeSession && <ProspectionActive historique={historique} session={activeSession} contacts={contacts} contactMap={contactMap} profile={profile} prefs={prefs} onDone={function(){setScreen('list');loadSessions();onRefresh();}} onBack={function(){setScreen('list');}} onEdit={function(s){handleEdit(s);}} onDelete={function(s){handleDeleteSession(s);}}/>}
       {screen === 'edit' && activeSession && <ProspectionEditContacts session={activeSession} contacts={contacts} profile={profile} onSaved={function(){setScreen('list');loadSessions();}} onBack={function(){setScreen('list');}}/>}
       {detailSession && <ProspectionDetailPanel session={detailSession} contactMap={contactMap} onClose={function(){setDetailSession(null);}} onNavToContact={onNavToContact} isAdmin={isAdmin} onDelete={function(){setDetailSession(null);loadSessions();}} onEditResults={handleEditResults} profile={profile}/>}
     </div>
@@ -10322,7 +10343,7 @@ function App() {
         {/* Agence : missions NON filtrées par agence — un commercial voit la France entière (spec §4), donc TJM/CJM/marges de toutes les agences (arbitrage Nicolas 14/09) ; un partner reste sur vMissions. */}
         {tab==='agence'   &&<TabAgence contacts={vContacts} missions={isPartner?vMissions:missions} missionPeriods={missionPeriods} intercos={intercos} taches={vTaches} comptes={vComptes} histMissions={vHistMiss} besoins={vBesoins} partnerConsultants={partnerConsultants} allProfiles={allProfiles} profile={activeProfile} isPartner={isPartner} onRefresh={fetchAll} onNavToMission={navToMission} onNavToContact={navToContact} prefs={prefs}/>}
         {tab==='prospects'&&<TabProspects contacts={vContacts} contactMap={contactMap} historique={vHistorique} taches={vTaches} histMissions={vHistMiss} missions={vMissions} allMissions={missions} besoins={vBesoins} comptes={vComptes} contactComptes={vContactComptes} compteMap={compteMap} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navContactId={navContactId} navContactKey={navContactKey} navEtape={navEtape} onNavEtapeConsumed={()=>setNavEtape(null)} navCompteId={navCompteId} navCompteKey={navCompteKey} onNavToBesoin={navToBesoin} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
-        {tab==='prospection'&&<TabProspection profile={activeProfile} contacts={vContacts} contactMap={contactMap} onRefresh={fetchAll} isAdmin={activeIsAdmin} onNavToContact={navToContact} allProfiles={allProfiles} prefs={prefs}/>}
+        {tab==='prospection'&&<TabProspection historique={historique} profile={activeProfile} contacts={vContacts} contactMap={contactMap} onRefresh={fetchAll} isAdmin={activeIsAdmin} onNavToContact={navToContact} allProfiles={allProfiles} prefs={prefs}/>}
         {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} contactMap={contactMap} besoins={vBesoins} missions={vMissions} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onPatch={patchData} onRefreshTaches={refreshTaches} navKey={tachesNavKey} navEcheance={tachesNavEcheance} navTacheId={navTacheId} navTacheKey={navTacheKey} onNavToEtapeTache={navToEtapeTache} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToMission={navToMission} prefs={prefs}/>}
         {tab==='besoins'  &&<TabBesoins  contacts={vContacts} contactMap={contactMap} comptes={vComptes} compteMap={compteMap} besoins={vBesoins} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navBesoinId={navBesoinId} navBesoinKey={navBesoinKey} onNavToContact={navToContact} onNavToMission={navToMission} onNavToTache={navToTache} onNavToCompte={navToCompte} prefs={prefs}/>}
         {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} comptes={vComptes} compteMap={compteMap} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToCompte={navToCompte} prefs={prefs}/>}
