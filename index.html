@@ -429,7 +429,7 @@ function prospectPatchEtape(etape, form) {
 // « Pas interesse » laisse une porte ouverte : sans la case « Ne plus appeler » c'est « À relancer »
 // (reveil dans 6 mois), avec la case c'est « Ne pas recontacter ». Un contact deja « À relancer » y reste (sa date est repoussee par prospectPatchDepuisAppel).
 // RGPD : « Ne pas recontacter » est terminal pour un appel, seule la levee protegee du stepper
-// (responsable ou admin) peut en sortir.
+// (commerciaux) peut en sortir.
 function etapeDepuisResultatAppel(statutAppel, nePlusAppeler, etapeActuelle) {
   if (etapeActuelle === 'Ne pas recontacter') return etapeActuelle;
   if (statutAppel === 'not_interested') {
@@ -651,7 +651,7 @@ function campagneSortiePlan(motif, contact, ctx) {
     var jour = campagneJourOuvreSuivant(ctx.aujourdhui);
     var form = { creer_tache: true, prochaine_action_date: jour, prochaine_action_libelle: 'Confirmer la date du RDV' };
     plan.patch = prospectPatchEtape('RDV planifié', form);
-    plan.tache = prospectTachePayload(contact, 'RDV planifié', form, contact.responsable || ctx.responsable);
+    plan.tache = prospectTachePayload(contact, 'RDV planifié', form, ctx.responsable || contact.responsable);   // 06/11 : à l'auteur de la sortie
   } else if (e.etape === 'Ne pas recontacter') {
     plan.patch = prospectPatchEtape('Ne pas recontacter', { motif_perte: e.motif_perte,
       motif_perte_precision: precision || (e.motif_perte ? 'Sortie de la campagne ' + (ctx.campagne || '') + ' : pas le bon profil' : 'Demande en campagne ' + (ctx.campagne || '')) });
@@ -1937,7 +1937,7 @@ function ContactEditModal({ contact, profile, allProfiles, comptes, contacts, on
   const isAdmin=profile.role==='admin';
   const initCompteId=(()=>{const c=(comptes||[]).find(x=>x.nom&&x.nom===contact.groupe);return c?c.id:'';})();
   const [f,setF] = useState({ prenom:contact.prenom||'', nom:contact.nom||'', telephone:contact.telephone||'', email:contact.email||'', commentaires:contact.commentaires||'', statut:contact.statut||'Prospect', ville:contact.ville||'', role:contact.role||'', groupe:contact.groupe||'', employeur:contact.employeur||'', compte_id:initCompteId, responsable:contact.responsable||'', linkedin:contact.linkedin||'', ats:contact.ats||'', cjm:contact.cjm??'', agence:contact.agence||'', date_entree:contact.date_entree||'', date_sortie:contact.date_sortie||'', salaire_annuel:contact.salaire_annuel??'', cjm_manuel:!!contact.cjm_manuel, statut_rh:contact.statut_rh||'', statut_rh_depuis:contact.statut_rh_depuis||'', type_presta:contact.type_presta||'', manager_trigramme:contact.manager_trigramme||'' });
-  const canEditAgence = isAdmin || (contact.responsable === profile.nom);
+  const canEditAgence = peutAgirSurContact(profile);   // 06/11 : contacts libres (le référent ne bloque plus)
   const [saving,setSaving]=useState(false); const [err,setErr]=useState('');
   const s = k => e => setF(v=>({...v,[k]:e.target.value}));
   const save = async () => {
@@ -1972,9 +1972,9 @@ function ContactEditModal({ contact, profile, allProfiles, comptes, contacts, on
       if (f.agence && f.agence !== (contact.agence||'')) changes.push(`agence → ${f.agence}`);
       if ((f.salaire_annuel||'')!==String(contact.salaire_annuel??'')) changes.push('salaire modifié');
       if ((f.statut_rh||'')!==(contact.statut_rh||'')) changes.push(`statut RH → ${f.statut_rh||'aucun'}`);
-      // Trace SILENCIEUSE si l'auteur est le responsable de la fiche (pas de bruit) — aligné sur logEdits().
-      // On ne loggue que de VRAIS changements faits par quelqu'un d'AUTRE que le propriétaire.
-      if (changes.length && profile?.nom !== contact.responsable) {
+      // Trace systématique (06/11, contacts libres) : le référent n'a plus de droit propre, il doit voir qui a
+      // modifié sa fiche. On ne loggue que de VRAIS changements.
+      if (changes.length) {
         await sb.from('historique_actions').insert({ id_prospect:contact.id, date:getToday(), type_action:'Note interne', details:`${profile.nom} a modifié : ${changes.join(', ')}`, responsable:profile?.nom||contact.responsable });
       }
       if(['Prospect','Client'].includes(f.statut) && (f.compte_id||'')!==(initCompteId||'')){
@@ -2414,11 +2414,16 @@ function AddContactModal({ profile, allProfiles, comptes, contacts, onClose, onS
 
 // ── Modal : Créer / Modifier compte (Phase 1.C) ──────────────────────────────
 // ── Transfert de responsabilité (db/59, 02/11/2026) ──
-// Le responsable actuel d'un contact ou d'un compte (ou l'admin) le confie à un autre commercial.
-// Passe par la fonction SQL transferer_responsabilite : elle ne change QUE `responsable`, vérifie les droits
-// (pas de reprise de main) et journalise. Les contacts, tâches, besoins et missions liés ne bougent pas.
-function peutTransferer(profile, objet) {
+// Compte : son responsable actuel (ou l'admin) le confie à un autre commercial. Contact (db/61, 06/11) : tout
+// commercial en change le référent. Passe par la fonction SQL transferer_responsabilite : elle ne change QUE
+// `responsable`, vérifie les droits et journalise. Les contacts, tâches, besoins et missions liés ne bougent pas.
+// 06/11 : un contact n'a plus de propriétaire qui bloque ; le référent (contacts.responsable) reste informatif.
+function peutAgirSurContact(profile) {
+  return !!profile && (profile.role === 'admin' || profile.role === 'commercial');
+}
+function peutTransferer(profile, objet, type) {
   if (!profile || !objet) return false;
+  if (type === 'contact') return peutAgirSurContact(profile);
   return profile.role === 'admin' || (profile.role === 'commercial' && objet.responsable === profile.nom);
 }
 function TransfertResponsableModal({ type, objet, profile, allProfiles, onClose, onDone }) {
@@ -2628,7 +2633,7 @@ function avertissementsCompte(compte, contactComptes, missions) {
 // Stepper d'etape prospect, clone de BesoinStatusStepper2.
 // Toutes les etapes sont contextuelles ici : meme « À contacter » passe par le
 // micro-formulaire, pour nettoyer motif et action periemes (cf. prospectPatchEtape).
-// verrouille : contact en « Ne pas recontacter » et utilisateur ni responsable ni admin. Les boutons
+// verrouille : contact en « Ne pas recontacter » et utilisateur qui n'est pas commercial (partner). Les boutons
 // d'etape sont alors desactives (protection RGPD reportee de l'ancien flag ne_pas_recontacter).
 function ProspectStatusStepper({ contact, onEtapeClick, verrouille }) {
   var courante = prospectEtapeOuDefaut(contact);
@@ -2640,7 +2645,7 @@ function ProspectStatusStepper({ contact, onEtapeClick, verrouille }) {
         var bc = PROSPECT_BADGE_COLORS[e] || {bg:'#E4E4E6',color:'#1C1F35'};
         var bloque = !!verrouille && !isCurrent;
         return <button key={e} disabled={bloque}
-          title={bloque?'Seul le responsable du contact ou un administrateur peut remettre ce contact en jeu':undefined}
+          title={bloque?'Réservé aux commerciaux':undefined}
           onClick={function(){ if(!isCurrent && !bloque) onEtapeClick(e); }} style={{
           padding:'4px 10px',fontSize:10,fontWeight:isCurrent?900:700,
           background:isCurrent?'#1C1F35':'#fff',
@@ -2728,15 +2733,15 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
   // Tache de prospection a clore a la confirmation d'etape (posee par l'intention venue de l'onglet Taches).
   const [tacheAClore,setTacheAClore]=useState(null);
   const [etapeSaving,setEtapeSaving]=useState(false);
-  // canEdit : ouvert a tous les commerciaux (db/09). canDelete : proprietaire ou admin.
-  // Le partner garde son perimetre, verrouille en dur par les policies *_partner_*.
+  // canEdit : ouvert a tous les commerciaux (db/09). Le partner garde son perimetre, verrouille en dur par les
+  // policies *_partner_*. La suppression passe par peutSupprimer (corbeille db/60).
   const canEdit  = profile.role==='admin'||profile.role==='commercial'||profile.role==='partner';
-  const canDelete= profile.role==='admin' || contact.responsable===profile.nom;
   const isOwner  = canEdit;   // conserve : ancien nom utilise ailleurs dans ce panneau
   // « Ne pas recontacter » est une etape de sortie protegee (ex-flag ne_pas_recontacter, RGPD) :
-  // en sortir est reserve au responsable du contact ou a un admin (meme regle que canDelete).
+  // en sortir est reserve aux commerciaux (admin ou commercial), quel que soit le referent (06/11, contacts libres).
+  const peutLeverNpc = peutAgirSurContact(profile);
   const etapeNpc = prospectEtapeOuDefaut(contact)==='Ne pas recontacter';
-  const npcVerrouille = etapeNpc && !canDelete;
+  const npcVerrouille = etapeNpc && !peutLeverNpc;
   const hist = historique.filter(h=>h.id_prospect===contact.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const tachesContact = taches.filter(t=>t.contact_id===contact.id&&t.statut!=='fait'&&t.statut!=='annule');
   const besoinsContact = (besoins||[]).filter(b=>String(b.contact_id)===String(contact.id)||String(b.candidat_id)===String(contact.id));
@@ -2761,15 +2766,15 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
   useEffect(()=>{
     if(!dropIntent) return;
     if(dropIntent.contactId===contact.id&&contact.statut==='Prospect'){
-      if(npcVerrouille){ toast('Contact en « Ne pas recontacter » : seul son responsable ou un administrateur peut le remettre en jeu','error'); }
+      if(npcVerrouille){ toast('Contact en « Ne pas recontacter » : réservé aux commerciaux','error'); }
       else{ setEtapeCible(dropIntent.etape); setTacheAClore(dropIntent.tacheId||null); }
     }
     if(onIntentConsumed) onIntentConsumed();
   },[dropIntent]);
   // Levee du refus pour un contact qui n'est PAS un Prospect (pas de stepper : Client, Candidat, Freelance).
-  // Meme protection que le stepper : responsable ou admin seulement (canDelete). L'etape revient a null.
+  // Meme protection que le stepper : commerciaux seulement (peutLeverNpc). L'etape revient a null.
   const handleLeverNpc=async()=>{
-    if(!canDelete){ toast('Seul le responsable du contact ou un administrateur peut le remettre en jeu','error'); return; }
+    if(!peutLeverNpc){ toast('Contact en « Ne pas recontacter » : réservé aux commerciaux','error'); return; }
     setEtapeSaving(true);
     try{
       const {error}=await sb.from('contacts').update({etape_prospect:null,motif_perte:null,motif_perte_precision:null,updated_at:new Date().toISOString()}).eq('id',contact.id);
@@ -2784,8 +2789,8 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
   };
   const handleEtapeConfirm=async(etape,form)=>{
     // Dernier rempart, au point d'ecriture unique : quel que soit le chemin (stepper, drop kanban,
-    // tache), personne d'autre que le responsable ou un admin ne sort un contact de « Ne pas recontacter ».
-    if(npcVerrouille&&etape!=='Ne pas recontacter'){ toast('Seul le responsable du contact ou un administrateur peut le remettre en jeu','error'); setEtapeCible(null); return; }
+    // tache), seul un commercial (admin ou commercial) sort un contact de « Ne pas recontacter ».
+    if(npcVerrouille&&etape!=='Ne pas recontacter'){ toast('Contact en « Ne pas recontacter » : réservé aux commerciaux','error'); setEtapeCible(null); return; }
     setEtapeSaving(true);
     try{
       const patch=prospectPatchEtape(etape,form);
@@ -2849,7 +2854,7 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
       <BtnAction variant="task" icon={ICONS.check} label="Tâche" onClick={()=>setModal('tache')}/>
       {isOwner && <>
         <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setModal('edit')}/>
-        {peutTransferer(profile, contact)&&<BtnAction variant="mission" icon={ICONS.person} label="Changer de responsable" onClick={()=>setModal('transfert')}/>}
+        {peutTransferer(profile, contact, 'contact')&&<BtnAction variant="mission" icon={ICONS.person} label="Changer de responsable" onClick={()=>setModal('transfert')}/>}
         {peutSupprimer(profile, contact)&&<BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>}
       </>}
     </div>
@@ -2871,11 +2876,11 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
             <div>NE PAS RECONTACTER</div>
             {contact.motif_perte&&<div style={{fontWeight:700,fontSize:11,marginTop:2}}>Motif : {contact.motif_perte}</div>}
             {contact.motif_perte_precision&&<div style={{fontWeight:400,fontSize:11,marginTop:2}}>{contact.motif_perte_precision}</div>}
-            {contact.statut==='Prospect'&&<div style={{fontWeight:400,fontSize:10,opacity:0.8}}>Seul le responsable du contact ou un administrateur peut le remettre en jeu (étapes ci-dessous).</div>}
+            {contact.statut==='Prospect'&&<div style={{fontWeight:400,fontSize:10,opacity:0.8}}>Un commercial peut le remettre en jeu (étapes ci-dessous).</div>}
           </div>
-          {contact.statut!=='Prospect'&&<button onClick={handleLeverNpc} disabled={!canDelete||etapeSaving}
-            title={!canDelete?'Seul le responsable du contact ou un administrateur peut remettre ce contact en jeu':'Remettre ce contact en jeu'}
-            style={{fontSize:10,background:'rgba(255,255,255,0.2)',border:'1px solid rgba(255,255,255,0.4)',color:'#fff',padding:'4px 8px',cursor:(!canDelete||etapeSaving)?'not-allowed':'pointer',opacity:(!canDelete||etapeSaving)?0.5:1,borderRadius:0,fontWeight:700,fontFamily:'Outfit,sans-serif',textTransform:'uppercase',letterSpacing:'0.03em'}}>Lever le refus</button>}
+          {contact.statut!=='Prospect'&&<button onClick={handleLeverNpc} disabled={!peutLeverNpc||etapeSaving}
+            title={!peutLeverNpc?'Réservé aux commerciaux':'Remettre ce contact en jeu'}
+            style={{fontSize:10,background:'rgba(255,255,255,0.2)',border:'1px solid rgba(255,255,255,0.4)',color:'#fff',padding:'4px 8px',cursor:(!peutLeverNpc||etapeSaving)?'not-allowed':'pointer',opacity:(!peutLeverNpc||etapeSaving)?0.5:1,borderRadius:0,fontWeight:700,fontFamily:'Outfit,sans-serif',textTransform:'uppercase',letterSpacing:'0.03em'}}>Lever le refus</button>}
         </div>
       )}
       {contact.statut==='Prospect'&&<>
@@ -2957,7 +2962,7 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
                 <div className="flex items-baseline gap-2 flex-wrap">
                   <span className="text-[11px] text-neutral-300 tabular-nums whitespace-nowrap">{fmtDateParis(h.date)}</span>
                   <span className="font-medium text-carbon">{h.type_action}</span>
-                  {h.responsable&&h.responsable!==contact.responsable&&<span className="text-xs text-neutral-300">({h.responsable})</span>}
+                  {h.responsable&&<span className="text-xs text-neutral-300">({h.responsable})</span>}
                 </div>
                 {h.details&&<div className="text-slate text-xs mt-0.5">{h.details}</div>}
               </div>
@@ -5149,7 +5154,7 @@ function CompteSidebar({ compte, contactComptes, contacts, missions, historique,
         </div>
         {(isOwner||isAdmin)&&<div className="px-4 pb-2 flex gap-2 flex-wrap">
           {isOwner&&<BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={onEdit}/>}
-          {onTransfer&&peutTransferer(profile, compte)&&<BtnAction variant="mission" icon={ICONS.person} label="Changer de responsable" onClick={onTransfer}/>}
+          {onTransfer&&peutTransferer(profile, compte, 'compte')&&<BtnAction variant="mission" icon={ICONS.person} label="Changer de responsable" onClick={onTransfer}/>}
           {peutSupprimer(profile, compte)&&<BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={onDelete}/>}
         </div>}
         {/* KPIs Activité 2026 — toujours visibles */}
