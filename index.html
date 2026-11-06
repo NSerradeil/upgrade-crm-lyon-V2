@@ -2418,6 +2418,13 @@ function AddContactModal({ profile, allProfiles, comptes, contacts, onClose, onS
 // commercial en change le référent. Passe par la fonction SQL transferer_responsabilite : elle ne change QUE
 // `responsable`, vérifie les droits et journalise. Les contacts, tâches, besoins et missions liés ne bougent pas.
 // 06/11 : un contact n'a plus de propriétaire qui bloque ; le référent (contacts.responsable) reste informatif.
+// L3 (06/11) : lien profond depuis la carte « double contact » de la Jules App : https://…/#/contact/<id>.
+// Renvoie l'id du contact, sinon null (tout autre hash, dont #type=recovery, est ignoré).
+function idContactDepuisHash(hash) {
+  const m = /^#\/contact\/(\d{1,9})\/?$/.exec(String(hash || ''));
+  return m ? Number(m[1]) : null;
+}
+
 function peutAgirSurContact(profile) {
   return !!profile && (profile.role === 'admin' || profile.role === 'commercial');
 }
@@ -9985,6 +9992,14 @@ function App() {
   const [navEtape,setNavEtape]=useState(null);
   const navToEtapeTache = (t,c) => { setNavEtape({contactId:c.id,etape:prospectEtapeOuDefaut(c),tacheId:t.id}); setTab('prospects'); setNavContactId(c.id); setNavContactKey(k=>k+1); };
   const navToContact = id => { setTab('prospects'); setNavContactId(id); setNavContactKey(k=>k+1); };
+  // Lien profond #/contact/<id> (carte d'alerte de la Jules App, 06/11) : appliqué une fois les données et le profil chargés,
+  // après l'onglet par défaut (qu'il remplace), puis le hash est effacé pour qu'un rechargement ne rouvre pas la fiche.
+  const [lienContact,setLienContact]=useState(()=>idContactDepuisHash(window.location.hash));
+  useEffect(()=>{ const f=()=>{ const id=idContactDepuisHash(window.location.hash); if(id) setLienContact(id); };
+    window.addEventListener('hashchange',f); return ()=>window.removeEventListener('hashchange',f); },[]);
+  useEffect(()=>{ if(!lienContact||!data||!profile) return;
+    initialTabSetRef.current=true; navToContact(lienContact); setLienContact(null);
+    try{ window.history.replaceState(null,'',window.location.pathname+window.location.search); }catch(e){} },[lienContact,data,profile]);
   const navToCompte = id => { setTab('prospects'); setNavCompteId(id); setNavCompteKey(k=>k+1); };
   const navToBesoin = id => { setTab('besoins'); setNavBesoinId(id); setNavBesoinKey(k=>k+1); };
   const navToMission = id => { setTab('tdb'); setNavMissionId(id); setNavMissionKey(k=>k+1); };

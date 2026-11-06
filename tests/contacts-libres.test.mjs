@@ -70,3 +70,12 @@ test('peutSupprimer : contact de collegue oui pour un commercial, compte de coll
   assert.equal(peutSupprimer(PARTNER, COMPTE_DE_LOUIS, 'compte'), false);
   assert.equal(peutSupprimer(CAMILLE, null, 'contact'), false);
 });
+
+// L3 (06/11) : lien profond depuis la carte d'alerte de la Jules App, https://…/#/contact/<id>
+test('lien profond : #/contact/1234 donne l id 1234, autre hash ignore', () => {
+  const idContactDepuisHash = new Function(`${extrait('idContactDepuisHash')}\nreturn idContactDepuisHash;`)();
+  assert.equal(idContactDepuisHash('#/contact/1234'), 1234);
+  assert.equal(idContactDepuisHash('#/contact/1234/'), 1234);
+  for (const h of ['', null, undefined, '#/contact/', '#/contact/abc', '#/compte/12', '#type=recovery&access_token=x', '#/contact/12; alert(1)', '#/contact/12345678901'])
+    assert.equal(idContactDepuisHash(h), null, String(h));
+});
