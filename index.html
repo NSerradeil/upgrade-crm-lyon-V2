@@ -2572,13 +2572,15 @@ function CompteFormModal({ compte, profile, allProfiles, onClose, onSaved }) {
 }
 
 // ── Suppression avec corbeille (db/60, 05/11/2026) ───────────────────────────
-// Un commercial supprime SES fiches (compte, contact), un admin toutes. Tout passe par la fonction SQL
+// Un commercial supprime tout contact (db/62, 06/11 : contacts libres) et SES comptes, un admin tout. Tout passe par la fonction SQL
 // supprimer_fiche : contrôles (fiche vide, pas de consultant, quota), copie complète dans la corbeille,
 // suppression en une seule transaction. Le DELETE direct est fermé en base pour les non-admins.
 // Le message d'erreur de la base est affiché tel quel : il dit quoi faire.
-function peutSupprimer(profile, objet) {
+function peutSupprimer(profile, objet, type) {
   if (!profile || !objet) return false;
-  return profile.role === 'admin' || (profile.role === 'commercial' && !!objet.responsable && objet.responsable === profile.nom);
+  if (profile.role === 'admin') return true;
+  if (profile.role !== 'commercial') return false;
+  return type === 'contact' ? true : (!!objet.responsable && objet.responsable === profile.nom);
 }
 function ConfirmSuppressionModal({ type, objet, profile, avertissements, onClose, onDone }) {
   const [motif, setMotif] = useState('');
@@ -2604,6 +2606,7 @@ function ConfirmSuppressionModal({ type, objet, profile, avertissements, onClose
       <div className="text-sm space-y-3">
         <div>Tu vas retirer {type === 'compte' ? 'le compte' : 'le contact'} <strong>{libelle}</strong> du CRM.</div>
         {type === 'contact' && <div className="text-xs text-slate">Son historique d'échanges, ses tâches et ses liens aux comptes partent avec lui.</div>}
+        {type === 'contact' && objet.responsable && objet.responsable !== profile?.nom && <div className="text-xs text-slate">Ce contact a pour référent {objet.responsable} : il le retrouvera dans la corbeille si besoin, via un admin.</div>}
         {(avertissements || []).map((a, i) => <div key={i} className="text-xs bg-lemon-20 p-3 border-2 border-lemon-100">⚠️ {a}</div>)}
         <div className="text-xs text-slate">
           Une copie complète est gardée en archive{isAdmin ? '' : ' : un admin pourra la remettre en place si besoin'}. Elle est effacée au bout de 12 mois.
@@ -2855,7 +2858,7 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
       {isOwner && <>
         <BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={()=>setModal('edit')}/>
         {peutTransferer(profile, contact, 'contact')&&<BtnAction variant="mission" icon={ICONS.person} label="Changer de responsable" onClick={()=>setModal('transfert')}/>}
-        {peutSupprimer(profile, contact)&&<BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>}
+        {peutSupprimer(profile, contact, 'contact')&&<BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={()=>setModal('confirmDel')}/>}
       </>}
     </div>
   );
@@ -2971,7 +2974,7 @@ function ContactDetail({ contact, contacts, historique, taches, missions, besoin
       </div>
       {modal==='edit'  && <ContactEditModal   contact={contact} contacts={contacts||[]} profile={profile} allProfiles={allProfiles} comptes={comptes} onClose={()=>setModal(null)} onSaved={saved} />}
       {modal==='transfert' && <TransfertResponsableModal type="contact" objet={contact} profile={profile} allProfiles={allProfiles} onClose={()=>setModal(null)} onDone={()=>{setModal(null);softRefresh();}} />}
-      {modal==='confirmDel' && peutSupprimer(profile, contact) && <ConfirmSuppressionModal type="contact" objet={contact} profile={profile}
+      {modal==='confirmDel' && peutSupprimer(profile, contact, 'contact') && <ConfirmSuppressionModal type="contact" objet={contact} profile={profile}
         avertissements={[
           ...(['Consultant CDI','Freelance','Prestataire'].includes(contact.statut) ? [`${contact.statut} : un membre de l'effectif ne se supprime pas, passe par la sortie d'effectif.`] : []),
           ...(besoinsContact.length>0 ? [`Ce contact est cité dans ${besoinsContact.length} besoin${besoinsContact.length>1?'s':''} : détache-le d'abord, sinon la suppression sera refusée.`] : []),
@@ -4860,7 +4863,7 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
       {showAddCompte&&<CompteFormModal compte={null} profile={profile} allProfiles={allProfiles} onClose={()=>setShowAddCompte(false)} onSaved={()=>{setShowAddCompte(false);onRefresh();}}/>}
       {editingCompte&&<CompteFormModal compte={editingCompte} profile={profile} allProfiles={allProfiles} onClose={()=>setEditingCompte(null)} onSaved={()=>{setEditingCompte(null);onRefresh();}}/>}
       {transfertCompte&&<TransfertResponsableModal type="compte" objet={transfertCompte} profile={profile} allProfiles={allProfiles} onClose={()=>setTransfertCompte(null)} onDone={()=>{setTransfertCompte(null);onRefresh();}}/>}
-      {deletingCompte&&peutSupprimer(profile, deletingCompte)&&<ConfirmSuppressionModal type="compte" objet={deletingCompte} profile={profile} avertissements={avertissementsCompte(deletingCompte, contactComptes, allMissions||missions)} onClose={()=>setDeletingCompte(null)} onDone={()=>{setSelectedCompte(null);setDeletingCompte(null);onRefresh();}}/>}
+      {deletingCompte&&peutSupprimer(profile, deletingCompte, 'compte')&&<ConfirmSuppressionModal type="compte" objet={deletingCompte} profile={profile} avertissements={avertissementsCompte(deletingCompte, contactComptes, allMissions||missions)} onClose={()=>setDeletingCompte(null)} onDone={()=>{setSelectedCompte(null);setDeletingCompte(null);onRefresh();}}/>}
     </div>
   );
 }
@@ -5155,7 +5158,7 @@ function CompteSidebar({ compte, contactComptes, contacts, missions, historique,
         {(isOwner||isAdmin)&&<div className="px-4 pb-2 flex gap-2 flex-wrap">
           {isOwner&&<BtnAction variant="edit" icon={ICONS.edit} label="Modifier" onClick={onEdit}/>}
           {onTransfer&&peutTransferer(profile, compte, 'compte')&&<BtnAction variant="mission" icon={ICONS.person} label="Changer de responsable" onClick={onTransfer}/>}
-          {peutSupprimer(profile, compte)&&<BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={onDelete}/>}
+          {peutSupprimer(profile, compte, 'compte')&&<BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={onDelete}/>}
         </div>}
         {/* KPIs Activité 2026 — toujours visibles */}
         <div className="px-4 pb-3">

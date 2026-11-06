@@ -23,9 +23,9 @@ const NOMS = ['DEFAULT_TASK_TIME', 'combineDT', 'PROSPECT_ETAPES', 'PROSPECT_ETA
               'prospectReveilPreset', 'prospectPatchEtape', 'prospectTachePayload',
               'CAMPAGNE_MOTIF_PERTE_PROFIL', 'CAMPAGNE_LIBELLES_SORTIE', 'campagneEstProspection', 'campagneEffetSortie',
               'campagneJourOuvreSuivant', 'campagneSortiePlan',
-              'peutAgirSurContact', 'peutTransferer'];
+              'peutAgirSurContact', 'peutTransferer', 'peutSupprimer'];
 const API = new Function(`${NOMS.map(extrait).join('\n')}\nreturn {${NOMS.join(',')}};`)();
-const { peutAgirSurContact, peutTransferer, campagneSortiePlan } = API;
+const { peutAgirSurContact, peutTransferer, peutSupprimer, campagneSortiePlan } = API;
 
 const ADMIN = { nom: 'Nicolas Serradeil', role: 'admin' };
 const CAMILLE = { nom: 'Camille Salinson', role: 'commercial' };
@@ -57,4 +57,16 @@ test('plan RDV planifie : la tache va a l auteur de la sortie, pas au referent',
   // Sans auteur connu, repli sur le référent.
   const p2 = campagneSortiePlan('converti', { ...CONTACT_DE_LOUIS, etape_prospect: 'Contacté' }, { ...ctx, responsable: '' });
   assert.equal(p2.tache.responsable, 'Louis Py');
+});
+
+test('peutSupprimer : contact de collegue oui pour un commercial, compte de collegue non, partner jamais', () => {
+  assert.equal(peutSupprimer(CAMILLE, CONTACT_DE_LOUIS, 'contact'), true);
+  assert.equal(peutSupprimer(CAMILLE, { ...CONTACT_DE_LOUIS, responsable: null }, 'contact'), true);
+  assert.equal(peutSupprimer(CAMILLE, COMPTE_DE_LOUIS, 'compte'), false);
+  assert.equal(peutSupprimer(CAMILLE, { ...COMPTE_DE_LOUIS, responsable: 'Camille Salinson' }, 'compte'), true);
+  assert.equal(peutSupprimer(CAMILLE, { ...COMPTE_DE_LOUIS, responsable: null }, 'compte'), false);
+  assert.equal(peutSupprimer(ADMIN, COMPTE_DE_LOUIS, 'compte'), true);
+  assert.equal(peutSupprimer(PARTNER, CONTACT_DE_LOUIS, 'contact'), false);
+  assert.equal(peutSupprimer(PARTNER, COMPTE_DE_LOUIS, 'compte'), false);
+  assert.equal(peutSupprimer(CAMILLE, null, 'contact'), false);
 });
