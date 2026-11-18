@@ -2425,6 +2425,31 @@ function idContactDepuisHash(hash) {
   return m ? Number(m[1]) : null;
 }
 
+// Liens profonds (Jules app, 18/11) : #besoin=<uuid>, #contact=<id>, #compte=<id>, #mission=<id>.
+// L'ancien format #/contact/<id> (06/11) reste lu. Renvoie {type,id} (id en texte), sinon null
+// (tout autre hash, dont #type=recovery ou #access_token=…, est ignoré).
+function lienDepuisHash(hash) {
+  const h = String(hash || '');
+  const ancien = idContactDepuisHash(h);
+  if (ancien) return { type: 'contact', id: String(ancien) };
+  const m = /^#(besoin|contact|compte|mission)=([0-9A-Fa-f-]{1,36})\/?$/.exec(h);
+  if (!m) return null;
+  const ok = m[1] === 'besoin' ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(m[2]) : /^\d{1,15}$/.test(m[2]);
+  return ok ? { type: m[1], id: m[1] === 'besoin' ? m[2].toLowerCase() : String(Number(m[2])) } : null;
+}
+
+// Met l'adresse à #<type>=<id> tant que la fiche est ouverte (pour copier le lien), puis la nettoie à la fermeture.
+// replaceState : pas d'entrée d'historique et pas d'événement hashchange.
+function useLienFiche(type, id) {
+  useEffect(() => {
+    if (id === null || id === undefined || id === '') return;
+    const h = '#' + type + '=' + id;
+    const sans = () => window.location.pathname + window.location.search;
+    try { if (window.location.hash !== h) window.history.replaceState(window.history.state, '', sans() + h); } catch (e) {}
+    return () => { try { if (window.location.hash === h) window.history.replaceState(window.history.state, '', sans()); } catch (e) {} };
+  }, [type, id]);
+}
+
 function peutAgirSurContact(profile) {
   return !!profile && (profile.role === 'admin' || profile.role === 'commercial');
 }
@@ -4620,6 +4645,8 @@ function TabProspects({ contacts, contactMap, historique, taches, histMissions, 
     if(navEtape&&String(navEtape.contactId)===String(c.id)) setDropIntent({contactId:c.id,etape:navEtape.etape,tacheId:navEtape.tacheId}); }
     if(navEtape&&onNavEtapeConsumed) onNavEtapeConsumed(); } },[navContactKey]);
   useEffect(()=>{ if(navCompteId){ const cpt=(comptes||[]).find(x=>String(x.id)===String(navCompteId)); if(cpt){ setSelected(null); setSelectedCompte(cpt); setViewMode('comptes'); } } },[navCompteKey]);
+  useLienFiche('contact', selectedCompte ? null : selected?.id);
+  useLienFiche('compte', selectedCompte?.id);
   const isAdmin=profile.role==='admin';
   const statuts=useMemo(()=>[...new Set(contacts.map(c=>c.statut).filter(Boolean))].sort(),[contacts]);
   const agences=useMemo(()=>[...new Set(allProfiles.map(p=>p.agence).filter(Boolean))].sort(),[allProfiles]);
@@ -6943,6 +6970,7 @@ function TabBesoins({ contacts, contactMap, comptes, compteMap, besoins, besoinC
   const [filterAgence,setFilterAgence]=useState(_multiAgence?'':(prefs?.besoins_filter_agence||(profile.role==='admin'?'':profile.agence)));
   const [selected,setSelected]=useState(null);
   useEffect(()=>{ if(navBesoinId){ const b=besoins.find(x=>String(x.id)===String(navBesoinId)); if(b) setSelected(b); } },[navBesoinKey]);
+  useLienFiche('besoin', selected?.id);
   const [showAdd,setShowAdd]=useState(false);
   const [viewMode,setViewMode]=useState(prefs?.besoins_view||'list');
   const reorder = useListReorder('besoins_list_order');
@@ -7801,6 +7829,7 @@ function KpiCards({ cards, active, onSelect }) {
 function TabTDB({ missions, histMissions, missionPeriods, contacts, taches, besoins, comptes, profile, allProfiles, commerciauxParAgence, onRefresh, navMissionId, navMissionKey, onNavToContact, onNavToBesoin, onNavToTache, onNavToCompte, prefs }) {
   const [selected,setSelected] = useState(null); const [showAdd,setShowAdd]=useState(false);
   useEffect(()=>{ if(navMissionId){ const m=missions.find(x=>String(x.id)===String(navMissionId)); if(m) setSelected(m); } },[navMissionKey]);
+  useLienFiche('mission', selected?.id);
   const [search,setSearch] = useState(''); const [filterStatut,setFilterStatut] = useState(prefs?.missions_filter_statut||'');
   const [filterAgence,setFilterAgence] = useState(prefs?.missions_filter_agence||'');
   const [filterResp,setFilterResp] = useState('');
@@ -9992,14 +10021,31 @@ function App() {
   const [navEtape,setNavEtape]=useState(null);
   const navToEtapeTache = (t,c) => { setNavEtape({contactId:c.id,etape:prospectEtapeOuDefaut(c),tacheId:t.id}); setTab('prospects'); setNavContactId(c.id); setNavContactKey(k=>k+1); };
   const navToContact = id => { setTab('prospects'); setNavContactId(id); setNavContactKey(k=>k+1); };
-  // Lien profond #/contact/<id> (carte d'alerte de la Jules App, 06/11) : appliqué une fois les données et le profil chargés,
-  // après l'onglet par défaut (qu'il remplace), puis le hash est effacé pour qu'un rechargement ne rouvre pas la fiche.
-  const [lienContact,setLienContact]=useState(()=>idContactDepuisHash(window.location.hash));
-  useEffect(()=>{ const f=()=>{ const id=idContactDepuisHash(window.location.hash); if(id) setLienContact(id); };
+  // Liens profonds #besoin=<uuid>, #contact=<id>, #compte=<id>, #mission=<id> (et l'ancien #/contact/<id>, 06/11) :
+  // appliqués une fois les données et le profil chargés, après l'onglet par défaut (qu'ils remplacent). Le lien est aussi
+  // gardé en sessionStorage : il survit à l'écran de connexion. Fiche absente des listes visibles (introuvable ou hors
+  // droits) : message, et l'adresse est nettoyée. Fiche ouverte : l'adresse est tenue à jour par useLienFiche dans l'onglet.
+  const LIEN_CLE='crm_lien_profond';
+  const visiblesRef=useRef(null);
+  const [lien,setLien]=useState(()=>{ const l=lienDepuisHash(window.location.hash);
+    try{ if(l) sessionStorage.setItem(LIEN_CLE,window.location.hash); else return lienDepuisHash(sessionStorage.getItem(LIEN_CLE)); }catch(e){}
+    return l; });
+  useEffect(()=>{ const f=()=>{ const l=lienDepuisHash(window.location.hash); if(l) setLien(l); };
     window.addEventListener('hashchange',f); return ()=>window.removeEventListener('hashchange',f); },[]);
-  useEffect(()=>{ if(!lienContact||!data||!profile) return;
-    initialTabSetRef.current=true; navToContact(lienContact); setLienContact(null);
-    try{ window.history.replaceState(null,'',window.location.pathname+window.location.search); }catch(e){} },[lienContact,data,profile]);
+  useEffect(()=>{ if(!lien||!data||!profile||!visiblesRef.current) return;
+    try{ sessionStorage.removeItem(LIEN_CLE); }catch(e){}
+    setLien(null);
+    const NOMS={besoin:'ce besoin',contact:'ce contact',compte:'ce compte',mission:'cette mission'};
+    const liste=visiblesRef.current[lien.type]||[];
+    if(!liste.some(x=>String(x.id)===lien.id)){
+      try{ if(lienDepuisHash(window.location.hash)) window.history.replaceState(null,'',window.location.pathname+window.location.search); }catch(e){}
+      toast(`Lien : ${NOMS[lien.type]} est introuvable, ou vous n'y avez pas accès.`,'error');
+      return;
+    }
+    initialTabSetRef.current=true;
+    const id=lien.type==='besoin'?lien.id:Number(lien.id);
+    ({besoin:navToBesoin,contact:navToContact,compte:navToCompte,mission:navToMission})[lien.type](id);
+  },[lien,data,profile]);
   const navToCompte = id => { setTab('prospects'); setNavCompteId(id); setNavCompteKey(k=>k+1); };
   const navToBesoin = id => { setTab('besoins'); setNavBesoinId(id); setNavBesoinKey(k=>k+1); };
   const navToMission = id => { setTab('tdb'); setNavMissionId(id); setNavMissionKey(k=>k+1); };
@@ -10268,6 +10314,7 @@ function App() {
   const vHistMiss   = histMissions; // filtré par missions déjà
   const _partnerClients = isPartner ? new Set(missions.filter(missionInPartnerScope).map(m=>m.client)) : null;
   const vComptes        = isPartner ? (comptes||[]).filter(c=>_partnerClients.has(c.nom)) : (comptes||[]);        // partner : comptes de ses missions ; sinon tous
+  visiblesRef.current = { besoin: vBesoins, contact: vContacts, compte: vComptes, mission: vMissions }; // liens profonds : mêmes listes que les onglets
   const vContactComptes = contactComptes||[]; // junction M2M contact↔compte
   const compteMap        = Object.fromEntries(vComptes.map(c=>[c.id,c]));
 
