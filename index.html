@@ -531,8 +531,8 @@ function prospectCoordsPatch(sc) {
 }
 
 // Ce que l'onglet Prosp. permet sur une session. « Tenue par la porte » = venue de la Jules app (origine 'jules') ou
-// ayant au moins une ligne écrite par la porte (aLignesPorte). Une session Jules ne se reprend, ne se corrige, ne se
-// modifie ni ne se supprime depuis le CRM. Une session tenue par la porte ne se note que par son responsable (la
+// ayant au moins une ligne écrite par la porte (aLignesPorte). Une session Jules ne se reprend, ne se corrige ni ne se
+// modifie depuis le CRM ; son responsable peut la supprimer (db 272 de la Jules app). Une session tenue par la porte ne se note que par son responsable (la
 // porte refuse tout autre, admin compris) ; l'ancien écran de correction ligne à ligne lui est fermé.
 function prospectSessionDroits(s, aLignesPorte, monNom, isAdmin) {
   var jules = s.origine === 'jules';
@@ -544,10 +544,10 @@ function prospectSessionDroits(s, aLignesPorte, monNom, isAdmin) {
     porte: porte,
     reprendre: active && !jules && aMoi,
     modifier: active && !jules && (aMoi || (!porte && !!isAdmin)),
-    supprimerEnCours: active && !jules && (aMoi || (!porte && !!isAdmin)),
+    supprimerEnCours: active && (jules ? aMoi : (aMoi || (!porte && !!isAdmin))),
     resultatsAncien: !active && !porte && (aMoi || !!isAdmin),
     resultatsPorte: !active && porte && !jules && aMoi,
-    supprimerTerminee: !active && !jules && (aMoi || !!isAdmin)
+    supprimerTerminee: !active && (jules ? aMoi : (aMoi || !!isAdmin))
   };
 }
 
