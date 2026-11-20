@@ -493,6 +493,110 @@ function prospectPatchDepuisAppel(sc, avancer, aujourdhui, correction) {
   return patch;
 }
 
+// Adresse de la Jules app (liens « Ouvrir dans Jules » des sessions tenues par la Jules app).
+const JULES_APP_URL = 'https://macmini-de-jules.tail724b8f.ts.net/app/';
+
+// Sessions d'appel (db/65) : chaque résultat passe par la porte unique public.enregistrer_resultat_appel, à chaque
+// clic. Elle écrit en une transaction la ligne de session, l'étape du contact (mêmes règles que
+// prospectPatchDepuisAppel), UNE ligne d'historique « Appel sortant », LA tâche de relance et les compteurs ; un
+// second envoi corrige au lieu de doubler, 'none' annule tout. Traduction d'une ligne de l'écran (sc) en paramètres.
+function prospectPorteParams(sessionId, sc) {
+  var st = sc.status || 'none';
+  var appel = st !== 'none';
+  var want = appel && !!sc.wantRelance;
+  return {
+    p_session: sessionId,
+    p_contact: parseInt(sc.id, 10),
+    p_resultat: st,
+    p_precision: null,
+    p_note: appel ? (sc.notes || null) : null,
+    p_suite: want ? 'rappel' : null,
+    p_date_suite: (want && sc.relanceDate) ? prospectTacheEcheance(sc.relanceDate) : null,
+    p_ne_plus_appeler: st === 'not_interested' && !!sc.nePlusAppeler,
+    p_canal: null,
+    p_note_suite: appel ? (sc.relanceNote || null) : null
+  };
+}
+
+// Coordonnées corrigées pendant l'appel (mêmes règles qu'avant : champ non vide et différent de la fiche).
+function prospectCoordsPatch(sc) {
+  var upd = {};
+  if (sc.editTel && sc.editTel !== sc.telephone) upd.telephone = sc.editTel;
+  if (sc.editEmail && sc.editEmail !== sc.email) upd.email = sc.editEmail;
+  if (sc.editLinkedin && sc.editLinkedin !== sc.linkedin) upd.linkedin = normalizeLinkedinUrl(sc.editLinkedin);
+  if (sc.editVille && sc.editVille !== sc.ville) upd.ville = sc.editVille;
+  if (sc.editRole && sc.editRole !== sc.role) upd.role = sc.editRole;
+  if (sc.editAts && sc.editAts !== (sc.ats||sc.recruitee||'')) upd.ats = sc.editAts;
+  return upd;
+}
+
+// Ce que l'onglet Prosp. permet sur une session. « Tenue par la porte » = venue de la Jules app (origine 'jules') ou
+// ayant au moins une ligne écrite par la porte (aLignesPorte). Une session Jules ne se reprend, ne se corrige, ne se
+// modifie ni ne se supprime depuis le CRM. Une session tenue par la porte ne se note que par son responsable (la
+// porte refuse tout autre, admin compris) ; l'ancien écran de correction ligne à ligne lui est fermé.
+function prospectSessionDroits(s, aLignesPorte, monNom, isAdmin) {
+  var jules = s.origine === 'jules';
+  var porte = jules || !!aLignesPorte;
+  var aMoi = !!monNom && s.responsable === monNom;
+  var active = s.statut === 'active';
+  return {
+    jules: jules,
+    porte: porte,
+    reprendre: active && !jules && aMoi,
+    modifier: active && !jules && (aMoi || (!porte && !!isAdmin)),
+    supprimerEnCours: active && !jules && (aMoi || (!porte && !!isAdmin)),
+    resultatsAncien: !active && !porte && (aMoi || !!isAdmin),
+    resultatsPorte: !active && porte && !jules && aMoi,
+    supprimerTerminee: !active && !jules && (aMoi || !!isAdmin)
+  };
+}
+
+// File d'envois de l'écran de session : au plus un envoi en vol par contact (les envois d'un même contact passent
+// l'un après l'autre, chacun relisant l'état le plus récent), un délai par geste (0 = tout de suite), une erreur
+// garde le contact « à envoyer » pour la prochaine tentative. envoyer(id) rend true / false (ou rejette).
+// signaler(id, 'en_cours' | 'ok' | 'erreur'). tout() envoie ce qui attend et rend true si plus rien n'attend.
+function prospectFileEnvois(envoyer, signaler, minuteur) {
+  var T = minuteur || { poser: function(f, d){ return setTimeout(f, d); }, retirer: function(h){ clearTimeout(h); } };
+  var timers = {}, chaines = {}, sales = {}, ids = {};
+  function un(k) {
+    if (!sales[k]) return Promise.resolve(true);
+    sales[k] = false;
+    signaler(ids[k], 'en_cours');
+    return Promise.resolve().then(function(){ return envoyer(ids[k]); }).then(function(ok){
+      if (ok === false) { sales[k] = true; signaler(ids[k], 'erreur'); return false; }
+      signaler(ids[k], sales[k] ? 'en_cours' : 'ok');
+      return true;
+    }, function(){ sales[k] = true; signaler(ids[k], 'erreur'); return false; });
+  }
+  function lancer(k) {
+    if (timers[k]) { T.retirer(timers[k]); delete timers[k]; }
+    chaines[k] = (chaines[k] || Promise.resolve(true)).then(function(){ return un(k); });
+    return chaines[k];
+  }
+  function marquer(id) { var k = String(id); ids[k] = id; sales[k] = true; }
+  function planifier(id, delai) {
+    var k = String(id);
+    marquer(id);
+    signaler(id, 'en_cours');
+    if (timers[k]) { T.retirer(timers[k]); delete timers[k]; }
+    if (!delai) { lancer(k); return; }
+    timers[k] = T.poser(function(){ delete timers[k]; lancer(k); }, delai);
+  }
+  function enAttente() { return Object.keys(sales).some(function(k){ return sales[k]; }); }
+  // Abandon (suppression de la session) : rien de ce qui attend ne part ; on attend seulement les envois déjà en vol.
+  function abandonner() {
+    Object.keys(timers).forEach(function(k){ T.retirer(timers[k]); delete timers[k]; });
+    Object.keys(sales).forEach(function(k){ sales[k] = false; });
+    return Promise.all(Object.keys(chaines).map(function(k){ return chaines[k]; })).then(function(){ return true; });
+  }
+  function tout() {
+    var promesses = Object.keys(sales).filter(function(k){ return sales[k]; }).map(lancer);
+    Object.keys(chaines).forEach(function(k){ promesses.push(chaines[k]); });
+    return Promise.all(promesses).then(function(r){ return r.every(Boolean) && !enAttente(); });
+  }
+  return { planifier: planifier, marquer: marquer, tout: tout, enAttente: enAttente, abandonner: abandonner };
+}
+
 // R3 : une tache de prospection se reconnait a son id (pose par prospectTachePayload) ET a son
 // contact lie. Sa cloture redemande l'etape au lieu de la passer simplement a « fait ».
 function prospectTacheEstProspection(t) {
@@ -8978,7 +9082,7 @@ function ProspectionContactCard({ sc, idx, updateItem, defaultExpanded, historiq
   );
 }
 
-function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact, onDelete, isAdmin, onEditResults, profile }) {
+function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact, onDelete, isAdmin, onEditResults, profile, droits }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [confirmDel, setConfirmDel] = useState(false);
@@ -8998,12 +9102,16 @@ function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact, 
       .then(function(res){setRows(res.data||[]);setLoading(false);});
   }, [session.id]);
 
-  var actions = (isAdmin || session.responsable === profile.nom) ? (
+  // Droits : prospectSessionDroits (session tenue par la porte = pas d'ancien écran de correction ; Jules app = lecture).
+  var dr = droits || { resultatsAncien: isAdmin || session.responsable === profile.nom, resultatsPorte:false, supprimerTerminee: isAdmin || session.responsable === profile.nom };
+  var peutResultats = session.statut === 'done' && (dr.resultatsAncien || dr.resultatsPorte);
+  var peutSupprimer = session.statut === 'done' && dr.supprimerTerminee;
+  var actions = (peutResultats || peutSupprimer) ? (
     <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-      <BtnAction variant="edit" icon={ICONS.edit} label="Résultats" onClick={function(){if(onEditResults)onEditResults(session);}}/>
-      {!confirmDel
+      {peutResultats&&<BtnAction variant="edit" icon={ICONS.edit} label="Résultats" onClick={function(){if(onEditResults)onEditResults(session);}}/>}
+      {peutSupprimer&&(!confirmDel
         ? <BtnAction variant="danger" icon={ICONS.delete} label="Supprimer" onClick={function(){setConfirmDel(true);}}/>
-        : <ConfirmDelete onConfirm={handleDelete} onCancel={function(){setConfirmDel(false);}} loading={deleting}/>}
+        : <ConfirmDelete onConfirm={handleDelete} onCancel={function(){setConfirmDel(false);}} loading={deleting}/>)}
     </div>
   ) : null;
 
@@ -9066,7 +9174,7 @@ function ProspectionDetailPanel({ session, contactMap, onClose, onNavToContact, 
   );
 }
 
-function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit, onDelete, contactMap, onNavToContact, isAdmin, allProfiles, profile }) {
+function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit, onDelete, contactMap, onNavToContact, isAdmin, allProfiles, profile, droitsDe }) {
   const [confirmDel, setConfirmDel] = useState(null);
   const [activeKpi, setActiveKpi] = useState('total');
   const [kpiData, setKpiData] = useState([]);
@@ -9119,8 +9227,15 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit,
       data = r5.data || [];
     } else if (id === 'total') {
       var annee = new Date().getFullYear();
-      var r4 = await sb.from('sessions_prospection').select('date_session, nb_contacts, nb_interesses, nb_injoignables').eq('statut','done').gte('date_session', annee+'-01-01').lte('date_session', annee+'-12-31').order('date_session',{ascending:true});
+      var r4 = await sb.from('sessions_prospection').select('id, date_session, nb_contacts, nb_interesses, nb_injoignables').eq('statut','done').gte('date_session', annee+'-01-01').lte('date_session', annee+'-12-31').order('date_session',{ascending:true});
       data = r4.data || [];
+      // Vrais « Pas intéressé » par session (la barre rouge ne compte plus les « Appelé »).
+      if (data.length > 0) {
+        var r4b = await sb.from('session_prospection_contacts').select('session_id').eq('statut','not_interested').in('session_id', data.map(function(x){return x.id;}));
+        var parSession = {};
+        (r4b.data || []).forEach(function(x){ parSession[x.session_id] = (parSession[x.session_id] || 0) + 1; });
+        data = data.map(function(x){ return {...x, nb_pas_interesses: parSession[x.id] || 0}; });
+      }
     }
     setKpiData(data);
     setKpiLoading(false);
@@ -9130,7 +9245,7 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit,
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
         <div/>
-        <BtnAction variant="primary" icon={ICONS.add} label="Nouvelle session" onClick={onNew}/>
+        {onNew&&<BtnAction variant="primary" icon={ICONS.add} label="Nouvelle session" onClick={onNew}/>}
       </div>
       <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
         <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Rechercher une session..." style={{flex:1,minWidth:200,padding:'8px 12px',border:'2px solid #E4E4E6',borderRadius:0,fontSize:13,fontFamily:'Outfit,sans-serif'}}/>
@@ -9271,22 +9386,24 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit,
   var MOIS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
   var CHS = {TOTAL:170, TOP:26, BOT:22, H:122};
   var curM = new Date().getMonth();
-  var parMois = MOIS.map(function(m,i){return {m:m, idx:i, n:0, int:0, inj:0, pas:0, tot:0};});
+  var parMois = MOIS.map(function(m,i){return {m:m, idx:i, n:0, int:0, inj:0, app:0, pas:0, tot:0};});
   kpiData.forEach(function(row){
     var i = new Date(row.date_session).getMonth();
     parMois[i].n += 1;
     parMois[i].int += row.nb_interesses || 0;
     parMois[i].inj += row.nb_injoignables || 0;
     parMois[i].tot += row.nb_contacts || 0;
+    parMois[i].pas += row.nb_pas_interesses || 0;
   });
-  parMois.forEach(function(m){m.pas = Math.max(0, m.tot - m.int - m.inj);});
+  // Rouge = vrais « Pas intéressé » ; le reste des appels (« Appelé ») a sa barre bleue : la hauteur totale ne change pas.
+  parMois.forEach(function(m){m.pas = Math.min(m.pas, Math.max(0, m.tot - m.int - m.inj)); m.app = Math.max(0, m.tot - m.int - m.inj - m.pas);});
   var maxTot = Math.max.apply(null, parMois.map(function(m){return m.tot;})) || 1;
   var totalInt = parMois.reduce(function(a,m){return a+m.int;},0);
   var totalTot = parMois.reduce(function(a,m){return a+m.tot;},0);
   var totalSess = parMois.reduce(function(a,m){return a+m.n;},0);
   var tauxGlobal = totalTot > 0 ? Math.round((totalInt/totalTot)*100) : 0;
   var tauxColor = '#007A10';
-  var SEGS = [{key:'int',color:'#00C218',label:'Intéressants'},{key:'inj',color:'#bbbbbb',label:'Injoignables'},{key:'pas',color:'#FF3D2E',label:'Pas intéressés'}];
+  var SEGS = [{key:'int',color:'#00C218',label:'Intéressants'},{key:'inj',color:'#bbbbbb',label:'Injoignables'},{key:'app',color:'#4A7FE5',label:'Appelés'},{key:'pas',color:'#FF3D2E',label:'Pas intéressés'}];
 
   return <>
     {/* Header */}
@@ -9334,8 +9451,8 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit,
       )}
       {kpiLoading && <div style={{padding:20,textAlign:'center',fontSize:12,color:'#999'}}>Chargement...</div>}
       <div style={{border:'2px solid #E4E4E6'}}>
-        {filtered.map(function(s){return(
-          <div key={s.id} onClick={function(){if(s.statut==='active'){onResume(s);}else{onDetail(s);}}} data-detail tabIndex="0" style={{padding:'14px 18px',borderBottom:'1px solid #E4E4E6',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',transition:'background 80ms'}}
+        {filtered.map(function(s){var dr=droitsDe?droitsDe(s):{reprendre:s.statut==='active',modifier:s.statut==='active',supprimerEnCours:s.statut==='active'};return(
+          <div key={s.id} onClick={function(){if(s.statut==='active'&&dr.reprendre){onResume(s);}else{onDetail(s);}}} data-detail tabIndex="0" style={{padding:'14px 18px',borderBottom:'1px solid #E4E4E6',display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',transition:'background 80ms'}}
             onMouseEnter={function(e){e.currentTarget.style.background='#f9f9f9';}} onMouseLeave={function(e){e.currentTarget.style.background='#fff';}}>
             <div>
               <div style={{fontWeight:800,fontSize:14,color:'#1C1F35'}}>{s.nom}</div>
@@ -9346,21 +9463,23 @@ function ProspectionList({ sessions, loading, onNew, onDetail, onResume, onEdit,
             <div style={{display:'flex',gap:8,alignItems:'center'}}>
               {(s.nb_interesses||0)>0&&<span style={{fontSize:10,fontWeight:700,background:'#EDFFF1',color:'#007A10',padding:'2px 8px',borderRadius:0}}>{s.nb_interesses} intéressants</span>}
               {(s.nb_relances||0)>0&&<span style={{fontSize:10,fontWeight:700,background:'#FFF9C0',color:'#1C1F35',padding:'2px 8px',borderRadius:0}}>{s.nb_relances} relances</span>}
+              {dr.jules&&<span title="Session tenue dans la Jules app : elle se note là-bas" style={{fontSize:10,fontWeight:700,background:'#F1E8FD',color:'#823DE8',padding:'2px 8px',borderRadius:0}}>JULES APP</span>}
+              {dr.jules&&s.mission_jules_id&&<a href={JULES_APP_URL+'#/dossier/'+s.mission_jules_id+'?onglet=main'} target="_blank" rel="noopener noreferrer" onClick={function(e){e.stopPropagation();}} style={{fontSize:10,fontWeight:700,color:'#823DE8',textTransform:'uppercase'}}>Ouvrir dans Jules ↗</a>}
               {s.statut==='active'&&<>
                 <span style={{fontSize:10,fontWeight:700,background:'#FF3D2E',color:'#fff',padding:'2px 8px',borderRadius:0}}>EN COURS</span>
-                <button onClick={function(e){e.stopPropagation();onResume(s);}} style={{fontSize:10,fontWeight:700,padding:'3px 10px',background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'3px 3px 0 #00C218',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>Reprendre</button>
-                <button onClick={function(e){e.stopPropagation();onEdit(s);}} style={{fontSize:10,fontWeight:700,padding:'3px 10px',background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'3px 3px 0 #4A7FE5',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>Modifier</button>
-                {confirmDel===s.id
+                {dr.reprendre&&<button onClick={function(e){e.stopPropagation();onResume(s);}} style={{fontSize:10,fontWeight:700,padding:'3px 10px',background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'3px 3px 0 #00C218',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>Reprendre</button>}
+                {dr.modifier&&<button onClick={function(e){e.stopPropagation();onEdit(s);}} style={{fontSize:10,fontWeight:700,padding:'3px 10px',background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'3px 3px 0 #4A7FE5',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>Modifier</button>}
+                {dr.supprimerEnCours&&(confirmDel===s.id
                   ? <ConfirmDelete onConfirm={function(){onDelete(s);setConfirmDel(null);}} onCancel={function(){setConfirmDel(null);}} loading={false}/>
                   : <button onClick={function(e){e.stopPropagation();setConfirmDel(s.id);}} style={{fontSize:10,fontWeight:700,padding:'3px 10px',background:'#fff',color:'#FF3D2E',border:'2px solid #FF3D2E',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>Supprimer</button>
-                }
+                )}
               </>}
             </div>
           </div>
         );})}
         {filtered.length===0&&!loading&&<div style={{padding:48,textAlign:'center'}}>
   <div style={{fontSize:13,color:'#999',fontWeight:700,marginBottom:12}}>Aucune session — lance ta première prospection</div>
-  <BtnAction variant="primary" icon={ICONS.add} label="Nouvelle session" onClick={onNew}/>
+  {onNew&&<BtnAction variant="primary" icon={ICONS.add} label="Nouvelle session" onClick={onNew}/>}
 </div>}
       </div>
     </div>
@@ -9477,7 +9596,11 @@ function ProspectionNew({ contacts, profile, onStart, onBack }) {
 }
 
 function ProspectionActive({ historique, session, contacts, contactMap, profile, prefs, onDone, onBack, onEdit, onDelete }) {
+  // 'results' = ancien écran de correction (sessions terminées sans aucune ligne passée par la porte) ;
+  // 'porte' = correction d'une session terminée tenue par la porte : chaque clic repasse par la porte.
   var isEditMode = session.editMode === 'results';
+  var isCorrectionPorte = session.editMode === 'porte';
+  var modePorte = !isEditMode;
   var spcMap = {};
   (session.spcRows||[]).forEach(function(r){ spcMap[r.contact_id]=r; });
   var sessionContacts = useMemo(function(){
@@ -9489,7 +9612,12 @@ function ProspectionActive({ historique, session, contacts, contactMap, profile,
       status: saved?saved.statut:'none',
       notes: saved?saved.notes||'':'',
       wantRelance: saved?!!saved.want_relance:false,
-      nePlusAppeler: false,
+      nePlusAppeler: saved?!!saved.ne_plus_appeler:false,
+      // Résultat posé hors de la porte (ancien connecteur) sur une session en cours : à faire passer par la porte.
+      horsPorte: !!(saved && saved.statut && saved.statut!=='none' && saved.statut!=='message' && !saved.geste_at),
+      // Ligne notée par la Jules app (geste identifié, message, précision, suite autre qu'une relance) : lecture seule ici,
+      // l'écran du CRM ne sait pas la renvoyer sans perdre ce détail.
+      ligneJules: !!(saved && (saved.geste_id || saved.message_at || saved.statut==='message' || saved.precision || (saved.suite && saved.suite!=='rappel'))),
       statutInitial: saved?saved.statut:'none',
       relanceDate: saved?saved.relance_date||'':'',
       relanceNote: saved?saved.relance_note||'':'',
@@ -9506,7 +9634,85 @@ function ProspectionActive({ historique, session, contacts, contactMap, profile,
   const [view, setView] = useState(prefs&&prefs.prospection_focus_mode?'focus':'list');
   var [showConfirm, setShowConfirm] = useState(false);
 
-  var updateItem = function(idx, patch){setItems(function(prev){return prev.map(function(it,i){return i===idx?{...it,...patch}:it;});});};
+  // ── Enregistrement à chaque clic (porte db/65) ──
+  // itemsRef = état à jour, relu au moment de l'envoi : le dernier geste saisi gagne. File d'envois : prospectFileEnvois.
+  var itemsRef = useRef(items);
+  var aEcritRef = useRef(false);
+  const [syncEtat, setSyncEtat] = useState({});
+  var envoyerUn = async function(id) {
+    var sc = itemsRef.current.find(function(it){return it.id===id;});
+    if (!sc) return true;
+    try {
+      if (sc.horsPorte) {
+        // Résultat posé hors porte (sans ses écritures) : on le remet à zéro pour que la porte l'enregistre en entier.
+        var r0 = await sb.from('session_prospection_contacts').update({statut:'none'})
+          .eq('session_id', session.id).eq('contact_id', id).is('geste_at', null);
+        if (r0.error) throw r0.error;
+      }
+      if (sc.status !== 'none') {
+        var upd = prospectCoordsPatch(sc);
+        if (Object.keys(upd).length > 0) {
+          var rc = await sb.from('contacts').update({...upd, updated_at:new Date().toISOString()}).eq('id', id);
+          if (rc.error) {
+            // Comme l'ancien écran : on prévient et on enregistre quand même l'appel.
+            console.error('[Prospection] Coordonnées non mises à jour', id, rc.error);
+            toast('⚠️ Coordonnées non mises à jour : ' + (sc.prenom||'') + ' ' + (sc.nom||'') + ' (' + rc.error.message + ')', 'error');
+          }
+          var base = {};
+          ['telephone','email','linkedin','ville','role','ats'].forEach(function(k){ if (k in upd) base[k] = upd[k]; });
+          if ('linkedin' in upd) base.linkedin = sc.editLinkedin;   // la saisie reste la référence de comparaison
+          if (!rc.error) itemsRef.current = itemsRef.current.map(function(it){ return it.id===id ? {...it, ...base} : it; });
+        }
+      }
+      var res = await sb.rpc('enregistrer_resultat_appel', prospectPorteParams(session.id, sc));
+      if (res.error) throw res.error;
+      aEcritRef.current = true;
+      if (sc.horsPorte) itemsRef.current = itemsRef.current.map(function(it){ return it.id===id ? {...it, horsPorte:false} : it; });
+      setItems(itemsRef.current);
+      return true;
+    } catch (e) {
+      console.error('[Prospection] Enregistrement du résultat', id, e);
+      toast('⚠️ Non enregistré : ' + (sc.prenom||'') + ' ' + (sc.nom||'') + ' (' + ((e && e.message) || 'erreur') + ')', 'error');
+      return false;
+    }
+  };
+  var fileRef = useRef(null);
+  if (!fileRef.current) fileRef.current = prospectFileEnvois(
+    function(id){ return envoyerUn(id); },
+    function(id, v){ setSyncEtat(function(p){ var n = {...p}; n[id] = v; return n; }); });
+  // Tout envoyer maintenant (Terminer, retour, onglet masqué). Rend true si tout est enregistré.
+  var toutEnregistrer = function() {
+    itemsRef.current.forEach(function(it){ if (it.horsPorte && it.status !== 'none') fileRef.current.marquer(it.id); });
+    return fileRef.current.tout();
+  };
+  useEffect(function(){
+    if (!modePorte) return;
+    var avantDepart = function(e){ if (fileRef.current.enAttente()) { toutEnregistrer(); e.preventDefault(); e.returnValue = ''; } };
+    var masque = function(){ if (document.visibilityState === 'hidden' && fileRef.current.enAttente()) toutEnregistrer(); };
+    window.addEventListener('beforeunload', avantDepart);
+    document.addEventListener('visibilitychange', masque);
+    return function(){ window.removeEventListener('beforeunload', avantDepart); document.removeEventListener('visibilitychange', masque); };
+  }, []);
+
+  // « Ne plus appeler » attend 1,2 s comme un texte : un clic corrigé aussitôt n'arrête aucune séquence.
+  var CHAMPS_IMMEDIATS = ['status','wantRelance','relanceDate'];
+  var updateItem = function(idx, patch){
+    var avant = itemsRef.current[idx];
+    if (!avant) return;
+    if (modePorte && avant.ligneJules) {
+      if (!avant.ligneJulesVue) { itemsRef.current = itemsRef.current.map(function(it,i){return i===idx?{...it, ligneJulesVue:true}:it;}); toast('Personne notée dans la Jules app : à corriger là-bas', 'error'); }
+      return;
+    }
+    if ('status' in patch && patch.status !== 'not_interested' && avant.nePlusAppeler) patch = {...patch, nePlusAppeler:false};
+    itemsRef.current = itemsRef.current.map(function(it,i){return i===idx?{...it,...patch}:it;});
+    setItems(itemsRef.current);
+    if (!modePorte) return;
+    var apres = itemsRef.current[idx];
+    // Rien à écrire tant que la personne n'a pas de résultat et n'en a jamais eu (texte saisi avant le clic).
+    if (apres.status === 'none' && avant.status === 'none') return;
+    var immediat = Object.keys(patch).some(function(k){ return CHAMPS_IMMEDIATS.indexOf(k) >= 0; });
+    fileRef.current.planifier(apres.id, immediat ? 0 : 1200);
+  };
 
   var stats = useMemo(function(){return {
     done: items.filter(function(c){return c.status!=='none';}).length,
@@ -9533,100 +9739,59 @@ function ProspectionActive({ historique, session, contacts, contactMap, profile,
       var idx = focusIdx;
       if(e.key==='ArrowRight'||e.key==='ArrowDown'){e.preventDefault();setFocusIdx(Math.min(items.length-1,idx+1));}
       if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault();setFocusIdx(Math.max(0,idx-1));}
-      if(e.key==='a'||e.key==='A'){updateItem(idx,{status:items[idx].status==='called'?'none':'called'});}
-      if(e.key==='i'||e.key==='I'){updateItem(idx,{status:items[idx].status==='interested'?'none':'interested'});}
-      if(e.key==='n'||e.key==='N'){updateItem(idx,{status:items[idx].status==='unreachable'?'none':'unreachable'});}
-      if(e.key==='p'||e.key==='P'){updateItem(idx,{status:items[idx].status==='not_interested'?'none':'not_interested'});}
+      var cur = itemsRef.current[idx];
+      if(!cur) return;
+      if(e.key==='a'||e.key==='A'){updateItem(idx,{status:cur.status==='called'?'none':'called'});}
+      if(e.key==='i'||e.key==='I'){updateItem(idx,{status:cur.status==='interested'?'none':'interested'});}
+      if(e.key==='n'||e.key==='N'){updateItem(idx,{status:cur.status==='unreachable'?'none':'unreachable'});}
+      if(e.key==='p'||e.key==='P'){updateItem(idx,{status:cur.status==='not_interested'?'none':'not_interested'});}
     };
     window.addEventListener('keydown',handler);
     return function(){window.removeEventListener('keydown',handler);};
   },[view,focusIdx,items]);
 
+  // « Terminer » ne fait plus que clore la session : chaque résultat a déjà été écrit par la porte au clic
+  // (historique, tâche, étape, compteurs). Rien n'est réécrit ici, donc rien ne peut être doublé. Idempotent.
   var handleTerminer = async function(){
     setSaving(true);
-    var todayStr = getToday();
-    var now = new Date().toISOString();
-    var appeles = items.filter(function(c){return c.status !== 'none';});
-    var LABELS = {called:'Appelé',interested:'Intéressant',unreachable:'Pas joignable',not_interested:'Pas intéressé'};
-
-    for (var si=0; si<appeles.length; si++) {
-      var sc = appeles[si];
-      var upd = {};
-      if (sc.editTel && sc.editTel !== sc.telephone) upd.telephone = sc.editTel;
-      if (sc.editEmail && sc.editEmail !== sc.email) upd.email = sc.editEmail;
-      if (sc.editLinkedin && sc.editLinkedin !== sc.linkedin) upd.linkedin = normalizeLinkedinUrl(sc.editLinkedin);
-      if (sc.editVille && sc.editVille !== sc.ville) upd.ville = sc.editVille;
-      if (sc.editRole && sc.editRole !== sc.role) upd.role = sc.editRole;
-      if (sc.editAts && sc.editAts !== (sc.ats||sc.recruitee||'')) upd.ats = sc.editAts;
-      // Etape du pipeline : « Pas interesse » = À relancer 6 mois (Prospect) ou Ne pas recontacter si la case
-      // « Ne plus appeler » est cochee ; les autres resultats font avancer un prospect, la relance saisie
-      // alimente sa prochaine action.
-      var patchAppel = prospectPatchDepuisAppel(sc, true);
-      if (patchAppel) Object.assign(upd, patchAppel);
-      if (Object.keys(upd).length > 0) {
-        var updRes = await sb.from('contacts').update({...upd, updated_at:now}).eq('id', sc.id);
-        if (updRes.error) {
-          console.error('[Prospection] Erreur mise à jour contact', sc.id, updRes.error);
-          toast('⚠️ Contact non mis à jour : ' + (sc.prenom||'') + ' ' + sc.nom + ' (' + updRes.error.message + ')', 'error');
-        } else if (patchAppel && prospectEtapeFermeTaches(patchAppel.etape_prospect)) {
-          var annT = await prospectAnnulerTachesOuvertes(sc.id);
-          if (annT.error) toast('⚠️ Tâches de prospection non annulées pour ' + (sc.prenom||'') + ' ' + sc.nom, 'error');
-        }
-        if (!updRes.error && patchAppel && prospectEntreeNpc(prospectEtapeOuDefaut(sc), patchAppel.etape_prospect)) {
-          var stopS = await prospectStopperSequencesLiees(sc.id);
-          if (stopS.error) toast('⚠️ Séquences de campagne non arrêtées pour ' + (sc.prenom||'') + ' ' + sc.nom, 'error');
-        }
-      }
+    var ok = await toutEnregistrer();
+    if (!ok) {
+      setSaving(false);
+      toast('⚠️ Des résultats ne sont pas enregistrés : vérifie la connexion puis réessaie', 'error');
+      return;
     }
-
-    if (appeles.length > 0) {
-      await sb.from('historique_actions').insert(appeles.map(function(sc2){return {
-        id_prospect: sc2.id, date: todayStr, type_action: 'Appel sortant',
-        details: ['Session : '+session.nom,'Résultat : '+LABELS[sc2.status],sc2.notes?('Notes : '+sc2.notes):null].filter(Boolean).join('\n'),
-        responsable: profile.nom,
-      };}));
+    // Fonction de fin commune avec la Jules app (migration Jules 257) : statut 'done' seulement, idempotente,
+    // refusée pour la session d'un autre et pour une session dont un résultat n'est pas passé par la porte.
+    var fin = await sb.rpc('terminer_session_appel', { p_session: session.id });
+    if (fin.error) {
+      setSaving(false);
+      console.error('[Prospection] Clôture de session', fin.error);
+      toast('⚠️ Session non clôturée : ' + fin.error.message, 'error');
+      return;
     }
-
-    var relances = appeles.filter(function(sc3){return sc3.wantRelance && sc3.relanceDate;});
-    if (relances.length > 0) {
-      var relanceInsert = await sb.from('taches').insert(relances.map(function(sc4,idx){return {
-        id: 'tw_relance_'+sc4.id+'_'+Date.now()+'_'+idx,
-        titre: ('Relance '+(sc4.prenom||'')+' '+sc4.nom+' — '+(sc4.groupe||'')).trim(),
-        statut: 'a_faire', due_date: prospectTacheEcheance(sc4.relanceDate), contact_id: sc4.id,
-        session_prospection_id: session.id,
-        notes: ['Session : '+session.nom,'Statut : '+LABELS[sc4.status],sc4.relanceNote||null].filter(Boolean).join('\n'),
-        responsable: profile.nom,
-      };}));
-      if (relanceInsert.error) {
-        console.error('[Prospection] Erreur création relances:', relanceInsert.error);
-        toast('⚠️ Erreur création relances : ' + relanceInsert.error.message, 'error');
-      }
-    }
-
-    var spcUpsert = await sb.from('session_prospection_contacts').upsert(items.map(function(sc5){return {
-      session_id: session.id, contact_id: sc5.id, statut: sc5.status,
-      notes: sc5.notes||null, want_relance: sc5.wantRelance,
-      relance_date: sc5.relanceDate||null, relance_note: sc5.relanceNote||null,
-      tel_saisi: sc5.editTel!==sc5.telephone?sc5.editTel:null,
-      email_saisi: sc5.editEmail!==sc5.email?sc5.editEmail:null,
-      linkedin_saisi: sc5.editLinkedin!==sc5.linkedin?sc5.editLinkedin:null,
-    };}), {onConflict:'session_id,contact_id'});
-    // db/64 : une seule ligne par (session, contact) ; la fin de session REMPLACE la ligne existante.
-    if (spcUpsert.error) {
-      console.error('[Prospection] Erreur enregistrement des résultats de session:', spcUpsert.error);
-      toast('⚠️ Résultats de session non enregistrés : ' + spcUpsert.error.message, 'error');
-    }
-
-    await sb.from('sessions_prospection').update({
-      statut:'done', nb_contacts:appeles.length,
-      nb_interesses:stats.interested, nb_relances:relances.length,
-      nb_injoignables:appeles.filter(function(c){return c.status==='unreachable';}).length,
-      updated_at:now,
-    }).eq('id', session.id);
-
+    var lu = await sb.from('sessions_prospection').select('nb_contacts, nb_interesses, nb_relances').eq('id', session.id);
     setSaving(false);
-    toast('Session terminée — '+appeles.length+' appelés, '+stats.interested+' intéressants, '+relances.length+' relances');
+    var k = (lu.data && lu.data[0]) || {};
+    toast('Session terminée — '+(k.nb_contacts||0)+' appelés, '+(k.nb_interesses||0)+' intéressants, '+(k.nb_relances||0)+' relances');
     onDone();
+  };
+
+  // Correction d'une session terminée tenue par la porte : tout est déjà écrit, on vide la file puis on ferme.
+  var handleFermerCorrection = async function(){
+    setSaving(true);
+    var ok = await toutEnregistrer();
+    setSaving(false);
+    if (!ok) { toast('⚠️ Des corrections ne sont pas enregistrées : réessaie', 'error'); return; }
+    toast('Corrections enregistrées');
+    onDone();
+  };
+
+  // Retour à la liste : on n'abandonne jamais un envoi en silence.
+  var handleRetour = async function(){
+    if (!modePorte) { onBack(); return; }
+    var ok = await toutEnregistrer();
+    if (!ok && !confirm('Des résultats ne sont pas enregistrés. Quitter quand même ?')) return;
+    if (aEcritRef.current) onDone(); else onBack();
   };
 
   var handleSaveEdits = async function() {
@@ -9726,17 +9891,21 @@ function ProspectionActive({ historique, session, contacts, contactMap, profile,
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,flexWrap:'wrap',gap:8}}>
         <div style={{display:'flex',alignItems:'center',gap:12}}>
-          <button onClick={onBack} style={{background:'none',border:'none',cursor:'pointer',color:'#999'}}><Icon d={ICONS.back} size={16}/></button>
-          <span style={{fontSize:16,fontWeight:900,color:'#1C1F35'}}>{isEditMode?'Correction \u00b7 ':''}{session.nom}</span>
+          <button onClick={handleRetour} style={{background:'none',border:'none',cursor:'pointer',color:'#999'}}><Icon d={ICONS.back} size={16}/></button>
+          <span style={{fontSize:16,fontWeight:900,color:'#1C1F35'}}>{(isEditMode||isCorrectionPorte)?'Correction \u00b7 ':''}{session.nom}</span>
           <span style={{fontSize:11,color:'#999'}}>{stats.done}/{items.length} traités</span>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center'}}>
           <button onClick={function(){setView(view==='list'?'focus':'list');}} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:'2px solid #E4E4E6',background:'#fff',cursor:'pointer',borderRadius:0,textTransform:'uppercase'}}>
             {view==='list'?'Vue focus':'Vue liste'}
           </button>
-          {!isEditMode&&onEdit&&<button onClick={function(){onEdit(session);}} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:'2px solid #4A7FE5',color:'#4A7FE5',background:'#fff',cursor:'pointer',borderRadius:0,textTransform:'uppercase'}}><Icon d={ICONS.edit} size={12}/> Modifier</button>}
-          {!isEditMode&&onDelete&&<button onClick={function(){if(confirm('Supprimer cette session ?')){onDelete(session);}}} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:'2px solid #FF3D2E',color:'#FF3D2E',background:'#fff',cursor:'pointer',borderRadius:0,textTransform:'uppercase'}}><Icon d={ICONS.delete} size={12}/> Supprimer</button>}
-          {isEditMode ? (
+          {!isEditMode&&!isCorrectionPorte&&onEdit&&<button onClick={async function(){var ok=await toutEnregistrer();if(!ok&&!confirm('Des résultats ne sont pas enregistrés. Continuer quand même ?'))return;onEdit(session);}} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:'2px solid #4A7FE5',color:'#4A7FE5',background:'#fff',cursor:'pointer',borderRadius:0,textTransform:'uppercase'}}><Icon d={ICONS.edit} size={12}/> Modifier</button>}
+          {!isEditMode&&!isCorrectionPorte&&onDelete&&<button onClick={function(){if(confirm('Supprimer cette session ? Les résultats déjà notés seront annulés (historique, relances et étapes remis comme avant).')){fileRef.current.abandonner().then(function(){onDelete(session);});}}} style={{fontSize:11,fontWeight:700,padding:'4px 12px',border:'2px solid #FF3D2E',color:'#FF3D2E',background:'#fff',cursor:'pointer',borderRadius:0,textTransform:'uppercase'}}><Icon d={ICONS.delete} size={12}/> Supprimer</button>}
+          {isCorrectionPorte ? (
+            <button onClick={handleFermerCorrection} disabled={saving} style={{background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #4A7FE5',padding:'8px 16px',fontWeight:900,fontSize:12,textTransform:'uppercase',letterSpacing:'0.04em',cursor:'pointer',borderRadius:0}}>
+              {saving?'Enregistrement...':'Fermer'}
+            </button>
+          ) : isEditMode ? (
             <button onClick={handleSaveEdits} disabled={saving} style={{background:'#1C1F35',color:'#fff',border:'2px solid #1C1F35',boxShadow:'4px 4px 0 #4A7FE5',padding:'8px 16px',fontWeight:900,fontSize:12,textTransform:'uppercase',letterSpacing:'0.04em',cursor:'pointer',borderRadius:0}}>
               {saving?'Enregistrement...':'Enregistrer les modifications'}
             </button>
@@ -9760,6 +9929,15 @@ function ProspectionActive({ historique, session, contacts, contactMap, profile,
         </div>
         <span style={{fontSize:11,fontWeight:900,color:stats.done===items.length?'#007A10':'#1C1F35'}}>{stats.done}/{items.length}</span>
         <span style={{fontSize:11,fontStyle:'italic',color:pct===100?'#007A10':'#2C5FC4',marginLeft:8}}>{encMsg}</span>
+        {modePorte&&(function(){
+          var v = Object.values(syncEtat);
+          var nErr = v.filter(function(x){return x==='erreur';}).length;
+          var nCours = v.filter(function(x){return x==='en_cours';}).length;
+          if (nErr > 0) return <button onClick={function(){toutEnregistrer();}} style={{fontSize:10,fontWeight:700,color:'#FF3D2E',background:'none',border:'2px solid #FF3D2E',padding:'1px 6px',borderRadius:0,cursor:'pointer',textTransform:'uppercase'}}>{nErr} non enregistré{nErr>1?'s':''} · Réessayer</button>;
+          if (nCours > 0) return <span style={{fontSize:10,fontWeight:700,color:'#999'}}>Enregistrement…</span>;
+          if (v.length > 0) return <span style={{fontSize:10,fontWeight:700,color:'#007A10'}}>Enregistré au CRM</span>;
+          return null;
+        })()}
       </div>
       {view === 'list' ? (
         <div style={{border:'2px solid #E4E4E6'}}>
@@ -9776,12 +9954,12 @@ function ProspectionActive({ historique, session, contacts, contactMap, profile,
           {view==='focus'&&<div style={{fontSize:9,color:'#ccc',marginTop:4}}>Raccourcis : A=Appelé · I=Intéressant · N=iNjoignable · P=Pas intéressé · ←→ Navigation</div>}
         </div>
       ) : null}
-      {showConfirm && !isEditMode && <Modal title="Terminer la session ?" onClose={function(){setShowConfirm(false);}} footer={<>
+      {showConfirm && !isEditMode && !isCorrectionPorte && <Modal title="Terminer la session ?" onClose={function(){setShowConfirm(false);}} footer={<>
         <button onClick={function(){setShowConfirm(false);}} className="px-4 py-2 text-sm text-slate hover:text-carbon">Continuer la session</button>
         <BtnAction variant="close" label="Terminer quand même" onClick={function(){setShowConfirm(false);handleTerminer();}}/>
       </>}>
         <div style={{fontSize:13,color:'#1C1F35'}}>
-          <strong>{items.filter(function(c){return c.status==='none';}).length}</strong> contact{items.filter(function(c){return c.status==='none';}).length>1?'s':''} non traité{items.filter(function(c){return c.status==='none';}).length>1?'s':''}. Les contacts non traités ne seront pas enregistrés.
+          <strong>{items.filter(function(c){return c.status==='none';}).length}</strong> contact{items.filter(function(c){return c.status==='none';}).length>1?'s':''} non traité{items.filter(function(c){return c.status==='none';}).length>1?'s':''}. Les contacts non traités restent sans résultat ; les résultats notés sont déjà enregistrés.
         </div>
       </Modal>}
     </div>
@@ -9835,9 +10013,24 @@ function ProspectionEditContacts({ session, contacts, profile, onSaved, onBack }
       await sb.from('session_prospection_contacts').insert(toAdd.map(function(id){return {session_id:session.id, contact_id:id, statut:'none'};}));
     }
     if (toRemove.length > 0) {
+      // Session tenue par la porte : le résultat déjà noté d'une personne retirée est d'abord annulé (historique,
+      // relance, étape), sinon il resterait écrit sans ligne de session.
+      // Relu à chaque fois (jamais depuis un état chargé plus tôt) : un clic fait après l'affichage de la liste compte.
+      var notees = {};
+      var lp = await sb.from('session_prospection_contacts').select('contact_id, statut').eq('session_id', session.id).not('geste_at', 'is', null);
+      if (lp.error) { toast('⚠️ Modifications non enregistrées : ' + lp.error.message, 'error'); setSaving(false); return; }
+      (lp.data || []).forEach(function(r){ if (r.statut !== 'none') notees[r.contact_id] = true; });
+      var retires = [];
       for (var i=0; i<toRemove.length; i++) {
-        await sb.from('session_prospection_contacts').delete().eq('session_id',session.id).eq('contact_id',toRemove[i]);
+        if (notees[toRemove[i]]) {
+          var ra = await sb.rpc('enregistrer_resultat_appel', prospectPorteParams(session.id, { id: toRemove[i], status: 'none' }));
+          if (ra.error) { toast('⚠️ Personne non retirée (' + ra.error.message + ')', 'error'); continue; }
+        }
+        var rd = await sb.from('session_prospection_contacts').delete().eq('session_id',session.id).eq('contact_id',toRemove[i]);
+        if (rd.error) { toast('⚠️ Personne non retirée (' + rd.error.message + ')', 'error'); continue; }
+        retires.push(toRemove[i]);
       }
+      toRemove = retires;
     }
     var msg = [];
     if (toAdd.length>0) msg.push('+'+toAdd.length+' ajouté'+(toAdd.length>1?'s':''));
@@ -9935,8 +10128,10 @@ function ProspectionEditContacts({ session, contacts, profile, onSaved, onBack }
   );
 }
 
-function TabProspection({ historique, profile, contacts, contactMap, onRefresh, isAdmin, onNavToContact, allProfiles, prefs }) {
+function TabProspection({ historique, profile, contacts, contactMap, onRefresh, isAdmin, onNavToContact, allProfiles, prefs, monNom }) {
   const [sessions, setSessions] = useState([]);
+  // Sessions ayant au moins une ligne écrite par la porte db/65 (id -> true).
+  const [porteIds, setPorteIds] = useState({});
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState('list');
   const [activeSession, setActiveSession] = useState(null);
@@ -9947,12 +10142,18 @@ function TabProspection({ historique, profile, contacts, contactMap, onRefresh, 
     var q = sb.from('sessions_prospection').select('*').order('created_at', {ascending:false});
     if (!isAdmin) q = q.eq('responsable', profile.nom);
     var result = await q;
+    var lp = await sb.from('session_prospection_contacts').select('session_id').not('geste_at', 'is', null);
+    var m = {};
+    (lp.data || []).forEach(function(r){ m[r.session_id] = true; });
+    setPorteIds(m);
     setSessions(result.data || []);
     setLoading(false);
   };
+  var droitsDe = function(s){ return prospectSessionDroits(s, !!porteIds[s.id], monNom, isAdmin); };
   useEffect(function(){ loadSessions(); }, []);
 
   var handleResume = async function(session) {
+    if (!droitsDe(session).reprendre) { setDetailSession(session); return; }
     var result = await sb.from('session_prospection_contacts').select('*').eq('session_id', session.id);
     var spcRows = result.data || [];
     var contactIds = spcRows.map(function(r){return r.contact_id;});
@@ -9960,12 +10161,15 @@ function TabProspection({ historique, profile, contacts, contactMap, onRefresh, 
     setScreen('active');
   };
   var handleEdit = async function(session) {
+    if (!droitsDe(session).modifier) { setDetailSession(session); return; }
     var result = await sb.from('session_prospection_contacts').select('contact_id').eq('session_id', session.id);
     var existingIds = (result.data || []).map(function(r){return r.contact_id;});
     setActiveSession({...session, existingContactIds: existingIds});
     setScreen('edit');
   };
   var handleEditResults = async function(session) {
+    var d = droitsDe(session);
+    if (!d.resultatsAncien && !d.resultatsPorte) return;
     var result = await sb.from('session_prospection_contacts').select('*').eq('session_id', session.id).neq('statut','none').order('created_at');
     var spcRows = result.data || [];
     // Dédupliquer par contact_id — garder la ligne la plus récente (last wins, trié created_at ASC)
@@ -9973,24 +10177,36 @@ function TabProspection({ historique, profile, contacts, contactMap, onRefresh, 
     spcRows.forEach(function(r){spcByContact[r.contact_id] = r;});
     spcRows = Object.values(spcByContact);
     var contactIds = spcRows.map(function(r){return r.contact_id;});
-    setActiveSession({...session, contactIds:contactIds, spcRows:spcRows, editMode:'results'});
+    setActiveSession({...session, contactIds:contactIds, spcRows:spcRows, editMode: d.resultatsPorte ? 'porte' : 'results'});
     setDetailSession(null);
     setScreen('active');
   };
   var handleDeleteSession = async function(session) {
-    await sb.from('session_prospection_contacts').delete().eq('session_id', session.id);
-    await sb.from('sessions_prospection').delete().eq('id', session.id);
-    toast('Session supprimée');
+    if (!droitsDe(session).supprimerEnCours) { toast('Suppression impossible depuis le CRM pour cette session', 'error'); setScreen('list'); loadSessions(); return; }
+    // Une session en cours dont des résultats sont déjà passés par la porte : on les annule d'abord (historique,
+    // relance, étape remis comme avant), comme l'ancien écran qui n'écrivait rien avant « Terminer ».
+    var lp = await sb.from('session_prospection_contacts').select('contact_id, statut').eq('session_id', session.id).not('geste_at', 'is', null);
+    if (lp.error) { toast('⚠️ Suppression annulée : ' + lp.error.message, 'error'); setScreen('list'); loadSessions(); return; }
+    var aAnnuler = (lp.data || []).filter(function(r){ return r.statut !== 'none'; });
+    for (var i = 0; i < aAnnuler.length; i++) {
+      var ra = await sb.rpc('enregistrer_resultat_appel', prospectPorteParams(session.id, { id: aAnnuler[i].contact_id, status: 'none' }));
+      if (ra.error) { toast('⚠️ Suppression interrompue : ' + (i > 0 ? i + ' résultat(s) déjà annulé(s), ' : '') + ra.error.message, 'error'); setScreen('list'); loadSessions(); return; }
+    }
+    var d1 = await sb.from('session_prospection_contacts').delete().eq('session_id', session.id);
+    var d2 = d1.error ? d1 : await sb.from('sessions_prospection').delete().eq('id', session.id);
+    if (d2.error) toast('⚠️ Session non supprimée : ' + d2.error.message, 'error');
+    else toast('Session supprimée');
+    setScreen('list');
     loadSessions();
   };
 
   return (
     <div className="tab-content">
-      {screen === 'list' && <ProspectionList sessions={sessions} loading={loading} onNew={function(){setScreen('new');}} onDetail={setDetailSession} onResume={handleResume} onEdit={handleEdit} onDelete={handleDeleteSession} contactMap={contactMap} onNavToContact={onNavToContact} isAdmin={isAdmin} allProfiles={allProfiles} profile={profile}/>}
+      {screen === 'list' && <ProspectionList sessions={sessions} loading={loading} droitsDe={droitsDe} onNew={monNom && monNom === profile.nom ? function(){setScreen('new');} : null} onDetail={setDetailSession} onResume={handleResume} onEdit={handleEdit} onDelete={handleDeleteSession} contactMap={contactMap} onNavToContact={onNavToContact} isAdmin={isAdmin} allProfiles={allProfiles} profile={profile}/>}
       {screen === 'new' && <ProspectionNew contacts={contacts} profile={profile} onStart={function(s){setActiveSession(s);setScreen('active');}} onBack={function(){setScreen('list');}}/>}
       {screen === 'active' && activeSession && <ProspectionActive historique={historique} session={activeSession} contacts={contacts} contactMap={contactMap} profile={profile} prefs={prefs} onDone={function(){setScreen('list');loadSessions();onRefresh();}} onBack={function(){setScreen('list');}} onEdit={function(s){handleEdit(s);}} onDelete={function(s){handleDeleteSession(s);}}/>}
       {screen === 'edit' && activeSession && <ProspectionEditContacts session={activeSession} contacts={contacts} profile={profile} onSaved={function(){setScreen('list');loadSessions();}} onBack={function(){setScreen('list');}}/>}
-      {detailSession && <ProspectionDetailPanel session={detailSession} contactMap={contactMap} onClose={function(){setDetailSession(null);}} onNavToContact={onNavToContact} isAdmin={isAdmin} onDelete={function(){setDetailSession(null);loadSessions();}} onEditResults={handleEditResults} profile={profile}/>}
+      {detailSession && <ProspectionDetailPanel session={detailSession} droits={droitsDe(detailSession)} contactMap={contactMap} onClose={function(){setDetailSession(null);}} onNavToContact={onNavToContact} isAdmin={isAdmin} onDelete={function(){setDetailSession(null);loadSessions();}} onEditResults={handleEditResults} profile={profile}/>}
     </div>
   );
 }
@@ -10447,7 +10663,7 @@ function App() {
         {/* Agence : missions NON filtrées par agence — un commercial voit la France entière (spec §4), donc TJM/CJM/marges de toutes les agences (arbitrage Nicolas 14/09) ; un partner reste sur vMissions. */}
         {tab==='agence'   &&<TabAgence contacts={vContacts} missions={isPartner?vMissions:missions} missionPeriods={missionPeriods} intercos={intercos} taches={vTaches} comptes={vComptes} histMissions={vHistMiss} besoins={vBesoins} partnerConsultants={partnerConsultants} allProfiles={allProfiles} profile={activeProfile} isPartner={isPartner} onRefresh={fetchAll} onNavToMission={navToMission} onNavToContact={navToContact} prefs={prefs}/>}
         {tab==='prospects'&&<TabProspects contacts={vContacts} contactMap={contactMap} historique={vHistorique} taches={vTaches} histMissions={vHistMiss} missions={vMissions} allMissions={missions} besoins={vBesoins} comptes={vComptes} contactComptes={vContactComptes} compteMap={compteMap} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navContactId={navContactId} navContactKey={navContactKey} navEtape={navEtape} onNavEtapeConsumed={()=>setNavEtape(null)} navCompteId={navCompteId} navCompteKey={navCompteKey} onNavToBesoin={navToBesoin} onNavToMission={navToMission} onNavToTache={navToTache} prefs={prefs}/>}
-        {tab==='prospection'&&<TabProspection historique={historique} profile={activeProfile} contacts={vContacts} contactMap={contactMap} onRefresh={fetchAll} isAdmin={activeIsAdmin} onNavToContact={navToContact} allProfiles={allProfiles} prefs={prefs}/>}
+        {tab==='prospection'&&<TabProspection historique={historique} profile={activeProfile} contacts={vContacts} contactMap={contactMap} onRefresh={fetchAll} isAdmin={activeIsAdmin} onNavToContact={navToContact} allProfiles={allProfiles} prefs={prefs} monNom={profile.nom}/>}
         {tab==='taches'   &&<TabTaches   taches={vTaches} contacts={vContacts} contactMap={contactMap} besoins={vBesoins} missions={vMissions} historique={vHistorique} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onPatch={patchData} onRefreshTaches={refreshTaches} navKey={tachesNavKey} navEcheance={tachesNavEcheance} navTacheId={navTacheId} navTacheKey={navTacheKey} onNavToEtapeTache={navToEtapeTache} onNavToContact={navToContact} onNavToBesoin={navToBesoin} onNavToMission={navToMission} prefs={prefs}/>}
         {tab==='besoins'  &&<TabBesoins  contacts={vContacts} contactMap={contactMap} comptes={vComptes} compteMap={compteMap} besoins={vBesoins} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} commerciauxParAgence={commerciauxParAgence} onRefresh={fetchAll} navBesoinId={navBesoinId} navBesoinKey={navBesoinKey} onNavToContact={navToContact} onNavToMission={navToMission} onNavToTache={navToTache} onNavToCompte={navToCompte} prefs={prefs}/>}
         {tab==='pipe'     &&<TabPipe    besoins={vBesoins} contacts={vContacts} contactMap={contactMap} comptes={vComptes} compteMap={compteMap} besoinCandidats={besoinCandidats} historique={vHistorique} taches={vTaches} missions={vMissions} profile={activeProfile} allProfiles={allProfiles} onRefresh={fetchAll} onNavToContact={navToContact} onNavToCompte={navToCompte} prefs={prefs}/>}

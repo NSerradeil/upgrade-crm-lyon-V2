@@ -76,9 +76,10 @@ test('I3 : colonne contact_id absente (avant migration 54) : l erreur revient, r
 });
 
 test('I3 : le cablage couvre les trois chemins NPC, pas la levee de NPC', () => {
-  assert.equal((html.match(/prospectStopperSequencesLiees\(/g) || []).length, 4, 'definition + 3 appels (le 4e, la sortie du cockpit Jules, a ete retire du CRM)');
+  // Fin de session : l'arret des sequences a l'entree en NPC est fait par la porte enregistrer_resultat_appel (db/65),
+  // au clic ; l'ecran ne le refait plus a « Terminer ».
+  assert.equal((html.match(/prospectStopperSequencesLiees\(/g) || []).length, 3, 'definition + 2 appels (fiche, correction ancienne) ; session = porte');
   assert.match(html, /prospectEntreeNpc\(prospectEtapeOuDefaut\(contact\),etape\)/);
-  assert.match(html, /prospectEntreeNpc\(prospectEtapeOuDefaut\(sc\), patchAppel\.etape_prospect\)/);
   assert.match(html, /prospectEntreeNpc\(prospectEtapeOuDefaut\(pic2\), patchNpc\.etape_prospect\)/);
   const levee = html.slice(html.indexOf('const handleLeverNpc'), html.indexOf('const handleEtapeConfirm'));
   assert.doesNotMatch(levee, /prospectStopperSequencesLiees/);
