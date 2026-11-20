@@ -582,15 +582,16 @@ begin
   elsif tg_op = 'INSERT' then
     if new.geste_at is not null or new.historique_id is not null or new.tache_id is not null
        or new.message_historique_id is not null or new.message_tache_id is not null or new.contact_avant is not null
-       or new.contact_pose is not null or new.geste_id is not null or new.appels_precedents is not null or coalesce(new.nb_appels, 0) <> 0 then
+       or new.contact_pose is not null or new.geste_id is not null or new.appels_precedents is not null or coalesce(new.nb_appels, 0) <> 0
+       or new.gestes_annules is not null or new.message_at is not null or new.appel_at is not null then
       raise exception 'Colonnes tenues par la porte d''appel : à poser par enregistrer_resultat_appel.' using errcode = '42501';
     end if;
     return new;
   elsif (new.geste_at, new.historique_id, new.tache_id, new.message_historique_id, new.message_tache_id, new.contact_avant,
-      new.contact_pose, new.geste_id, new.appels_precedents, new.nb_appels, new.message_at, new.appel_at)
+      new.contact_pose, new.geste_id, new.appels_precedents, new.nb_appels, new.message_at, new.appel_at, new.gestes_annules)
      is distinct from
      (old.geste_at, old.historique_id, old.tache_id, old.message_historique_id, old.message_tache_id, old.contact_avant,
-      old.contact_pose, old.geste_id, old.appels_precedents, old.nb_appels, old.message_at, old.appel_at) then
+      old.contact_pose, old.geste_id, old.appels_precedents, old.nb_appels, old.message_at, old.appel_at, old.gestes_annules) then
     raise exception 'Colonnes tenues par la porte d''appel : à poser par enregistrer_resultat_appel.' using errcode = '42501';
   end if;
   if tg_op = 'UPDATE' and old.geste_at is not null
