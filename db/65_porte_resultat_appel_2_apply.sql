@@ -211,6 +211,12 @@ begin
   if v_nom is null then
     raise exception 'Enregistrement refusé : profil introuvable.' using errcode = '42501';
   end if;
+  -- Relecture B1 : un partner (ou tout autre rôle) ne passe pas, même sur une session à son nom.
+  if v_role is distinct from 'admin' and v_role is distinct from 'commercial' then
+    raise exception 'Enregistrement refusé : réservé aux commerciaux.' using errcode = '42501';
+  end if;
+  -- Filet db/65 : signale au trigger trg_spc_garde_porte que l'écriture vient de la porte.
+  perform set_config('crm.porte_appel', '1', true);
 
   -- b. Paramètres
   if p_resultat is null or p_resultat not in ('none','called','interested','unreachable','not_interested','message','message_annule') then
@@ -231,6 +237,9 @@ begin
   if coalesce(p_ne_plus_appeler, false) and p_resultat <> 'not_interested' then
     raise exception '« Ne plus appeler » ne va qu''avec « Pas intéressé ».' using errcode = '22023';
   end if;
+  if p_suite = 'rdv' and p_date_suite is null then
+    raise exception 'La suite « RDV pris » demande la date du RDV.' using errcode = '22023';
+  end if;
   if p_suite = 'rdv' and p_resultat <> 'interested' then
     raise exception 'La suite « RDV pris » ne va qu''avec « Intéressant ».' using errcode = '22023';
   end if;
@@ -240,9 +249,12 @@ begin
   if not found then
     raise exception 'Session introuvable.' using errcode = 'P0002';
   end if;
-  if s.responsable is distinct from v_nom and v_role is distinct from 'admin' then
+  -- Spec §10 : la direction voit tout en lecture, mais ne note jamais un résultat à la place de quelqu'un.
+  if s.responsable is distinct from v_nom then
     raise exception 'Enregistrement refusé : cette session est celle de %.', s.responsable using errcode = '42501';
   end if;
+  -- Ordre des verrous : la fiche avant la ligne de session (comme fusionner_contacts et supprimer_fiche).
+  perform 1 from public.contacts where id = p_contact for update;
 
   select * into r from public.session_prospection_contacts where session_id = p_session and contact_id = p_contact for update;
   if not found then
@@ -302,7 +314,10 @@ begin
   v_actuel := jsonb_build_object('etape_prospect', c.etape_prospect, 'prochaine_action_date', public._ts_utc(c.prochaine_action_date),
                 'prochaine_action_libelle', c.prochaine_action_libelle, 'motif_perte', c.motif_perte,
                 'motif_perte_precision', c.motif_perte_precision);
-  if r.contact_avant is null or (r.contact_pose is not null and r.contact_pose is distinct from v_actuel) then
+  -- Le statut du contact fait partie de la photo (relecture I1) : un passage en Client entre deux gestes compte
+  -- comme une modification par quelqu'un d'autre.
+  if r.contact_avant is null or (r.contact_pose is not null and
+     ((r.contact_pose - '_statut') is distinct from v_actuel or r.contact_pose ->> '_statut' is distinct from c.statut)) then
     r.contact_avant := v_actuel;
   end if;
   v_base := r.contact_avant;
@@ -313,7 +328,7 @@ begin
   if r.message_at is not null then
     if p_resultat = 'message' then
       v_msg_due := case when coalesce(p_suite, '') = 'aucune' then null
-                        else coalesce(p_date_suite, ((v_jour + 7) + time '09:00') at time zone 'Europe/Paris') end;
+                        else coalesce(p_date_suite, ((((r.message_at at time zone 'Europe/Paris')::date) + 7) + time '09:00') at time zone 'Europe/Paris') end;
     else
       select t.due_date into v_msg_due from public.taches t where t.id = r.message_tache_id;
     end if;
@@ -341,7 +356,7 @@ begin
     v_ecrit := v_ecrit || 'fiche'::text;
   end if;
   v_etape_apres := v_cible ->> 'etape_prospect';
-  r.contact_pose := case when r.statut = 'none' then null else v_cible end;
+  r.contact_pose := case when r.statut = 'none' then null else v_cible || jsonb_build_object('_statut', c.statut) end;
   if r.statut = 'none' then r.contact_avant := null; end if;
 
   -- Entrée en « Ne pas recontacter » : tâches de prospection annulées, séquences arrêtées (comme le CRM).
@@ -391,11 +406,14 @@ begin
     v_due := case when r.suite = 'rdv' then r.date_suite - interval '1 hour' else r.date_suite end;
     v_notes := concat_ws(E'\n', 'Session : ' || s.nom, 'Statut : ' || v_label, r.relance_note);
     select t.statut into v_tache_statut from public.taches t where t.id = r.tache_id;
-    if r.tache_id is not null and found then
+    -- Tâche liée encore à faire : corrigée. Faite ou annulée : gardée si la suite demandée est la même, sinon
+    -- une nouvelle tâche est créée (relecture I2 : un rappel après une tâche faite ne doit pas se perdre).
+    if r.tache_id is not null and found and (v_tache_statut = 'a_faire'
+       or (select (t.titre, t.due_date) from public.taches t where t.id = r.tache_id) is not distinct from (v_titre, v_due)) then
       if v_tache_statut = 'a_faire' then
         update public.taches set titre = v_titre, due_date = v_due, notes = v_notes, updated_at = v_now
          where id = r.tache_id and (titre, due_date, notes) is distinct from (v_titre, v_due, v_notes);
-      end if;   -- faite ou annulée : on la laisse telle quelle
+      end if;
     else
       r.tache_id := 'tw_relance_' || p_contact || '_' || (extract(epoch from clock_timestamp()) * 1000)::bigint || '_a';
       insert into public.taches (id, titre, statut, due_date, contact_id, session_prospection_id, notes, responsable)
@@ -500,6 +518,25 @@ end $$;
 revoke all on function public.enregistrer_resultat_appel(uuid,integer,text,text,text,text,timestamptz,boolean,text,text) from public, anon;
 grant execute on function public.enregistrer_resultat_appel(uuid,integer,text,text,text,text,timestamptz,boolean,text,text) to authenticated;
 
+-- ─── 3 bis. Filet (relecture B2) : une ligne tenue par la porte ne se réécrit que par la porte ───
+-- L'ancien écran « Prosp. » (Terminer, correction) et l'outil MCP crm_update_session_contact ne peuvent plus
+-- écraser le résultat d'une ligne où la porte a écrit (geste_at rempli).
+create or replace function public.spc_garde_porte()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  if old.geste_at is not null and coalesce(current_setting('crm.porte_appel', true), '') <> '1'
+     and (new.statut, new.notes, new.want_relance, new.relance_date, new.relance_note)
+         is distinct from (old.statut, old.notes, old.want_relance, old.relance_date, old.relance_note) then
+    raise exception 'Ligne tenue par la porte d''appel : à corriger par enregistrer_resultat_appel.' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+create trigger trg_spc_garde_porte before update on public.session_prospection_contacts
+  for each row execute function public.spc_garde_porte();
+
 -- ─── 4. Tests intégrés (savepoint annulé ; toute erreur annule TOUT) ───
 savepoint tests_t1;
 do $$
@@ -594,7 +631,29 @@ begin
   begin perform public.enregistrer_resultat_appel(v_s, -1, 'called'); exception when no_data_found then v_ok := true; end;
   if not v_ok then raise exception 'T1.11 : contact hors session non refusé'; end if;
 
-  raise notice 'Tests T1.1 à T1.11 : OK';
+  -- T1.12 : filet, une écriture hors porte sur une ligne tenue par la porte est refusée
+  perform set_config('crm.porte_appel', '', true);
+  v_ok := false;
+  begin update public.session_prospection_contacts set statut = 'called' where session_id = v_s and contact_id = v_c;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'T1.12 : écriture hors porte non refusée'; end if;
+
+  -- T1.13 : un admin ne note pas dans la session d'un autre
+  perform set_config('request.jwt.claims', json_build_object('sub', (select id from public.profiles where role = 'admin' and nom <> n_a limit 1), 'role', 'authenticated')::text, true);
+  v_ok := false;
+  begin perform public.enregistrer_resultat_appel(v_s, v_c, 'called'); exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then raise exception 'T1.13 : admin non refusé'; end if;
+
+  -- T1.14 : un partner est refusé même sur une session à son nom
+  if exists (select 1 from public.profiles where role = 'partner') then
+    update public.sessions_prospection set responsable = (select nom from public.profiles where role = 'partner' limit 1) where id = v_s;
+    perform set_config('request.jwt.claims', json_build_object('sub', (select id from public.profiles where role = 'partner' limit 1), 'role', 'authenticated')::text, true);
+    v_ok := false;
+    begin perform public.enregistrer_resultat_appel(v_s, v_c2, 'called'); exception when insufficient_privilege then v_ok := true; end;
+    if not v_ok then raise exception 'T1.14 : partner non refusé'; end if;
+  end if;
+
+  raise notice 'Tests T1.1 à T1.14 : OK';
 end $$;
 rollback to savepoint tests_t1;
 

@@ -23,6 +23,8 @@ begin
   raise notice 'Sauvegardes : _spc_t1_bak_% et _sessions_t1_bak_%', v_suffixe, v_suffixe;
 end $$;
 
+drop trigger if exists trg_spc_garde_porte on public.session_prospection_contacts;
+drop function if exists public.spc_garde_porte();
 drop function if exists public.enregistrer_resultat_appel(uuid,integer,text,text,text,text,timestamptz,boolean,text,text);
 drop function if exists public._appel_contact_cible(jsonb,text,text,boolean,boolean,timestamptz,text,text,boolean,timestamptz,date);
 drop function if exists public._ts_utc(timestamptz);
