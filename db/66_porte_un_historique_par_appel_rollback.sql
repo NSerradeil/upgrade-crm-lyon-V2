@@ -25,6 +25,8 @@ do $$ begin execute (select definition from public._fn_bak_db66_20261120); end $
 revoke all on function public.enregistrer_resultat_appel(uuid,integer,text,text,text,text,timestamptz,boolean,text,text) from public, anon;
 grant execute on function public.enregistrer_resultat_appel(uuid,integer,text,text,text,text,timestamptz,boolean,text,text) to authenticated;
 drop function public._spc_date_dernier_retrait(integer, date);
+-- La porte db/65 est restaurée (et sa source est dans le dépôt) : la sauvegarde est retirée pour permettre un nouveau passage.
+drop table public._fn_bak_db66_20261120;
 alter table public.session_prospection_contacts drop column geste_id, drop column nb_appels, drop column appels_precedents;
 do $$ begin
   if to_regprocedure('public.enregistrer_resultat_appel(uuid,integer,text,text,text,text,timestamptz,boolean,text,text)') is null then
