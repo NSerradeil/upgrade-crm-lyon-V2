@@ -9603,14 +9603,19 @@ function ProspectionActive({ historique, session, contacts, contactMap, profile,
       }
     }
 
-    await sb.from('session_prospection_contacts').upsert(items.map(function(sc5){return {
+    var spcUpsert = await sb.from('session_prospection_contacts').upsert(items.map(function(sc5){return {
       session_id: session.id, contact_id: sc5.id, statut: sc5.status,
       notes: sc5.notes||null, want_relance: sc5.wantRelance,
       relance_date: sc5.relanceDate||null, relance_note: sc5.relanceNote||null,
       tel_saisi: sc5.editTel!==sc5.telephone?sc5.editTel:null,
       email_saisi: sc5.editEmail!==sc5.email?sc5.editEmail:null,
       linkedin_saisi: sc5.editLinkedin!==sc5.linkedin?sc5.editLinkedin:null,
-    };}));
+    };}), {onConflict:'session_id,contact_id'});
+    // db/64 : une seule ligne par (session, contact) ; la fin de session REMPLACE la ligne existante.
+    if (spcUpsert.error) {
+      console.error('[Prospection] Erreur enregistrement des résultats de session:', spcUpsert.error);
+      toast('⚠️ Résultats de session non enregistrés : ' + spcUpsert.error.message, 'error');
+    }
 
     await sb.from('sessions_prospection').update({
       statut:'done', nb_contacts:appeles.length,
