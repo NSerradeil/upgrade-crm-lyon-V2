@@ -14,20 +14,26 @@ do $$
 declare v_suffixe text := to_char(clock_timestamp() at time zone 'Europe/Paris', 'YYYYMMDD_HH24MISS');
 begin
   if to_regclass('public._fn_bak_db66_20261120') is null then raise exception 'Sauvegarde absente : arrêt'; end if;
-  execute format('create table public.%I as select id, geste_id, nb_appels, appels_precedents from public.session_prospection_contacts
-                  where geste_id is not null or appels_precedents is not null', '_spc_db66_bak_' || v_suffixe);
+  execute format('create table public.%I as select id, geste_id, nb_appels, appels_precedents, gestes_annules from public.session_prospection_contacts
+                  where geste_id is not null or appels_precedents is not null or gestes_annules is not null', '_spc_db66_bak_' || v_suffixe);
   execute format('alter table public.%I enable row level security', '_spc_db66_bak_' || v_suffixe);
   execute format('revoke all on public.%I from anon, authenticated', '_spc_db66_bak_' || v_suffixe);
   raise notice 'Sauvegarde : _spc_db66_bak_%', v_suffixe;
 end $$;
 drop function public.enregistrer_resultat_appel(uuid,integer,text,text,text,text,timestamptz,boolean,text,text,boolean,uuid);
-do $$ begin execute (select definition from public._fn_bak_db66_20261120); end $$;
+do $$ begin
+  execute (select definition from public._fn_bak_db66_20261120 where fonction like 'public.enregistrer_resultat_appel%');
+  execute (select definition from public._fn_bak_db66_20261120 where fonction = 'public.spc_garde_porte()');
+end $$;
+drop trigger trg_spc_garde_porte on public.session_prospection_contacts;
+create trigger trg_spc_garde_porte before update on public.session_prospection_contacts
+  for each row execute function public.spc_garde_porte();
 revoke all on function public.enregistrer_resultat_appel(uuid,integer,text,text,text,text,timestamptz,boolean,text,text) from public, anon;
 grant execute on function public.enregistrer_resultat_appel(uuid,integer,text,text,text,text,timestamptz,boolean,text,text) to authenticated;
 drop function public._spc_date_dernier_retrait(integer, date);
 -- La porte db/65 est restaurée (et sa source est dans le dépôt) : la sauvegarde est retirée pour permettre un nouveau passage.
 drop table public._fn_bak_db66_20261120;
-alter table public.session_prospection_contacts drop column geste_id, drop column nb_appels, drop column appels_precedents;
+alter table public.session_prospection_contacts drop column geste_id, drop column nb_appels, drop column appels_precedents, drop column gestes_annules;
 do $$ begin
   if to_regprocedure('public.enregistrer_resultat_appel(uuid,integer,text,text,text,text,timestamptz,boolean,text,text)') is null then
     raise exception 'porte db/65 non restaurée'; end if;

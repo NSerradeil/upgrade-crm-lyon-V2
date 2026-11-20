@@ -23,6 +23,12 @@
 --        - même p_geste_id : rejeu ou correction de SA ligne (jamais de doublon).
 --        - p_resultat = 'none' : annule le DERNIER appel (sa ligne, sa tâche à faire) ; l'appel précédent redevient
 --          le résultat et la fiche revient à son état d'avant ce geste (si personne ne l'a touchée).
+--   2 bis. Idempotence par geste (relecture db/66) : gestes_annules garde les gestes annulés ; un geste déjà empilé,
+--      déjà annulé, ou une annulation qui ne vise plus le dernier appel revient sans rien écrire (deja_traite = true).
+--      Corriger un ancien appel (autre geste que le dernier, sans p_nouvel_appel) est refusé. Un 'none' SANS geste
+--      (appelant à 10 paramètres, écran CRM) annule toute la pile, comme db/65. Toute écriture de la porte est limitée
+--      à l'historique et aux tâches de CETTE fiche.
+--   2 ter. Filet renforcé : trg_spc_garde_porte devient BEFORE INSERT OR UPDATE et protège toutes les colonnes de la porte.
 --   3. M5 : retirer une ligne d'historique remet contacts.date_dernier à la date de la dernière ligne restante
 --      (seulement si date_dernier venait de la ligne retirée, et s'il reste une ligne ; sinon inchangé).
 --
@@ -51,7 +57,9 @@ end $$;
 create table public._fn_bak_db66_20261120 as
   select 'public.enregistrer_resultat_appel(uuid,integer,text,text,text,text,timestamptz,boolean,text,text)'::text as fonction,
          pg_get_functiondef('public.enregistrer_resultat_appel(uuid,integer,text,text,text,text,timestamptz,boolean,text,text)'::regprocedure) as definition,
-         now() as sauvegarde_le;
+         now() as sauvegarde_le
+  union all
+  select 'public.spc_garde_porte()', pg_get_functiondef('public.spc_garde_porte()'::regprocedure), now();
 alter table public._fn_bak_db66_20261120 enable row level security;
 revoke all on public._fn_bak_db66_20261120 from anon, authenticated;
 
@@ -59,7 +67,8 @@ revoke all on public._fn_bak_db66_20261120 from anon, authenticated;
 alter table public.session_prospection_contacts
   add column geste_id uuid,
   add column nb_appels integer not null default 0,
-  add column appels_precedents jsonb;
+  add column appels_precedents jsonb,
+  add column gestes_annules uuid[];
 update public.session_prospection_contacts set nb_appels = 1
  where geste_at is not null and statut in ('called','interested','unreachable','not_interested');
 
@@ -126,6 +135,7 @@ declare
   v_nouveau boolean := false;
   v_pop jsonb;
   v_hdate date;
+  i int;
 begin
   -- a. Appelant : une personne connectée avec un profil. Pas d'anon, pas de clé service.
   if v_uid is null then
@@ -205,6 +215,29 @@ begin
    where cc.contact_id = p_contact and cc.is_primary and cc.date_fin is null order by cc.id limit 1;
   v_societe := coalesce(nullif(btrim(v_societe), ''), nullif(btrim(c.employeur), ''));
 
+  -- Relecture db/66 : idempotence par geste.
+  if p_geste_id is not null and p_geste_id is distinct from r.geste_id
+     and (p_geste_id = any (coalesce(r.gestes_annules, '{}'::uuid[]))
+          or exists (select 1 from jsonb_array_elements(coalesce(r.appels_precedents, '[]'::jsonb)) e where e ->> 'geste_id' = p_geste_id::text)
+          or (p_resultat = 'none' and r.geste_id is not null)) then
+    -- geste déjà empilé, déjà annulé, ou annulation qui ne vise plus le dernier appel : rejeu tardif, rien n'est réécrit
+    return jsonb_build_object('ok', true, 'deja_traite', true, 'session', p_session, 'contact', p_contact,
+                              'resultat', r.statut, 'nb_appels', coalesce(r.nb_appels, 0), 'geste_id', r.geste_id);
+  end if;
+  if not coalesce(p_nouvel_appel, false) and p_resultat = any (c_appels) and p_geste_id is not null
+     and r.geste_id is not null and p_geste_id <> r.geste_id and r.statut = any (c_appels) then
+    raise exception 'Ce geste n''est pas le dernier appel : nouvel appel (p_nouvel_appel) ou correction du dernier.' using errcode = '22023';
+  end if;
+  -- Appelant à 10 paramètres (écran CRM : retirer une personne, supprimer la session) : 'none' sans geste = tout annuler, comme db/65.
+  if p_resultat = 'none' and p_geste_id is null and r.appels_precedents is not null then
+    for i in 1 .. jsonb_array_length(r.appels_precedents) loop
+      perform public.enregistrer_resultat_appel(p_session, p_contact, 'none',
+                p_geste_id => (select x.geste_id from public.session_prospection_contacts x where x.id = r.id));
+    end loop;
+    select * into r from public.session_prospection_contacts where id = r.id;
+    select * into c from public.contacts where id = p_contact;
+  end if;
+
   -- d0. Nouvel appel (db/66) : l'appel précédent garde sa ligne d'historique et sa tâche ; il est empilé dans
   --     appels_precedents et le nouvel appel repart de la fiche telle qu'elle est maintenant. Un rejeu du même
   --     geste (même p_geste_id) n'est PAS un nouvel appel : c'est un rejeu ou une correction de SA ligne.
@@ -225,14 +258,14 @@ begin
     -- db/66 : annuler le DERNIER appel. Sa ligne d'historique et sa tâche (si encore à faire) sont retirées ; la fiche
     -- revient à son état d'avant ce geste si personne ne l'a touchée depuis ; l'appel précédent redevient le résultat.
     if r.historique_id is not null then
-      delete from public.historique_actions where id = r.historique_id returning date into v_hdate;
+      delete from public.historique_actions where id = r.historique_id and id_prospect = p_contact returning date into v_hdate;
       perform public._spc_date_dernier_retrait(p_contact, v_hdate);
       v_ecrit := v_ecrit || 'historique_retire'::text;
     end if;
     if r.tache_id is not null then
-      select t.statut into v_tache_statut from public.taches t where t.id = r.tache_id;
+      select t.statut into v_tache_statut from public.taches t where t.id = r.tache_id and t.contact_id = p_contact;
       if found and v_tache_statut = 'a_faire' then
-        delete from public.taches where id = r.tache_id;
+        delete from public.taches where id = r.tache_id and contact_id = p_contact;
         v_ecrit := v_ecrit || 'tache_retiree'::text;
       end if;
     end if;
@@ -252,6 +285,7 @@ begin
       select * into c from public.contacts where id = p_contact;
       v_ecrit := v_ecrit || 'fiche'::text;
     end if;
+    if r.geste_id is not null then r.gestes_annules := array_append(coalesce(r.gestes_annules, '{}'::uuid[]), r.geste_id); end if;
     v_pop := r.appels_precedents -> -1;
     r.appels_precedents := r.appels_precedents - (-1);
     if jsonb_array_length(r.appels_precedents) = 0 then r.appels_precedents := null; end if;
@@ -287,6 +321,7 @@ begin
     r.statut := case when r.message_at is not null then 'message' else 'none' end;
     r.precision := null; r.suite := null; r.date_suite := null; r.ne_plus_appeler := false;
     r.notes := null; r.want_relance := false; r.relance_date := null; r.relance_note := null; r.appel_at := null;
+    if r.geste_id is not null then r.gestes_annules := array_append(coalesce(r.gestes_annules, '{}'::uuid[]), r.geste_id); end if;
     r.geste_id := null; r.nb_appels := 0;
     v_canal := case when r.message_at is not null then r.message_canal end;
   else
@@ -331,7 +366,7 @@ begin
       v_msg_due := case when coalesce(p_suite, '') = 'aucune' then null
                         else coalesce(p_date_suite, ((((r.message_at at time zone 'Europe/Paris')::date) + 7) + time '09:00') at time zone 'Europe/Paris') end;
     else
-      select t.due_date into v_msg_due from public.taches t where t.id = r.message_tache_id;
+      select t.due_date into v_msg_due from public.taches t where t.id = r.message_tache_id and t.contact_id = p_contact;
     end if;
   end if;
   v_jour_reveil := coalesce((r.appel_at at time zone 'Europe/Paris')::date, v_jour);
@@ -385,33 +420,35 @@ begin
                                     when 'pas_concerne' then 'Motif : pas concerné' end,
                    case when r.ne_plus_appeler then 'Ne plus appeler' end,
                    case when r.notes is not null then 'Notes : ' || r.notes end);
-    if r.historique_id is not null and exists (select 1 from public.historique_actions where id = r.historique_id) then
+    if r.historique_id is not null and exists (select 1 from public.historique_actions where id = r.historique_id and id_prospect = p_contact) then
       update public.historique_actions set type_action = 'Appel sortant', details = v_details
-       where id = r.historique_id and (type_action, details) is distinct from ('Appel sortant', v_details);
+       where id = r.historique_id and id_prospect = p_contact and (type_action, details) is distinct from ('Appel sortant', v_details);
     else
       insert into public.historique_actions (id_prospect, date, type_action, details, responsable)
-      values (p_contact, v_jour, 'Appel sortant', v_details, v_nom) returning id into r.historique_id;
+      values (p_contact, coalesce((r.appel_at at time zone 'Europe/Paris')::date, v_jour), 'Appel sortant', v_details, v_nom) returning id into r.historique_id;
       v_ecrit := v_ecrit || 'historique'::text;
     end if;
   elsif r.historique_id is not null then
-    delete from public.historique_actions where id = r.historique_id returning date into v_hdate;
+    delete from public.historique_actions where id = r.historique_id and id_prospect = p_contact returning date into v_hdate;
     perform public._spc_date_dernier_retrait(p_contact, v_hdate);
     r.historique_id := null;
     v_ecrit := v_ecrit || 'historique_retire'::text;
   end if;
 
-  -- g. Tâche de suite de l'appel : UNE tâche, corrigée ou retirée.
+  -- g. Tâche de suite de l'appel : UNE tâche, corrigée ou retirée. Un appel qu'on dépile (annulation du suivant)
+  --    garde sa tâche telle quelle : jamais recréée ni corrigée (relecture db/66, I2).
+  if v_pop is null then
   if r.statut = any (c_appels) and r.want_relance and r.date_suite is not null then
     v_titre := case r.suite when 'rdv' then 'Préparer le RDV avec ' || v_nom_contact
                             when 'presentation' then 'Envoyer une présentation à ' || v_nom_contact
                             else 'Relance ' || v_nom_contact || coalesce(' — ' || v_societe, '') end;
     v_due := case when r.suite = 'rdv' then r.date_suite - interval '1 hour' else r.date_suite end;
     v_notes := concat_ws(E'\n', 'Session : ' || s.nom, 'Statut : ' || v_label, r.relance_note);
-    select t.statut into v_tache_statut from public.taches t where t.id = r.tache_id;
+    select t.statut into v_tache_statut from public.taches t where t.id = r.tache_id and t.contact_id = p_contact;
     -- Tâche liée encore à faire : corrigée. Faite ou annulée : gardée si la suite demandée est la même, sinon
     -- une nouvelle tâche est créée (relecture I2 : un rappel après une tâche faite ne doit pas se perdre).
     if r.tache_id is not null and found and (v_tache_statut = 'a_faire'
-       or (select (t.titre, t.due_date) from public.taches t where t.id = r.tache_id) is not distinct from (v_titre, v_due)) then
+       or (select (t.titre, t.due_date) from public.taches t where t.id = r.tache_id and t.contact_id = p_contact) is not distinct from (v_titre, v_due)) then
       if v_tache_statut = 'a_faire' then
         update public.taches set titre = v_titre, due_date = v_due, notes = v_notes, updated_at = v_now
          where id = r.tache_id and (titre, due_date, notes) is distinct from (v_titre, v_due, v_notes);
@@ -423,12 +460,13 @@ begin
       v_ecrit := v_ecrit || 'tache'::text;
     end if;
   elsif r.tache_id is not null then
-    select t.statut into v_tache_statut from public.taches t where t.id = r.tache_id;
+    select t.statut into v_tache_statut from public.taches t where t.id = r.tache_id and t.contact_id = p_contact;
     if found and v_tache_statut = 'a_faire' then
-      delete from public.taches where id = r.tache_id;
+      delete from public.taches where id = r.tache_id and contact_id = p_contact;
       v_ecrit := v_ecrit || 'tache_retiree'::text;
     end if;
     r.tache_id := null;
+  end if;
   end if;
 
   -- h. Message envoyé : UNE ligne d'historique (« Mail envoyé » ou « LinkedIn ») et UNE relance.
@@ -436,11 +474,11 @@ begin
     v_details := concat_ws(E'\n', 'Session : ' || s.nom,
                    'Message envoyé par ' || case r.message_canal when 'mail' then 'mail' else 'LinkedIn' end || ' (envoyé par ' || v_nom || ')',
                    case when p_resultat = 'message' and nullif(p_note, '') is not null then left(p_note, 500) end);
-    if r.message_historique_id is not null and exists (select 1 from public.historique_actions where id = r.message_historique_id) then
+    if r.message_historique_id is not null and exists (select 1 from public.historique_actions where id = r.message_historique_id and id_prospect = p_contact) then
       if p_resultat = 'message' then
         update public.historique_actions
            set type_action = case r.message_canal when 'mail' then 'Mail envoyé' else 'LinkedIn' end, details = v_details
-         where id = r.message_historique_id;
+         where id = r.message_historique_id and id_prospect = p_contact;
       end if;
     else
       insert into public.historique_actions (id_prospect, date, type_action, details, responsable)
@@ -452,7 +490,7 @@ begin
       if v_msg_due is not null then
         v_titre := 'Relancer ' || v_nom_contact;
         v_notes := concat_ws(E'\n', 'Session : ' || s.nom, 'Statut : Message envoyé (' || r.message_canal || ')', nullif(p_note_suite, ''));
-        select t.statut into v_tache_statut from public.taches t where t.id = r.message_tache_id;
+        select t.statut into v_tache_statut from public.taches t where t.id = r.message_tache_id and t.contact_id = p_contact;
         if r.message_tache_id is not null and found then
           if v_tache_statut = 'a_faire' then
             update public.taches set titre = v_titre, due_date = v_msg_due, notes = v_notes, updated_at = v_now
@@ -465,21 +503,21 @@ begin
           v_ecrit := v_ecrit || 'tache_message'::text;
         end if;
       elsif r.message_tache_id is not null then   -- suite « aucune » : la relance prévue est retirée
-        select t.statut into v_tache_statut from public.taches t where t.id = r.message_tache_id;
-        if found and v_tache_statut = 'a_faire' then delete from public.taches where id = r.message_tache_id; end if;
+        select t.statut into v_tache_statut from public.taches t where t.id = r.message_tache_id and t.contact_id = p_contact;
+        if found and v_tache_statut = 'a_faire' then delete from public.taches where id = r.message_tache_id and contact_id = p_contact; end if;
         r.message_tache_id := null;
       end if;
     end if;
   else
     if r.message_historique_id is not null then
-      delete from public.historique_actions where id = r.message_historique_id returning date into v_hdate;
+      delete from public.historique_actions where id = r.message_historique_id and id_prospect = p_contact returning date into v_hdate;
       perform public._spc_date_dernier_retrait(p_contact, v_hdate);
       r.message_historique_id := null;
       v_ecrit := v_ecrit || 'historique_message_retire'::text;
     end if;
     if r.message_tache_id is not null then
-      select t.statut into v_tache_statut from public.taches t where t.id = r.message_tache_id;
-      if found and v_tache_statut = 'a_faire' then delete from public.taches where id = r.message_tache_id; end if;
+      select t.statut into v_tache_statut from public.taches t where t.id = r.message_tache_id and t.contact_id = p_contact;
+      if found and v_tache_statut = 'a_faire' then delete from public.taches where id = r.message_tache_id and contact_id = p_contact; end if;
       r.message_tache_id := null;
     end if;
   end if;
@@ -493,7 +531,7 @@ begin
          message_at = r.message_at, message_historique_id = r.message_historique_id,
          message_tache_id = r.message_tache_id, contact_avant = r.contact_avant, contact_pose = r.contact_pose,
          maj_par = r.maj_par, geste_id = r.geste_id, nb_appels = coalesce(r.nb_appels, 0),
-         appels_precedents = r.appels_precedents
+         appels_precedents = r.appels_precedents, gestes_annules = r.gestes_annules
    where id = r.id;
 
   update public.sessions_prospection x
@@ -522,7 +560,49 @@ end $$;
 
 revoke all on function public.enregistrer_resultat_appel(uuid,integer,text,text,text,text,timestamptz,boolean,text,text,boolean,uuid) from public, anon;
 grant execute on function public.enregistrer_resultat_appel(uuid,integer,text,text,text,text,timestamptz,boolean,text,text,boolean,uuid) to authenticated;
+do $$ begin
+  if has_function_privilege('anon', 'public.enregistrer_resultat_appel(uuid,integer,text,text,text,text,timestamptz,boolean,text,text,boolean,uuid)', 'execute')
+     or not has_function_privilege('authenticated', 'public.enregistrer_resultat_appel(uuid,integer,text,text,text,text,timestamptz,boolean,text,text,boolean,uuid)', 'execute') then
+    raise exception 'Droits de la porte incorrects (anon doit être refusé, authenticated autorisé) : arrêt';
+  end if;
+end $$;
 
+-- ─── 3 bis. Filet renforcé (relecture db/66, B1) : hors de la porte, un utilisateur (authenticated, anon) ne peut ni
+--     poser ni modifier les colonnes tenues par la porte (liens vers l'historique et les tâches, pile, photos de fiche).
+--     Sinon il pourrait y glisser l'id d'une ligne d'historique ou d'une tâche d'un collègue, que la porte réécrirait.
+--     Les fonctions security definer (fusion, corbeille) gardent la seule règle db/65.
+create or replace function public.spc_garde_porte()
+returns trigger language plpgsql set search_path = public, pg_temp as $$
+begin
+  if coalesce(current_setting('crm.porte_appel', true), '') = '1' then
+    return new;   -- la porte
+  end if;
+  if current_user not in ('authenticated','anon') then
+    null;         -- fonctions security definer (fusion, corbeille) : seules les règles db/65 ci-dessous s'appliquent
+  elsif tg_op = 'INSERT' then
+    if new.geste_at is not null or new.historique_id is not null or new.tache_id is not null
+       or new.message_historique_id is not null or new.message_tache_id is not null or new.contact_avant is not null
+       or new.contact_pose is not null or new.geste_id is not null or new.appels_precedents is not null or coalesce(new.nb_appels, 0) <> 0 then
+      raise exception 'Colonnes tenues par la porte d''appel : à poser par enregistrer_resultat_appel.' using errcode = '42501';
+    end if;
+    return new;
+  elsif (new.geste_at, new.historique_id, new.tache_id, new.message_historique_id, new.message_tache_id, new.contact_avant,
+      new.contact_pose, new.geste_id, new.appels_precedents, new.nb_appels, new.message_at, new.appel_at)
+     is distinct from
+     (old.geste_at, old.historique_id, old.tache_id, old.message_historique_id, old.message_tache_id, old.contact_avant,
+      old.contact_pose, old.geste_id, old.appels_precedents, old.nb_appels, old.message_at, old.appel_at) then
+    raise exception 'Colonnes tenues par la porte d''appel : à poser par enregistrer_resultat_appel.' using errcode = '42501';
+  end if;
+  if tg_op = 'UPDATE' and old.geste_at is not null
+     and (new.statut, new.notes, new.want_relance, new.relance_date, new.relance_note)
+         is distinct from (old.statut, old.notes, old.want_relance, old.relance_date, old.relance_note) then
+    raise exception 'Ligne tenue par la porte d''appel : à corriger par enregistrer_resultat_appel.' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+drop trigger trg_spc_garde_porte on public.session_prospection_contacts;
+create trigger trg_spc_garde_porte before insert or update on public.session_prospection_contacts
+  for each row execute function public.spc_garde_porte();
 
 -- ─── 4. Tests db/65 rejoués sur la nouvelle porte ───
 savepoint tests_t1;
@@ -682,15 +762,23 @@ begin
   if (select etape_prospect from public.contacts where id = v_c) <> 'En discussion' then raise exception 'T1.17 : étape'; end if;
 
   -- T1.18 : annulation de l'appel 2 = la ligne 1 seule, résultat de l'appel 1, fiche d'après l'appel 1
-  v_j := public.enregistrer_resultat_appel(v_s, v_c, 'none');
+  v_j := public.enregistrer_resultat_appel(v_s, v_c, 'none', p_geste_id => g2);
   if (select count(*) from public.historique_actions where id_prospect = v_c and type_action = 'Appel sortant') <> 1
      or not exists (select 1 from public.historique_actions where id = v_h1) then raise exception 'T1.18 : lignes'; end if;
   if (select statut from public.session_prospection_contacts where session_id = v_s and contact_id = v_c) <> 'unreachable' then raise exception 'T1.18 : statut'; end if;
   if (select etape_prospect from public.contacts where id = v_c) <> 'Contacté' then raise exception 'T1.18 : étape %', (select etape_prospect from public.contacts where id = v_c); end if;
   if (v_j ->> 'nb_appels')::int <> 1 then raise exception 'T1.18 : nb_appels'; end if;
 
+  -- T1.18b : rejeu de l'annulation de l'appel 2 et rejeu tardif de l'appel 2 = sans effet
+  v_j := public.enregistrer_resultat_appel(v_s, v_c, 'none', p_geste_id => g2);
+  if not coalesce((v_j ->> 'deja_traite')::boolean, false) then raise exception 'T1.18b : rejeu de l''annulation non ignoré'; end if;
+  v_j := public.enregistrer_resultat_appel(v_s, v_c, 'interested', p_nouvel_appel => true, p_geste_id => g2);
+  if not coalesce((v_j ->> 'deja_traite')::boolean, false)
+     or (select count(*) from public.historique_actions where id_prospect = v_c and type_action = 'Appel sortant') <> 1 then
+    raise exception 'T1.18b : un appel annulé a été recréé'; end if;
+
   -- T1.19 : annulation de l'appel 1 = 0 ligne, fiche à « À contacter », date_dernier remise au 15/01 (M5)
-  v_j := public.enregistrer_resultat_appel(v_s, v_c, 'none');
+  v_j := public.enregistrer_resultat_appel(v_s, v_c, 'none', p_geste_id => g1);
   if (select count(*) from public.historique_actions where id_prospect = v_c and type_action = 'Appel sortant') <> 0 then raise exception 'T1.19 : lignes'; end if;
   if (select etape_prospect from public.contacts where id = v_c) <> 'À contacter' then raise exception 'T1.19 : étape'; end if;
   select (date_dernier at time zone 'Europe/Paris')::date into v_dd from public.contacts where id = v_c;
@@ -705,15 +793,34 @@ begin
   -- T1.21 (décision I4) : « Ne plus appeler » arrête la séquence Jules d'un collègue
   insert into jules.agent_sequences (owner_id, mission_id, target_kind, target_ref, target_label, contact_id, statut)
   values (u_b, (select id from jules.agent_missions order by created_at limit 1), 'contact_crm', v_c::text, 'test T66', v_c, 'active');
-  v_j := public.enregistrer_resultat_appel(v_s, v_c, 'not_interested', p_ne_plus_appeler => true, p_geste_id => g1);
+  v_j := public.enregistrer_resultat_appel(v_s, v_c, 'not_interested', p_ne_plus_appeler => true, p_geste_id => gen_random_uuid());
   if (select etape_prospect from public.contacts where id = v_c) <> 'Ne pas recontacter' then raise exception 'T1.21 : NPC'; end if;
   if exists (select 1 from jules.agent_sequences where contact_id = v_c and statut <> 'stopped') then raise exception 'T1.21 : séquence du collègue non arrêtée'; end if;
 
   -- T1.22 (M1) : un NOUVEL appel ne fait jamais sortir de « Ne pas recontacter »
-  v_j := public.enregistrer_resultat_appel(v_s, v_c, 'called', p_nouvel_appel => true, p_geste_id => g2);
+  v_j := public.enregistrer_resultat_appel(v_s, v_c, 'called', p_nouvel_appel => true, p_geste_id => gen_random_uuid());
   if (select etape_prospect from public.contacts where id = v_c) <> 'Ne pas recontacter' then raise exception 'T1.22 : sorti de NPC'; end if;
 
-  raise notice 'Tests db/66 T1.15 à T1.22 : OK';
+  -- T1.23 (B3) : 'none' SANS geste (écran CRM : retirer une personne) annule toute la pile, comme db/65
+  v_j := public.enregistrer_resultat_appel(v_s, v_c, 'called', p_nouvel_appel => true, p_geste_id => gen_random_uuid());
+  v_j := public.enregistrer_resultat_appel(v_s, v_c, 'none');
+  if (select count(*) from public.historique_actions where id_prospect = v_c and type_action = 'Appel sortant') <> 0 then raise exception 'T1.23 : lignes restantes'; end if;
+  if (select statut from public.session_prospection_contacts where session_id = v_s and contact_id = v_c) <> 'none' then raise exception 'T1.23 : statut'; end if;
+
+  -- T1.24 (B1) : un commercial ne peut pas glisser un lien de la porte dans sa ligne hors de la porte
+  perform set_config('crm.porte_appel', '', true);
+  set local role authenticated;
+  v_ok := false;
+  begin update public.session_prospection_contacts set historique_id = v_h1 where session_id = v_s and contact_id = v_c;
+  exception when insufficient_privilege then v_ok := true; end;
+  if not v_ok then reset role; raise exception 'T1.24 : forge acceptée'; end if;
+  v_ok := false;
+  begin update public.session_prospection_contacts set appels_precedents = '[]'::jsonb where session_id = v_s and contact_id = v_c;
+  exception when insufficient_privilege then v_ok := true; end;
+  reset role;
+  if not v_ok then raise exception 'T1.24 : pile forgée acceptée'; end if;
+
+  raise notice 'Tests db/66 T1.15 à T1.24 : OK';
 end $$;
 rollback to savepoint tests_t66;
 
