@@ -16,6 +16,9 @@
 --      du premier), annulable (p_resultat = 'none' ; 'message_annule' pour un message).
 --      Droits : la session est à celui qui appelle, ou à un admin (règle actuelle des sessions). Aucun accès anon.
 --
+-- DÉCISIONS ACTÉES (Nicolas, 20/11, après passage) : direction (admin) en lecture seule sur la session d'un autre ;
+-- « Ne plus appeler » arrête aussi les séquences Jules d'un collègue (RGPD). Suite : db/66 (une ligne par appel).
+--
 -- CE QUI NE BOUGE PAS : l'écran « Prosp. » du CRM (il écrit toujours à « Terminer »), les sessions passées,
 -- les compteurs existants, les droits des tables.
 --

@@ -4,11 +4,19 @@
 -- copié dans _spc_t1_bak_<horodatage> et _sessions_t1_bak_<horodatage> (RLS, superuser seul).
 -- Les lignes d'historique et les tâches créées par la porte restent (ce sont de vraies écritures du CRM).
 -- Une ligne au statut 'message' (sans appel) repasse en 'none' (le message reste dans l'historique du contact).
+-- Décisions actées 20/11 (Nicolas) : direction en lecture seule sur la session d'un autre ; « Ne plus appeler »
+-- arrête aussi les séquences Jules d'un collègue (RGPD). Rien à défaire pour elles ici.
 -- Lancer : zsh ~/Pro/Jules/bin/macmini/crm-sql.sh db/65_porte_resultat_appel_rollback.sql
 -- ══════════════════════════════════════════════════════════════════════
 \set ON_ERROR_STOP on
 begin;
 lock table public.session_prospection_contacts in share row exclusive mode;
+
+do $$ begin
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'session_prospection_contacts' and column_name = 'geste_id') then
+    raise exception 'db/66 en place : passer d''abord db/66_porte_un_historique_par_appel_rollback.sql';
+  end if;
+end $$;
 
 do $$
 declare v_suffixe text := to_char(now() at time zone 'Europe/Paris', 'YYYYMMDD_HH24MI');
